@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      # The compiler and FFmpeg's libraries take minutes to build and change only with these files.
+      - uses: actions/cache@v5
+        with:
+          path: .build
+          key: media-${{ hashFiles('scripts/tool-versions.txt', 'scripts/build-media.sh') }}
+
+      - run: npm run media
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+
+      # The hash test compares with the ffmpeg of the desktop app. It is the build rpm ships, from the
+      # release named in tool-versions.txt of rpm-desktop.
+      - name: Fetch the desktop's ffmpeg
+        run: |
+          source scripts/tool-versions.txt
+          curl -fsSL "https://github.com/rpmrpmrpm/rpm-desktop/releases/download/rpm-ffmpeg-$FFMPEG_VERSION-1/ffmpeg-linux-x64.gz" \
+            | gunzip > "$RUNNER_TEMP/ffmpeg"
+          chmod +x "$RUNNER_TEMP/ffmpeg"
+
+      - run: npm run test:media
+        env:
+          RPM_FFMPEG: ${{ runner.temp }}/ffmpeg

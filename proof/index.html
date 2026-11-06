@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101014">
+<title>rpm playback test</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 16px; background: #101014; color: #eee; font: 16px/1.4 -apple-system, system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  button, select { font: inherit; padding: 12px 16px; margin: 4px 4px 4px 0; border-radius: 10px; border: 0; background: #2a2a33; color: #fff; }
+  button.primary { background: #0371d0; }
+  #title { font-size: 22px; font-weight: 600; margin: 16px 0 0; }
+  #where { font-variant-numeric: tabular-nums; color: #aaa; margin-bottom: 12px; }
+  #facts { color: #aaa; font-size: 14px; }
+  #log { margin-top: 12px; font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: #bbb; }
+  .fail { color: #ff8b96; }
+</style>
+</head>
+<body>
+<h1>rpm playback test</h1>
+<div id="facts"></div>
+<div id="title">Press Play</div>
+<div id="where">&nbsp;</div>
+<select id="set">
+  <option value="flac">FLAC album</option>
+  <option value="mp3">MP3 album</option>
+  <option value="aac128">128 AAC album</option>
+</select>
+<input id="files" type="file" multiple accept="audio/*" hidden>
+<button id="pick">Pick files</button>
+<div>
+  <button id="play" class="primary">Play</button>
+  <button id="prev">Previous</button>
+  <button id="next">Next</button>
+  <button id="forward">+30 s</button>
+  <button id="clear">Clear log</button>
+</div>
+<audio id="audio" playsinline></audio>
+<div id="log"></div>
+<script type="module" src="./proof.js"></script>
+</body>
+</html>

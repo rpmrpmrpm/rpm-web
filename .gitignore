@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.build/
+public/media/
+*.log
+.DS_Store
+.env
+.env.*
+proof/tracks/

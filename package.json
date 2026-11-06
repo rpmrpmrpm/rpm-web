@@ -1,0 +1,31 @@
+{
+  "name": "rpm-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MPL-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "check": "svelte-check --threshold warning",
+    "test": "vitest run",
+    "test:browser": "node --test test/browser/proof.test.mjs",
+    "media": "scripts/build-media.sh",
+    "proof": "node proof/serve.mjs",
+    "test:media": "node --test test/parity/parity.test.mjs test/chain/chain.test.mjs"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@tsconfig/svelte": "5.0.8",
+    "@types/node": "22.20.5",
+    "playwright": "1.56.1",
+    "svelte": "5.57.3",
+    "svelte-check": "4.7.8",
+    "typescript": "5.9.3",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
