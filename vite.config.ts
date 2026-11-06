@@ -17,6 +17,10 @@ function forward(prefix: string, target: string, headers: Record<string, string>
 
 export default defineConfig({
   plugins: [svelte()],
+  build: {
+    // Every asset stays a file. The site's content policy refuses data: fonts.
+    assetsInlineLimit: 0,
+  },
   server: {
     proxy: {
       '/api': forward('/api', 'https://api.rpmrpmrpm.com', key ? { 'X-RPM-Key': key } : {}),
