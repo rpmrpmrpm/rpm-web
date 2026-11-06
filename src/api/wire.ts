@@ -24,6 +24,9 @@ export interface CloudTrackTags {
   favorite?: boolean;
   favoritedAt?: number;
   advisory?: number;
+  composer?: string | null;
+  work?: string | null;
+  movementName?: string | null;
 }
 
 export interface CloudTrack {

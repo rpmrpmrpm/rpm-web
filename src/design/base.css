@@ -132,3 +132,69 @@ textarea {
     backdrop-filter: none;
   }
 }
+
+@font-face {
+  font-family: Icons;
+  font-display: block;
+  src: url('/fonts/icons.woff2') format('woff2');
+}
+
+.icon {
+  font-family: Icons;
+  font-weight: 900;
+  font-style: normal;
+  line-height: 1;
+}
+
+/* A key with a flat glyph and no chrome, as on the deck. */
+.key {
+  display: inline-grid;
+  place-items: center;
+  min-width: var(--control-height);
+  height: var(--control-height);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .key:hover {
+    color: #fff;
+  }
+}
+
+/* The frosted card of a pane or the deck. */
+.pane {
+  border: 1px solid rgb(255 255 255 / 0.13);
+  border-radius: 12px;
+  background: rgb(0 0 0 / 0.2);
+  backdrop-filter: blur(30px);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .pane {
+    backdrop-filter: none;
+    background: rgb(12 14 20 / 0.92);
+  }
+}
+
+.heading {
+  margin: 0;
+  color: rgb(255 255 255 / 0.5);
+  font: 400 78px / 36px Thiamine, Cabin, sans-serif;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.logo {
+  display: block;
+  color: rgb(255 255 255 / 0.5);
+  font: 400 230px / 64px Thiamine, Cabin, sans-serif;
+}
+
+.logo.small {
+  font-size: 120px;
+  line-height: 34px;
+}

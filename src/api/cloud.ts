@@ -34,4 +34,10 @@ export class CloudClient {
   stream(rpmId: string, rate: number, signal?: AbortSignal): Promise<CloudStream> {
     return this.api.json(`cloud/stream/${encodeURIComponent(rpmId)}?rate=${rate}`, readStream, { signal });
   }
+
+  // Asks the store to make a rendition, without waiting for it. See PLAN-TRANSCODE: the look-ahead goes
+  // through this and never through a live address.
+  async requestRendition(rpmIds: string[], kilobits: number): Promise<void> {
+    await this.api.call('cloud/transcode', { method: 'POST', body: { rpmIds, kilobits } });
+  }
 }

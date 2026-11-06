@@ -1,5 +1,5 @@
 // The playback chain: tracks go in, one continuous stream of FLAC in fragmented MP4 comes out. It runs
-// in a worker in the browser and in Node in the tests.
+// in a worker in the browser and in Node in the tests, which is why it is plain JavaScript.
 //
 // The stream is continuous because the queue never starts a new track. A locked iPhone cannot call
 // play(), so the next track is written into the stream that is already playing.
@@ -81,6 +81,10 @@ export class UrlSource extends PositionedSource {
     const known = this.blocks.get(index);
     if (known) return known;
 
+    // A server that answers without ranges sent everything in the first answer. This is a live
+    // transcode, which ends when the encode ends.
+    if (this.whole) return this.whole;
+
     const start = index * UrlSource.BLOCK;
     const request = new XMLHttpRequest();
     request.open('GET', this.url, false);
@@ -93,6 +97,11 @@ export class UrlSource extends PositionedSource {
     const bytes = new Uint8Array(request.response);
     const block = { bytes, total: range ? Number(range.split('/')[1]) : bytes.length };
 
+    if (!range) {
+      this.whole = block;
+      return block;
+    }
+
     if (this.blocks.size >= UrlSource.BLOCKS_KEPT) this.blocks.delete(this.blocks.keys().next().value);
     this.blocks.set(index, block);
     return block;
@@ -100,8 +109,8 @@ export class UrlSource extends PositionedSource {
 
   read(view) {
     if (this.position >= this.size) return 0;
-    const index = Math.floor(this.position / UrlSource.BLOCK);
-    const offset = this.position - index * UrlSource.BLOCK;
+    const index = this.whole ? 0 : Math.floor(this.position / UrlSource.BLOCK);
+    const offset = this.position - index * (this.whole ? 0 : UrlSource.BLOCK);
     const part = this.block(index).bytes.subarray(offset, offset + view.length);
     view.set(part);
     this.position += part.length;
@@ -124,8 +133,13 @@ class SourceTable {
     this.sources.delete(id);
   }
 
+  // A failure is an answer to C. An exception must not pass through compiled code.
   read(id, view) {
-    return this.sources.get(id).read(view);
+    try {
+      return this.sources.get(id).read(view);
+    } catch {
+      return -1;
+    }
   }
 
   seek(id, offset, whence) {
@@ -134,13 +148,15 @@ class SourceTable {
 }
 
 export class Chain {
-  // track: { name, source, gain }. gain is the levelling, as a factor.
+  // track: { id, name, source or makeSource, gain, startAt }. gain is the levelling, as a factor.
+  // startAt is where to begin, in seconds, for a track that is opened again after a failure.
   queue = [];
   current = null;
   framesWritten = 0;
-  // Where each track starts in the stream, in seconds.
+  // Where each track starts in the stream: { id, name, at, offset, duration }. Stream time at is track
+  // time offset.
   boundaries = [];
-  // Tracks that could not be played, with the words FFmpeg gave.
+  // Tracks that could not be played: { id, name, said, at }. at is how far into the track it got.
   failures = [];
 
   constructor(media) {
@@ -170,51 +186,64 @@ export class Chain {
   }
 
   open(track) {
-    let id;
+    const { media } = this;
+    let sourceId;
     try {
       // A remote track is only touched when it is reached, not when it joins the queue.
-      id = this.table.add(track.source ?? track.makeSource());
+      sourceId = this.table.add(track.source ?? track.makeSource());
     } catch (error) {
-      this.failures.push({ name: track.name, said: String(error) });
+      this.failures.push({ id: track.id, name: track.name, said: String(error), at: track.startAt ?? 0 });
       return null;
     }
-    const name = this.media.stringToNewUTF8(track.name);
-    const decoder = this.media._rm_open(id, name, STREAM_RATE);
-    this.media._free(name);
+    const name = media.stringToNewUTF8(track.name);
+    const decoder = media._rm_open(sourceId, name, STREAM_RATE);
+    media._free(name);
     if (!decoder) {
-      this.failures.push({ name: track.name, said: this.lastError() });
-      this.table.remove(id);
+      this.failures.push({ id: track.id, name: track.name, said: this.lastError(), at: track.startAt ?? 0 });
+      this.table.remove(sourceId);
       return null;
     }
-    return { ...track, id, decoder };
+    if (track.startAt) media._rm_seek(decoder, track.startAt);
+    return { ...track, sourceId, decoder, offset: track.startAt ?? 0, framesRead: 0 };
   }
 
   closeCurrent() {
     if (!this.current) return;
     this.media._rm_close(this.current.decoder);
-    this.table.remove(this.current.id);
+    this.table.remove(this.current.sourceId);
     this.current = null;
   }
 
-  // The next track that opens, or null when the queue has ended.
-  advance() {
-    this.closeCurrent();
-    while (this.queue.length > 0) {
-      const track = this.queue.shift();
-      this.current = this.open(track);
-      if (this.current) {
-        this.boundaries.push({ name: track.name, at: this.framesWritten / STREAM_RATE });
-        return this.current;
-      }
-    }
-    return null;
+  // Adds a track ahead of the rest of the queue: one that is opened again after a failure.
+  addFirst(track) {
+    this.queue.unshift(track);
   }
 
-  // Stops the current track where it is. What the caller does next starts on a new block, with nothing
-  // of this track left in the output. The bytes already made are the caller's to remove from the
-  // buffer.
-  stopCurrent() {
+  // The next track that opens, or null when none did: the queue is empty, or a track failed.
+  advance() {
     this.closeCurrent();
+    const track = this.queue.shift();
+    if (!track) return null;
+
+    this.current = this.open(track);
+    if (!this.current) return null;
+
+    this.boundaries.push({
+      id: track.id,
+      name: track.name,
+      at: this.framesWritten / STREAM_RATE,
+      offset: this.current.offset,
+      duration: this.media._rm_duration(this.current.decoder),
+    });
+    return this.current;
+  }
+
+  // Stops the current track and forgets the queue. What is added next starts on a new block, with
+  // nothing of the old tracks left in the output. The bytes already made are the caller's to remove
+  // from the buffer.
+  stop() {
+    this.closeCurrent();
+    this.queue = [];
     this.media._rm_output_drop(this.output);
   }
 
@@ -224,22 +253,33 @@ export class Chain {
     const ret = this.media._rm_seek(this.current.decoder, seconds);
     if (ret < 0) throw new Error(this.lastError());
     this.media._rm_output_drop(this.output);
-    this.boundaries.push({ name: this.current.name, at: this.framesWritten / STREAM_RATE, offset: seconds });
+    this.current.offset = seconds;
+    this.boundaries.push({
+      id: this.current.id,
+      name: this.current.name,
+      at: this.framesWritten / STREAM_RATE,
+      offset: seconds,
+      duration: this.media._rm_duration(this.current.decoder),
+    });
   }
 
-  // Makes up to the given number of seconds of stream. Returns the bytes, and whether the queue ended.
+  // Makes up to the given number of seconds of stream. Returns the bytes, and drained when the queue
+  // ran out. Drained is not the end of the stream: the next track may still be on its way. finish()
+  // says there is nothing more. A failure stops here with failed set, so the caller can open the same
+  // track again and the sound carries on from the same sample. Calling again moves on instead.
   render(seconds) {
     const { media, output } = this;
     const wanted = Math.round(seconds * STREAM_RATE);
     const chunk = 4096;
     const pointer = media._malloc(chunk * 8);
+    const failuresBefore = this.failures.length;
     let made = 0;
-    let ended = false;
+    let drained = false;
 
     try {
       while (made < wanted) {
         if (!this.current && !this.advance()) {
-          ended = true;
+          drained = this.failures.length === failuresBefore;
           break;
         }
 
@@ -249,9 +289,10 @@ export class Chain {
           continue;
         }
         if (got < 0) {
-          this.failures.push({ name: this.current.name, said: this.lastError() });
+          const at = this.current.offset + this.current.framesRead / STREAM_RATE;
+          this.failures.push({ id: this.current.id, name: this.current.name, said: this.lastError(), at });
           this.closeCurrent();
-          continue;
+          break;
         }
 
         if (this.current.gain !== undefined && this.current.gain !== 1) {
@@ -262,15 +303,23 @@ export class Chain {
         const ret = media._rm_output_write(output, pointer, got);
         if (ret < 0) throw new Error(this.lastError());
         made += got;
+        this.current.framesRead += got;
         this.framesWritten += got;
       }
     } finally {
       media._free(pointer);
     }
 
-    const ret = media._rm_output_cut(output, ended ? 1 : 0);
+    const ret = media._rm_output_cut(output, 0);
     if (ret < 0) throw new Error(this.lastError());
-    return { bytes: this.take(), ended };
+    return { bytes: this.take(), drained, failed: this.failures.length > failuresBefore };
+  }
+
+  // The queue has ended. Writes the last short block.
+  finish() {
+    const ret = this.media._rm_output_cut(this.output, 1);
+    if (ret < 0) throw new Error(this.lastError());
+    return this.take();
   }
 
   close() {

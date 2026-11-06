@@ -214,6 +214,22 @@ export class Session implements TokenSource {
     return this.signUpStep('auth/resend-code', { email: email.trim() });
   }
 
+  // Takes the code from a beta mail. The account is read again, because that is what says it is in.
+  async redeemCode(code: string): Promise<Outcome> {
+    try {
+      const token = await this.accessToken();
+      const response = await this.post('auth/beta-code', { code: code.trim() }, { Authorization: `Bearer ${token}` });
+      if (response.status === 400) return 'Web_CodeRefused';
+      if (response.status === 429) return 'SignUp_TooMany';
+      if (!response.ok) return 'Web_CodeFailed';
+      await this.loadUser();
+      this.set('signed-in');
+      return null;
+    } catch {
+      return 'Web_CodeFailed';
+    }
+  }
+
   // Leaves for the provider's page. The browser comes back to finishSocialSignIn.
   async startSocialSignIn(provider: 'Apple' | 'Google'): Promise<Outcome> {
     const secret = base64Url(crypto.getRandomValues(new Uint8Array(32)));

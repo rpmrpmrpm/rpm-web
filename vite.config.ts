@@ -27,6 +27,7 @@ export default defineConfig({
       '/accounts': forward('/accounts', 'https://accounts.rpmrpmrpm.com'),
     },
   },
+  worker: { format: 'es' },
   test: {
     include: ['test/unit/**/*.test.ts'],
     environment: 'node',

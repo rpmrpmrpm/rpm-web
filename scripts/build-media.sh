@@ -131,7 +131,7 @@ emcc -O3 -msimd128 -sUSE_ZLIB=1 \
   -sENVIRONMENT=web,worker,node \
   -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=33554432 -sMAXIMUM_MEMORY=2147483648 -sSTACK_SIZE=1048576 \
   -sFORCE_FILESYSTEM=1 -lworkerfs.js -lnodefs.js \
-  -sEXPORTED_FUNCTIONS=_malloc,_free,_rpm_canonical,_rpm_last_error,_rm_open,_rm_duration,_rm_seek,_rm_read_pcm,_rm_close,_rm_output_open,_rm_output_write,_rm_output_cut,_rm_output_drop,_rm_output_data,_rm_output_size,_rm_output_clear,_rm_output_close \
+  -sEXPORTED_FUNCTIONS=_malloc,_free,_rpm_canonical,_rpm_last_error,_rm_open,_rm_duration,_rm_seek,_rm_read_pcm,_rm_close,_rm_encode,_rm_output_open,_rm_output_write,_rm_output_cut,_rm_output_drop,_rm_output_data,_rm_output_size,_rm_output_clear,_rm_output_close \
   -sEXPORTED_RUNTIME_METHODS=FS,ccall,cwrap,UTF8ToString,stringToNewUTF8,WORKERFS,NODEFS,HEAPU8,HEAPF32 \
   -o "$OUT/rpm-media.js"
 

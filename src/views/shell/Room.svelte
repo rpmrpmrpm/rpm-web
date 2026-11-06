@@ -1,0 +1,41 @@
+<script lang="ts">
+  // The room behind the panes: dark blue at rest, and the colour of the record while one is playing.
+  import type { CloudAlbum } from '../../library/albums';
+  import { catalogue, covers } from '../../app';
+  import { colourOf, css, type Colour } from '../../library/colour';
+  import { now } from '../../state.svelte';
+
+  let colour = $state<Colour | null>(null);
+
+  $effect(() => {
+    const track = now.track;
+    if (!track) {
+      colour = null;
+      return;
+    }
+    const album: CloudAlbum | undefined = catalogue.albums.find((a) => a.tracks.some((t) => t.rpmId === track.rpmId));
+    if (!album) return;
+    let current = true;
+    void covers.url(album, 256).then(async (url) => {
+      const found = url ? await colourOf(url) : null;
+      if (current) colour = found;
+    });
+    return () => {
+      current = false;
+    };
+  });
+</script>
+
+<div class="room" style:--wash={colour ? css(colour, 0.55) : '#0a2a54'}></div>
+
+<style>
+  .room {
+    position: fixed;
+    inset: 0;
+    transition: background 1.2s;
+    background:
+      radial-gradient(90% 70% at 85% 0%, color-mix(in srgb, var(--wash) 80%, transparent), transparent 70%),
+      radial-gradient(80% 80% at 0% 100%, color-mix(in srgb, var(--wash) 45%, transparent), transparent 70%),
+      #05070c;
+  }
+</style>

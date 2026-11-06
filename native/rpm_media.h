@@ -30,6 +30,11 @@ int rm_read_pcm(RmDecoder *decoder, float *samples, int frames);
 
 void rm_close(RmDecoder *decoder);
 
+// Writes a rendition of an open track: AAC-LC in a faststart MP4 at 44.1 kHz stereo. The rate given to
+// rm_open must be 44100. seconds of 0 means the whole track, otherwise the first seconds of it. Returns
+// 0, or a negative FFmpeg error.
+int rm_encode(RmDecoder *decoder, const char *out_path, int kilobits, double seconds);
+
 // The output: one continuous stream of FLAC in fragmented MP4, which a MediaSource plays.
 typedef struct RmOutput RmOutput;
 

@@ -852,10 +852,152 @@ int rm_output_cut(RmOutput *o, int flush)
     return 0;
 }
 
-void rm_output_drop(RmOutput *o) { av_audio_fifo_reset(o->fifo); }
+// The clock moves past what is dropped, so the stream's time stays the frames given to it.
+void rm_output_drop(RmOutput *o)
+{
+    o->next_pts += av_audio_fifo_size(o->fifo);
+    av_audio_fifo_reset(o->fifo);
+}
 
 const unsigned char *rm_output_data(const RmOutput *o) { return o->data; }
 
 int rm_output_size(const RmOutput *o) { return o->size; }
 
 void rm_output_clear(RmOutput *o) { o->size = 0; }
+
+// --- Renditions --------------------------------------------------------------------------------
+
+#define RENDITION_RATE 44100
+
+// Encodes one frame from the fifo, or flushes the encoder when frame is NULL, and writes the packets.
+static int encode_rendition_frame(AVCodecContext *encoder, AVFormatContext *mux, AVStream *st, AVFrame *frame, AVPacket *pkt)
+{
+    int ret = avcodec_send_frame(encoder, frame);
+    if (ret < 0) return ret;
+
+    while ((ret = avcodec_receive_packet(encoder, pkt)) == 0) {
+        av_packet_rescale_ts(pkt, encoder->time_base, st->time_base);
+        pkt->stream_index = st->index;
+        ret = av_interleaved_write_frame(mux, pkt);
+        if (ret < 0) return ret;
+    }
+    return ret == AVERROR(EAGAIN) || ret == AVERROR_EOF ? 0 : ret;
+}
+
+// AAC-LC in a faststart MP4 at 44.1 kHz stereo, as Transcoding does on the desktop. seconds of 0 means
+// the whole track.
+int rm_encode(RmDecoder *d, const char *out_path, int kilobits, double seconds)
+{
+    AVFormatContext *mux = NULL;
+    AVCodecContext *encoder = NULL;
+    AVAudioFifo *fifo = NULL;
+    AVFrame *frame = av_frame_alloc();
+    AVPacket *pkt = av_packet_alloc();
+    AVDictionary *options = NULL;
+    float *interleaved = NULL;
+    int ret = AVERROR(ENOMEM);
+    int header_written = 0;
+
+    clear_error();
+    av_log_set_callback(log_to_last_error);
+
+    const AVCodec *aac = avcodec_find_encoder(AV_CODEC_ID_AAC);
+    if (!frame || !pkt || !aac) goto done;
+
+    encoder = avcodec_alloc_context3(aac);
+    if (!encoder) goto done;
+
+    AVChannelLayout stereo = AV_CHANNEL_LAYOUT_STEREO;
+    encoder->sample_fmt = AV_SAMPLE_FMT_FLTP;
+    encoder->sample_rate = RENDITION_RATE;
+    encoder->bit_rate = kilobits * 1000LL;
+    encoder->time_base = (AVRational){1, RENDITION_RATE};
+    encoder->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    if ((ret = av_channel_layout_copy(&encoder->ch_layout, &stereo)) < 0) goto done;
+    if ((ret = avcodec_open2(encoder, aac, NULL)) < 0) goto done;
+
+    if ((ret = avformat_alloc_output_context2(&mux, NULL, "mp4", out_path)) < 0) goto done;
+    mux->flags |= AVFMT_FLAG_BITEXACT;
+
+    AVStream *st = avformat_new_stream(mux, NULL);
+    if (!st) {
+        ret = AVERROR(ENOMEM);
+        goto done;
+    }
+    if ((ret = avcodec_parameters_from_context(st->codecpar, encoder)) < 0) goto done;
+    st->time_base = encoder->time_base;
+
+    if ((ret = avio_open(&mux->pb, out_path, AVIO_FLAG_WRITE)) < 0) goto done;
+    av_dict_set(&options, "movflags", "+faststart", 0);
+    if ((ret = avformat_write_header(mux, &options)) < 0) goto done;
+    header_written = 1;
+
+    int block = encoder->frame_size;
+    fifo = av_audio_fifo_alloc(AV_SAMPLE_FMT_FLTP, STREAM_CHANNELS, block * 4);
+    interleaved = av_malloc_array(block * STREAM_CHANNELS, sizeof(float));
+    if (!fifo || !interleaved) {
+        ret = AVERROR(ENOMEM);
+        goto done;
+    }
+
+    int64_t limit = seconds > 0 ? (int64_t)(seconds * RENDITION_RATE) : INT64_MAX;
+    int64_t read_so_far = 0;
+    int64_t next_pts = 0;
+    int ended = 0;
+
+    while (!ended || av_audio_fifo_size(fifo) > 0) {
+        while (!ended && av_audio_fifo_size(fifo) < block) {
+            int wanted = (int)FFMIN(block, limit - read_so_far);
+            int got = wanted > 0 ? rm_read_pcm(d, interleaved, wanted) : 0;
+            if (got < 0) {
+                ret = got;
+                goto done;
+            }
+            if (got == 0) {
+                ended = 1;
+                break;
+            }
+            read_so_far += got;
+
+            float left[1024 * 4], right[1024 * 4];
+            for (int i = 0; i < got; i++) {
+                left[i] = interleaved[i * 2];
+                right[i] = interleaved[i * 2 + 1];
+            }
+            void *planes[2] = {left, right};
+            if ((ret = av_audio_fifo_write(fifo, planes, got)) < 0) goto done;
+        }
+
+        int samples = FFMIN(block, av_audio_fifo_size(fifo));
+        if (samples == 0) break;
+
+        av_frame_unref(frame);
+        frame->nb_samples = samples;
+        frame->format = AV_SAMPLE_FMT_FLTP;
+        frame->sample_rate = RENDITION_RATE;
+        if ((ret = av_channel_layout_copy(&frame->ch_layout, &stereo)) < 0) goto done;
+        if ((ret = av_frame_get_buffer(frame, 0)) < 0) goto done;
+        av_audio_fifo_read(fifo, (void **)frame->data, samples);
+        frame->pts = next_pts;
+        next_pts += samples;
+
+        if ((ret = encode_rendition_frame(encoder, mux, st, frame, pkt)) < 0) goto done;
+    }
+
+    if ((ret = encode_rendition_frame(encoder, mux, st, NULL, pkt)) < 0) goto done;
+    ret = av_write_trailer(mux);
+    header_written = 0;
+
+done:
+    if (ret < 0 && !last_error[0]) add_error(av_err2str(ret));
+    if (header_written) av_write_trailer(mux);
+    if (mux) avio_closep(&mux->pb);
+    avformat_free_context(mux);
+    avcodec_free_context(&encoder);
+    if (fifo) av_audio_fifo_free(fifo);
+    av_frame_free(&frame);
+    av_packet_free(&pkt);
+    av_dict_free(&options);
+    av_free(interleaved);
+    return ret < 0 ? ret : 0;
+}

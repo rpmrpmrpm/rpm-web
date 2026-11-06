@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { session } from '../../app';
+  import { keptCode } from '../../api/beta-code';
+  import { BETA_FORM, PRIVACY, session, TERMS } from '../../app';
   import { text } from '../../strings/loc';
   import Card from './Card.svelte';
 
@@ -62,6 +63,9 @@
     <button class="link" onclick={resend}>{text('SignUp_Resend')}</button>
   {:else}
     <p class="subtitle">{text('SignUp_Subtitle')}</p>
+    {#if !keptCode()}
+      <p class="rule">{text('Web_BetaClosed')} <a class="link" href={BETA_FORM}>{text('Web_BetaApply')}</a></p>
+    {/if}
     <form onsubmit={create}>
       <input class="field" autocomplete="name" placeholder={text('SignUp_Name')} bind:value={name} />
       <input class="field" type="email" autocomplete="username" placeholder={text('Login_Email')} bind:value={email} />
@@ -70,7 +74,13 @@
       {#if message}<p class="message" role="alert">{message}</p>{/if}
       <button class="glass-button primary" type="submit" disabled={busy}>{text('SignUp_Create')}</button>
     </form>
-    <button class="link" onclick={onBack}>{text('Login_SignIn')}</button>
+    <div class="foot">
+      <button class="link" onclick={onBack}>{text('Login_SignIn')}</button>
+      <span>
+        <a class="link" href={TERMS} target="_blank" rel="noopener">{text('Shell_Terms')}</a>
+        <a class="link" href={PRIVACY} target="_blank" rel="noopener">{text('Shell_Privacy')}</a>
+      </span>
+    </div>
   {/if}
 </Card>
 
@@ -100,5 +110,17 @@
   .message {
     color: var(--error);
     font-size: 13px;
+  }
+
+  .foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px 16px;
+  }
+
+  .foot span {
+    display: flex;
+    gap: 16px;
   }
 </style>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { BETA_FORM, FORGOT_PASSWORD, session, signUpOpen } from '../../app';
+  import { FORGOT_PASSWORD, session } from '../../app';
   import { text } from '../../strings/loc';
   import Card from './Card.svelte';
 
@@ -59,16 +59,8 @@
     <button class="glass-button primary" type="submit" disabled={busy}>{text('Login_SignIn')}</button>
   </form>
 
-  <div class="foot">
-    <a class="link" href={forgot}>{text('Login_Forgot')}</a>
-    {#if signUpOpen}
-      <button class="link" onclick={onSignUp}>{text('SignUp_Button')}</button>
-    {/if}
-  </div>
-
-  {#if !signUpOpen}
-    <p class="note">{text('Web_BetaClosed')} <a class="link" href={BETA_FORM}>{text('Web_BetaApply')}</a></p>
-  {/if}
+  <button class="glass-button" onclick={onSignUp}>{text('SignUp_Create')}</button>
+  <a class="link forgot" href={forgot}>{text('Login_Forgot')}</a>
 </Card>
 
 <style>
@@ -127,14 +119,7 @@
     font-size: 13px;
   }
 
-  .foot {
-    display: flex;
-    justify-content: space-between;
-  }
-
-  .note {
-    color: var(--text-soft);
-    font-size: 13px;
-    line-height: 1.5;
+  .forgot {
+    text-align: center;
   }
 </style>

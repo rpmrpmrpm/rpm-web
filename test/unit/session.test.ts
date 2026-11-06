@@ -192,3 +192,68 @@ describe('signing out', () => {
     expect(await session.accessToken()).toBeNull();
   });
 });
+
+describe('the code from a beta mail', () => {
+  const newcomer = { ...me, grSupporter: false, grTester: false };
+
+  function withCode(answer: Response) {
+    let accepted = false;
+    return make((path) => {
+      if (path === 'auth/beta-code') {
+        accepted = answer.ok;
+        return answer;
+      }
+      if (path === 'auth/me') return json(200, accepted ? { ...me, grSupporter: true } : newcomer);
+      return signedIn(path);
+    });
+  }
+
+  it('reads the account again, and says so, once the code is taken', async () => {
+    const { session } = withCode(json(200, { status: 'tester' }));
+    await session.restore();
+    expect(session.user?.supporter).toBe(false);
+    const heard = vi.fn();
+    session.onChange(heard);
+
+    expect(await session.redeemCode(' K7QM-2XPD ')).toBeNull();
+
+    expect(session.user?.supporter).toBe(true);
+    expect(heard).toHaveBeenCalled();
+  });
+
+  it('sends the signed-in token and the code without spaces', async () => {
+    const { session, fetcher } = withCode(json(200));
+    await session.restore();
+
+    await session.redeemCode(' K7QM-2XPD ');
+
+    const [, init] = fetcher.mock.calls.find(([url]) => String(url).endsWith('auth/beta-code'))!;
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token');
+    expect(JSON.parse(String(init?.body))).toEqual({ code: 'K7QM-2XPD' });
+  });
+
+  it.each([
+    [400, 'Web_CodeRefused'],
+    [429, 'SignUp_TooMany'],
+    [500, 'Web_CodeFailed'],
+  ])('a %i leaves the account as it was and says %s', async (status, key) => {
+    const { session } = withCode(json(status));
+    await session.restore();
+
+    expect(await session.redeemCode('WRONGONE')).toBe(key);
+
+    expect(session.user?.supporter).toBe(false);
+    expect(session.state).toBe('signed-in');
+  });
+
+  it('a dropped request is a failure to check, never a refused code', async () => {
+    const { session } = make((path) => {
+      if (path === 'auth/beta-code') throw new TypeError('network');
+      return path === 'auth/me' ? json(200, newcomer) : signedIn(path);
+    });
+    await session.restore();
+
+    expect(await session.redeemCode('K7QM2XPD')).toBe('Web_CodeFailed');
+    expect(session.state).toBe('signed-in');
+  });
+});
