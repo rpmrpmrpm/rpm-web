@@ -153,6 +153,9 @@ test('a real import through the workbench', { skip: !email, timeout: 300_000 }, 
     await page.waitForFunction(() => /TONE 2/i.test(document.querySelector('.playing')?.textContent ?? ''), null, { timeout: 20_000 });
     await page.waitForFunction(() => /0:0[1-5]/.test(document.querySelector('.seek .time')?.textContent ?? ''), null, { timeout: 20_000 });
 
+    // The room takes its colour from the cover. A failure here is silent on screen.
+    await page.waitForFunction(() => document.querySelector('.room')?.style.getPropertyValue('--wash').startsWith('rgb'), null, { timeout: 20_000 });
+
     // The same files again: nothing is stored twice.
     await page.click('button:has-text("Clear finished")');
     await page.setInputFiles('input[type=file][multiple]', files.slice(0, 1));

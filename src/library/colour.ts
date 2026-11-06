@@ -35,12 +35,15 @@ export function pickColour(pixels: Uint8ClampedArray): Colour {
   return best ?? { r: Math.round(mean.r), g: Math.round(mean.g), b: Math.round(mean.b) };
 }
 
+// Read through an image, because the site's content policy allows a blob address for a picture and
+// not for a fetch.
 export async function colourOf(url: string): Promise<Colour | null> {
   try {
-    const bitmap = await createImageBitmap(await (await fetch(url)).blob(), { resizeWidth: SIZE, resizeHeight: SIZE });
-    const canvas = new OffscreenCanvas(SIZE, SIZE);
-    const context = canvas.getContext('2d')!;
-    context.drawImage(bitmap, 0, 0);
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const context = new OffscreenCanvas(SIZE, SIZE).getContext('2d')!;
+    context.drawImage(image, 0, 0, SIZE, SIZE);
     return pickColour(context.getImageData(0, 0, SIZE, SIZE).data);
   } catch {
     return null;
