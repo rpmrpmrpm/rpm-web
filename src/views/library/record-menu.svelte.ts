@@ -12,9 +12,17 @@ import { text } from '../../strings/loc';
 import type { MenuEntry, MenuItem } from '../menu/menu.svelte';
 import { openMenu, tidy } from '../menu/menu.svelte';
 
+// Which edit window is open: one track's tags, a record's, several tracks at once, or the tracks filled from
+// a release listing.
+export type Editing =
+  | { kind: 'track'; track: CloudTrack }
+  | { kind: 'album'; album: CloudAlbum }
+  | { kind: 'mass'; tracks: readonly CloudTrack[] }
+  | { kind: 'release'; tracks: readonly CloudTrack[] };
+
 class Asked {
   adding = $state.raw<readonly CloudTrack[] | null>(null);
-  editing = $state.raw<{ tracks: readonly CloudTrack[]; album: CloudAlbum | null } | null>(null);
+  editing = $state.raw<Editing | null>(null);
   deleting = $state.raw<{ tracks: readonly CloudTrack[]; name: string; wholeAlbum: boolean } | null>(null);
   opening = $state.raw<CloudAlbum | null>(null);
 }
@@ -78,7 +86,7 @@ export async function albumMenu(album: CloudAlbum, place: 'collection' | 'page')
     { label: text('AlbumMenu_PlayNext'), glyph: icons.playNext, run: () => player.playNext(tracks) },
     'rule',
     ...(place === 'collection' ? [{ label: text('AlbumMenu_AlbumPage'), glyph: icons.album, run: () => (asked.opening = album) }] : []),
-    { label: text('AlbumMenu_EditAlbum'), glyph: icons.pen, run: () => (asked.editing = { tracks, album }) },
+    { label: text('AlbumMenu_EditAlbum'), glyph: icons.pen, run: () => (asked.editing = { kind: 'album', album }) },
     { label: text('AlbumMenu_Favorite'), glyph: icons.heart, outline: !loved, run: () => void favorites.markAlbum(album, !loved) },
     'rule',
     { label: text('Delete_Cloud'), glyph: icons.trash, run: () => (asked.deleting = { tracks, name: album.album, wholeAlbum: true }) },
@@ -97,10 +105,29 @@ export function trackMenu(track: CloudTrack, list: readonly CloudTrack[], index:
     'rule',
     { label: text(on ? 'Track_UnsetFavorite' : 'Track_SetFavorite'), glyph: icons.heart, outline: !on, run: () => void favorites.mark(track, !on) },
     'rule',
-    { label: text('Review_CtxEditTrack'), glyph: icons.edit, run: () => (asked.editing = { tracks: [track], album: null }) },
+    { label: text('Review_CtxEditTrack'), glyph: icons.edit, run: () => (asked.editing = { kind: 'track', track }) },
+    ...(options.album ? [{ label: text('AlbumEdit_MenuEdit'), glyph: icons.album, run: () => (asked.editing = { kind: 'album', album: options.album! }) }] : []),
+    { label: text('Queue_CtxNameTracks'), glyph: icons.tag, run: () => (asked.editing = { kind: 'release', tracks: [track] }) },
+    'rule',
     ...(options.album ? [{ label: text('AlbumMenu_AlbumPage'), glyph: icons.album, run: () => (asked.opening = options.album!) }] : []),
     'rule',
     { label: text('Delete_Cloud'), glyph: icons.trash, run: () => (asked.deleting = { tracks: [track], name: track.title ?? '', wholeAlbum: false }) },
+  ];
+}
+
+// What several selected songs offer: the desktop's library table menu for a selection.
+export function selectionMenu(tracks: readonly CloudTrack[]): MenuEntry[] {
+  readPlaylists();
+  return [
+    { label: text('AlbumMenu_Play'), glyph: icons.play, run: () => player.play(tracks, 0, { inAlbumOrder: false }) },
+    { label: text('AlbumMenu_PlayNext'), glyph: icons.playNext, run: () => player.playNext(tracks) },
+    { label: text('Review_CtxAddNowPlaying'), glyph: icons.playlist, run: () => player.addToQueue(tracks) },
+    toPlaylist(tracks, text('Playlists_AddToPlaylist'), false),
+    'rule',
+    { label: text('MassEdit_MenuEdit'), glyph: icons.edit, run: () => (asked.editing = { kind: 'mass', tracks }) },
+    { label: text('Queue_CtxNameTracks'), glyph: icons.tag, run: () => (asked.editing = { kind: 'release', tracks }) },
+    'rule',
+    { label: text('Delete_Cloud'), glyph: icons.trash, run: () => (asked.deleting = { tracks, name: text('AlbumPicker_Tracks', tracks.length), wholeAlbum: false }) },
   ];
 }
 

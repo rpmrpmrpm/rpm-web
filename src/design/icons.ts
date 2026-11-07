@@ -76,4 +76,8 @@ export const icons = {
   broadcast: '\uf519',
   folderClosed: '\uf07b',
   grip: '\uf58e',
+  users: '\uf0c0',
+  sliders: '\uf1de',
+  alignLeft: '\uf036',
+  save: '\uf0c7',
 } as const;

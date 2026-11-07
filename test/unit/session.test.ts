@@ -41,6 +41,13 @@ describe('opening with a session', () => {
     expect(session.user).toMatchObject({ email: 'a@b.c', tester: true });
   });
 
+  it('says it is the web app when it reads the account, so the visit is noted', async () => {
+    const { session, fetcher } = make(signedIn);
+    await session.restore();
+    const read = fetcher.mock.calls.find(([url]) => String(url).endsWith('auth/me'));
+    expect((read?.[1]?.headers as Record<string, string>)['X-RPM-Session']).toBe('cookie');
+  });
+
   it('shows the sign-in form when there is no cookie', async () => {
     const { session } = make(() => json(400));
     await session.restore();

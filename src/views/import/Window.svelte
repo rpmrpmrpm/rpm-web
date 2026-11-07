@@ -21,6 +21,7 @@
     footer,
     leading,
     footnote,
+    banner,
   }: {
     title: string;
     glyph?: string;
@@ -34,6 +35,8 @@
     footer?: Snippet;
     leading?: Snippet;
     footnote?: Snippet;
+    // A band across the whole window under the title, for what must be read before the form is filled in.
+    banner?: Snippet;
   } = $props();
 
   // The title fills a box 92 high, as a Viewbox does. Thiamine's line is 0.4875 of its size, so that is this size.
@@ -94,6 +97,7 @@
       <div class="title"><h2 bind:this={heading}>{title.toLowerCase()}</h2></div>
       {#if !footer}<button class="key" title={text('Common_Cancel')} aria-label={text('Common_Cancel')} onclick={onClose}><i class="icon">{icons.close}</i></button>{/if}
     </header>
+    {@render banner?.()}
     <div class="body">
       {@render children()}
     </div>

@@ -169,8 +169,9 @@ export class Session implements TokenSource {
   }
 
   private async loadUser() {
+    // The session header tells the accounts service that the web app opened, which rpm.Admin shows.
     const response = await this.environment.fetcher(`${this.base}auth/me`, {
-      headers: { Authorization: `Bearer ${this.token}` },
+      headers: { ...SESSION_HEADER, Authorization: `Bearer ${this.token}` },
     });
     if (!response.ok) throw new ApiError(response.status, 'The account could not be read.');
     const me = await response.json();

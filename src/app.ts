@@ -17,6 +17,7 @@ import { RadioListens } from './radio/listens';
 import { RadioRules } from './radio/rules';
 import { Tuner } from './radio/tuner';
 import { CatalogEdits } from './library/edit';
+import { Sidecars } from './library/sidecars';
 import { Favorites } from './library/favorites';
 import { AlbumRatings } from './library/ratings';
 import { Recogniser } from './import/recognise';
@@ -71,7 +72,8 @@ export const player = new Player(
 
 export const playlists = new Playlists(api, browserTransfers);
 export const favorites = new Favorites(api);
-export const catalogEdits = new CatalogEdits(api, covers, browserTransfers, favorites);
+export const sidecars = new Sidecars(api, browserTransfers);
+export const catalogEdits = new CatalogEdits(api, covers, browserTransfers, favorites, sidecars);
 export const albumRatings = new AlbumRatings(() => localStorage);
 export const releaseLookup = new ReleaseLookup(api);
 export const coverSearch = new CoverSearch(api);

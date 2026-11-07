@@ -3,13 +3,15 @@
   import { untrack } from 'svelte';
 
   import { coverSearch, importQueue, releaseLookup, session } from '../../app';
-  import type { FillLine, ImportRow } from '../../import/queue';
+  import type { FillLine, ImportQueue, ImportRow } from '../../import/queue';
   import { canSearch, fitOf, GOOD_MATCH, orderResults, type ReleaseDetail, type ReleaseMedia, type ReleaseQuery, type ReleaseResult, type SourceAnswer } from '../../import/release';
   import { icons } from '../../design/icons';
   import { text } from '../../strings/loc';
   import Window from './Window.svelte';
 
-  let { rows, onClose, onDone }: { rows: ImportRow[]; onClose: () => void; onDone: (note: string) => void } = $props();
+  // The queue the result is written to. The edit windows give a queue of their own, over rows that stand for
+  // the tracks they edit, so the same lookup fills their boxes.
+  let { rows, onClose, onDone, queue = importQueue }: { rows: ImportRow[]; onClose: () => void; onDone: (note: string) => void; queue?: Pick<ImportQueue, 'fillFrom' | 'applyFill' | 'setCover'> } = $props();
 
   const SHORTLIST = 5;
   const MEDIA: [ReleaseMedia, string][] = [
@@ -142,7 +144,7 @@
         return;
       }
       detail = listing;
-      lines = importQueue.fillFrom(rows, listing);
+      lines = queue.fillFrom(rows, listing);
       edits = lines.map(({ title, artist, selected }) => ({ title, artist, selected }));
       if (setTracks) step = 'tracks';
       else await apply();
@@ -156,7 +158,7 @@
   async function apply() {
     if (!detail || !picked) return;
     working = true;
-    const named = importQueue.applyFill(
+    const named = queue.applyFill(
       lines.map((line, index) => ({ ...line, ...edits[index]!, selected: setTracks && edits[index]!.selected })),
       detail,
       albumFields,
@@ -164,7 +166,7 @@
     if (overwriteArt) {
       const address = detail.coverUrl ?? (await releaseLookup.coverOf({ ...picked, coverUrl: null }, 1200).catch(() => null));
       const picture = address ? await coverSearch.download([address, picked.coverUrl]) : null;
-      if (picture) importQueue.setCover(rows, picture);
+      if (picture) queue.setCover(rows, picture);
     }
     working = false;
     onDone(text('Queue_NamedTracks', named, lines.length));

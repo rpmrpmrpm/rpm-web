@@ -65,6 +65,7 @@ export class FavoriteMarks {
 export class Favorites {
   readonly marks = new FavoriteMarks();
   private albumKeys = new Set<string>();
+  private classicalKeys = new Set<string>();
   private readonly listeners = new Set<() => void>();
 
   constructor(
@@ -88,12 +89,32 @@ export class Favorites {
   // A failed read keeps the marks already held.
   async readAlbums() {
     try {
-      const marks = await this.api.json('cloud/album-marks', (raw) => (raw as { albums?: { albumKey: string; favorite?: boolean }[] }).albums ?? []);
+      const marks = await this.api.json('cloud/album-marks', (raw) => (raw as { albums?: { albumKey: string; favorite?: boolean; classical?: boolean | null }[] }).albums ?? []);
       this.albumKeys = new Set(marks.filter((mark) => mark.favorite).map((mark) => mark.albumKey));
+      this.classicalKeys = new Set(marks.filter((mark) => mark.classical === true).map((mark) => mark.albumKey));
       this.changed();
     } catch {
       // Asked again on the next visit.
     }
+  }
+
+  // Whether the record has been said to be classical. Nothing works it out: a record is classical because
+  // somebody said so, on this device or another, and every record starts as an ordinary one.
+  async isClassical(album: CloudAlbum): Promise<boolean> {
+    return (await coverSpellings(album.tracks)).some((key) => this.classicalKeys.has(key));
+  }
+
+  // Said under the record's best key, and taken off every key it was said under. The other apps then draw the
+  // record as works and movements. A refusal throws, so the window can say so.
+  async markClassical(album: CloudAlbum, on: boolean) {
+    const spellings = await coverSpellings(album.tracks);
+    const keys = on ? spellings.slice(0, 1) : spellings.filter((key) => this.classicalKeys.has(key));
+    for (const key of keys) {
+      await this.api.call(`cloud/album-mark/${key}/classical`, { method: 'PUT', body: { classical: on } });
+      if (on) this.classicalKeys.add(key);
+      else this.classicalKeys.delete(key);
+    }
+    this.changed();
   }
 
   // Shown before the call, and undone if the call fails. catalog/tags drops a push that says only
@@ -147,6 +168,7 @@ export class Favorites {
   forget() {
     this.marks.forget();
     this.albumKeys = new Set();
+    this.classicalKeys = new Set();
     this.changed();
   }
 }

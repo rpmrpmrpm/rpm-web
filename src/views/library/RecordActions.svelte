@@ -7,7 +7,10 @@
   import Window from '../import/Window.svelte';
   import AddToPlaylist from './AddToPlaylist.svelte';
   import AlbumPage from './AlbumPage.svelte';
-  import EditTags from './EditTags.svelte';
+  import AlbumEditor from '../edit/AlbumEditor.svelte';
+  import MassEditor from '../edit/MassEditor.svelte';
+  import ReleaseFill from '../edit/ReleaseFill.svelte';
+  import TrackEditor from '../edit/TrackEditor.svelte';
   import { asked } from './record-menu.svelte';
 
   let { compact }: { compact: boolean } = $props();
@@ -45,8 +48,18 @@
   <AddToPlaylist tracks={asked.adding} onClose={() => (asked.adding = null)} />
 {/if}
 
-{#if asked.editing}
-  <EditTags tracks={asked.editing.tracks} album={asked.editing.album} onClose={() => (asked.editing = null)} />
+{#if asked.editing?.kind === 'track'}
+  <TrackEditor track={asked.editing.track} onClose={() => (asked.editing = null)} />
+{:else if asked.editing?.kind === 'album'}
+  <AlbumEditor album={asked.editing.album} onClose={() => (asked.editing = null)} />
+{:else if asked.editing?.kind === 'mass'}
+  {#if asked.editing.tracks.length === 1}
+    <TrackEditor track={asked.editing.tracks[0]!} onClose={() => (asked.editing = null)} />
+  {:else}
+    <MassEditor tracks={asked.editing.tracks} onClose={() => (asked.editing = null)} />
+  {/if}
+{:else if asked.editing?.kind === 'release'}
+  <ReleaseFill tracks={asked.editing.tracks} onClose={() => (asked.editing = null)} />
 {/if}
 
 {#if asked.opening && compact}

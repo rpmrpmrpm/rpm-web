@@ -27,6 +27,13 @@ export interface CloudTrackTags {
   composer?: string | null;
   work?: string | null;
   movementName?: string | null;
+  movementNumber?: number;
+  // Which pressing the record is, and what kind of release.
+  catno?: string | null;
+  barcode?: string | null;
+  mbReleaseId?: string | null;
+  discId?: string | null;
+  releaseType?: string | null;
 }
 
 export interface CloudTrack {

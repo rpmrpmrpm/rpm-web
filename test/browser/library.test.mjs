@@ -88,6 +88,8 @@ async function open(viewport = { width: 1440, height: 900 }, words = {}) {
     if (path.startsWith('cloud/lyric-sheet/')) return answer(route, 404);
     if (path === 'metadata/article') return answer(route, 200, { article: { title: `About ${url.searchParams.get('artist') ?? url.searchParams.get('genre')}`, text: 'First paragraph.\nSecond paragraph.', url: 'https://en.wikipedia.org/wiki/X', language: 'en' } });
     if (path.startsWith('cloud/stream/')) return answer(route, 200, { url: `${site}/proof/tracks/flac-1.flac`, kilobits: 0, live: false, expiresInSeconds: 3600 });
+    // No sidecars: the edit windows read the row alone.
+    if (path.startsWith('cloud/sidecar/')) return answer(route, 404);
     if (path === 'cloud/catalog/tags') {
       const { items } = route.request().postDataJSON();
       pushes.push(items);
@@ -385,10 +387,10 @@ test('the tags of a track in the cloud are changed, and only what changed is sen
   await page.waitForSelector('.drawer .track');
   await page.click('.drawer .track >> nth=0', { button: 'right' });
   await page.click('[role=menuitem]:has-text("Edit track")');
-  const title = page.locator('label:has-text("Title") input');
+  const title = page.locator('.rows input[aria-label="Title"]');
   await title.fill('Renamed');
   await page.click('button:text-is("Save")');
-  await page.waitForFunction(() => !document.querySelector('form .field'));
+  await page.waitForSelector('[role=dialog]', { state: 'detached' });
   assert.equal(pushes.length, 1);
   assert.equal(pushes[0].length, 1);
   assert.equal(pushes[0][0].title, 'Renamed');
@@ -404,9 +406,9 @@ test('a record is edited as a whole, for every track on it', async () => {
   await page.locator('.card', { hasText: 'Dummy' }).click();
   await page.click('.drawer .mini-key >> nth=2');
   await page.click('[role=menuitem]:has-text("Edit album")');
-  await page.locator('label:has-text("Genre") input').fill('Bristol');
-  await page.click('button:text-is("Save")');
-  await page.waitForFunction(() => !document.querySelector('form .field'));
+  await page.locator('.rows input[aria-label="Genre"]').fill('Bristol');
+  await page.click('button:text-is("Save album")');
+  await page.waitForSelector('[role=dialog]', { state: 'detached' });
   assert.deepEqual(pushes[0].map((item) => item.tags?.genre), ['Bristol', 'Bristol']);
   await page.close();
 });
