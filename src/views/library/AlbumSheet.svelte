@@ -3,13 +3,13 @@
   // is known about it. The room takes the sleeve's colour while it is open. The desktop's reviews are community pages,
   // which the web app does not have.
   import { covers, dossiers, favorites, headClips, player } from '../../app';
-  import { durationSeconds } from '../../api/wire';
   import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
-  import { albumFacts, askAbout, type Dossier } from '../../library/dossier';
+  import { askAbout, type Dossier } from '../../library/dossier';
   import { library, room } from '../../state.svelte';
   import { text } from '../../strings/loc';
   import { menuOn } from '../menu/menu.svelte';
+  import AboutCards from './AboutCards.svelte';
   import AlbumTracks from './AlbumTracks.svelte';
   import { albumMenu, menuAt } from './record-menu.svelte';
   import Stars from './Stars.svelte';
@@ -71,9 +71,6 @@
     return [album.artist, album.year, extension, depth].filter(Boolean).join('  ·  ');
   });
 
-  const seconds = $derived(album.tracks.reduce((sum, track) => sum + durationSeconds(track), 0));
-  const summary = $derived(text(album.tracks.length === 1 ? 'Library_SongsAndTimeOne' : 'Library_SongsAndTime', album.tracks.length, Math.round(seconds / 60)));
-  const facts = $derived(albumFacts(known?.album ?? null));
 
   function shuffle() {
     player.play(album.tracks, 0, { inAlbumOrder: false });
@@ -108,20 +105,7 @@
   </div>
 
   <div class="about">
-    <div class="facts">
-      <p>{summary}</p>
-      {#if album.year}<p>{text('Album_Released')} {album.year}</p>{/if}
-      {#if facts}<p>{facts}</p>{/if}
-    </div>
-    {#if known?.albumArticle}
-      <section>
-        <h3>{text('TrackInfo_AboutAlbum')}</h3>
-        <div class="article">
-          <strong>{known.albumArticle.title}</strong>
-          {#each known.albumArticle.text.split('\n').filter(Boolean) as paragraph}<p>{paragraph}</p>{/each}
-        </div>
-      </section>
-    {/if}
+    <AboutCards dossier={known} artistName={album.artist} albumName={album.album} albumFirst />
   </div>
 </div>
 
@@ -240,37 +224,5 @@
     min-height: 0;
     padding-bottom: 18px;
     overflow-y: auto;
-  }
-
-  .facts {
-    padding: 12px;
-    border: 1px solid rgb(255 255 255 / 0.133);
-    border-radius: 8px;
-    color: rgb(255 255 255 / 0.66);
-    font-size: 12px;
-    line-height: 1.6;
-  }
-
-  .facts p {
-    margin: 0;
-  }
-
-  .article {
-    padding: 12px;
-    border-radius: 8px;
-    background: rgb(255 255 255 / 0.11);
-    color: rgb(255 255 255 / 0.87);
-    font-size: 12.5px;
-    line-height: 1.5;
-  }
-
-  .article strong {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 13px;
-  }
-
-  .article p {
-    margin: 0 0 8px;
   }
 </style>

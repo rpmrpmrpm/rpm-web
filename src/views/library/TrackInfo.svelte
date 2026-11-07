@@ -4,14 +4,13 @@
   // shown as nothing to say.
   import { artistArt, covers, dossiers } from '../../app';
   import { icons } from '../../design/icons';
-  import { albumFacts, artistFacts, askAbout, elsewhere, hasMore, lead, type Dossier } from '../../library/dossier';
-  import type { Article } from '../../library/articles';
+  import { askAbout, type Dossier } from '../../library/dossier';
   import { library, now } from '../../state.svelte';
   import { text } from '../../strings/loc';
   import { asked } from './record-menu.svelte';
   import Heart from './Heart.svelte';
   import LyricWell from './LyricWell.svelte';
-  import MemberFace from './MemberFace.svelte';
+  import AboutCards from './AboutCards.svelte';
 
   let { compact = false }: { compact?: boolean } = $props();
 
@@ -30,8 +29,6 @@
   let sleeve = $state<string | null>(null);
   let photo = $state<string | null>(null);
   let dossier = $state.raw<Dossier | null>(null);
-  let artistOpen = $state(false);
-  let albumOpen = $state(false);
   let scrolled = $state(0);
 
   $effect(() => {
@@ -69,8 +66,6 @@
     const count = tracks;
     let current = true;
     dossier = null;
-    artistOpen = false;
-    albumOpen = false;
     if (name) {
       dossiers.of(name, record, count).then(
         (found) => {
@@ -84,20 +79,6 @@
     };
   });
 
-  const artist = $derived(dossier?.artist ?? null);
-  const record = $derived(dossier?.album ?? null);
-  const links = $derived(dossier ? elsewhere(dossier) : []);
-  const lineup = $derived(artist?.kind?.toLowerCase() === 'group' ? (artist.members ?? []) : []);
-
-  // The fact line stands only where there is no article to say it better.
-  const artistLine = $derived(dossier?.artistArticle ? '' : artistFacts(artist));
-  const albumLine = $derived(albumFacts(record));
-  const tags = $derived(record?.genres ?? []);
-  const artistCard = $derived(!!(artistLine || dossier?.artistArticle));
-  const albumCard = $derived(!!(albumLine || tags.length || dossier?.albumArticle));
-
-  const shown = (article: Article, open: boolean) => (open ? article.text : lead(article));
-  const siteName = (site: string) => (site === 'official' ? text('TrackInfo_OfficialSite') : { discogs: 'Discogs', bandcamp: 'Bandcamp', facebook: 'Facebook', x: 'X', instagram: 'Instagram' }[site]);
 </script>
 
 <div class="sheet" class:compact>
@@ -137,68 +118,9 @@
 
       <LyricWell {track} />
 
-      {#if artistCard}
-        <section>
-          <h3>{text('TrackInfo_AboutArtist')}</h3>
-          <div class="card">
-            <strong>{artist?.name ?? dossier?.artistArticle?.title ?? about}</strong>
-            {#if artistLine}<small>{artistLine}</small>{/if}
-            {#if dossier?.artistArticle}
-              <p class="prose">{shown(dossier.artistArticle, artistOpen)}</p>
-              <div class="links">
-                {#if hasMore(dossier.artistArticle)}
-                  <button class="link" onclick={() => (artistOpen = !artistOpen)}>{text(artistOpen ? 'TrackInfo_ShowLess' : 'TrackInfo_ShowMore')}</button>
-                {/if}
-                <a class="link" href={dossier.artistArticle.url} target="_blank" rel="noopener">{text('TrackInfo_ReadOnWikipedia')}</a>
-              </div>
-              <a class="licence" href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener" title={text('Wikipedia_LicenceTip')}>{text('Wikipedia_Licence')}</a>
-            {/if}
-          </div>
-        </section>
-      {/if}
-
-      {#if lineup.length}
-        <section>
-          <h3>{text('TrackInfo_Members')}</h3>
-          <div class="card members">
-            {#each lineup as member (member.name)}<MemberFace {member} />{/each}
-          </div>
-        </section>
-      {/if}
-
-      {#if albumCard}
-        <section>
-          <h3>{text('TrackInfo_AboutAlbum')}</h3>
-          <div class="card">
-            <strong>{record?.title ?? dossier?.albumArticle?.title ?? track.album}</strong>
-            {#if albumLine}<small>{albumLine}</small>{/if}
-            {#if tags.length}
-              <div class="chips">{#each tags as tag}<span>{tag}</span>{/each}</div>
-            {/if}
-            {#if dossier?.albumArticle}
-              <p class="prose">{shown(dossier.albumArticle, albumOpen)}</p>
-              <div class="links">
-                {#if hasMore(dossier.albumArticle)}
-                  <button class="link" onclick={() => (albumOpen = !albumOpen)}>{text(albumOpen ? 'TrackInfo_ShowLess' : 'TrackInfo_ShowMore')}</button>
-                {/if}
-                <a class="link" href={dossier.albumArticle.url} target="_blank" rel="noopener">{text('TrackInfo_ReadOnWikipedia')}</a>
-              </div>
-              <a class="licence" href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener" title={text('Wikipedia_LicenceTip')}>{text('Wikipedia_Licence')}</a>
-            {/if}
-          </div>
-        </section>
-      {/if}
-
-      {#if links.length}
-        <section>
-          <h3>{text('TrackInfo_Elsewhere')}</h3>
-          <div class="elsewhere">
-            {#each links as link (link.site)}
-              <a href={link.url} target="_blank" rel="noopener" title={link.url}><b>{siteName(link.site)}</b><span>{link.url}</span></a>
-            {/each}
-          </div>
-        </section>
-      {/if}
+      <div class="about">
+        <AboutCards {dossier} artistName={about} albumName={track.album} />
+      </div>
 
       {#if track.tags?.composer}
         <section>
@@ -377,11 +299,16 @@
     opacity: 0.7;
   }
 
-  section {
+  section,
+  .about {
     display: flex;
     flex-direction: column;
     gap: 8px;
     margin: 0 16px;
+  }
+
+  .about {
+    gap: 18px;
   }
 
   section > h3 {
@@ -389,110 +316,6 @@
     color: rgb(255 255 255 / 0.67);
     font-size: 12px;
     font-weight: 600;
-  }
-
-  .card {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 14px;
-    border-radius: 8px;
-    background: rgb(255 255 255 / 0.094);
-  }
-
-  .card strong {
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  .card small {
-    color: rgb(255 255 255 / 0.53);
-    font-size: 11px;
-  }
-
-  .prose {
-    margin: 0;
-    color: rgb(255 255 255 / 0.87);
-    font-size: 12px;
-    line-height: 18px;
-    white-space: pre-line;
-  }
-
-  .links {
-    display: flex;
-    gap: 14px;
-  }
-
-  .link {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--accent);
-    font-size: 11px;
-    text-decoration: none;
-    cursor: pointer;
-  }
-
-  .licence {
-    align-self: flex-end;
-    color: var(--accent);
-    font-size: 10.5px;
-    text-decoration: none;
-    opacity: 0.7;
-  }
-
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .chips span {
-    padding: 3px 10px;
-    border-radius: 12px;
-    background: rgb(255 255 255 / 0.18);
-    font-size: 11px;
-  }
-
-  .members {
-    display: flex;
-    flex-flow: row wrap;
-    gap: 14px 10px;
-    justify-content: center;
-  }
-
-  .elsewhere {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .elsewhere a {
-    display: flex;
-    gap: 8px;
-    align-items: baseline;
-    padding: 5px 10px;
-    border-radius: 6px;
-    background: rgb(255 255 255 / 0.094);
-    color: #fff;
-    font-size: 11px;
-    text-decoration: none;
-  }
-
-  .elsewhere a:hover {
-    background: rgb(255 255 255 / 0.18);
-  }
-
-  .elsewhere b {
-    flex: none;
-    font-weight: 400;
-  }
-
-  .elsewhere span {
-    overflow: hidden;
-    opacity: 0.6;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   dl {

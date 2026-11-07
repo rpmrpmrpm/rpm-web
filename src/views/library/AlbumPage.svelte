@@ -1,14 +1,18 @@
 <script lang="ts">
-  // A record on a phone: a page of its own over the wall.
-  import { covers } from '../../app';
+  // A record on a phone: a page of its own over the wall, with what is known about it under the songs, as on
+  // the record's page on a computer.
+  import { covers, dossiers } from '../../app';
   import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
+  import { askAbout, type Dossier } from '../../library/dossier';
   import { text } from '../../strings/loc';
+  import AboutCards from './AboutCards.svelte';
   import AlbumDetail from './AlbumDetail.svelte';
 
   let { album, onClose }: { album: CloudAlbum; onClose: () => void } = $props();
 
   let sleeve = $state<string | null>(null);
+  let known = $state.raw<Dossier | null>(null);
 
   $effect(() => {
     const wanted = album;
@@ -16,6 +20,15 @@
     void covers.url(wanted, 1024).then((url) => {
       if (current) sleeve = url;
     });
+    known = null;
+    const about = wanted.tracks[0] ? askAbout(wanted.tracks[0]) : null;
+    if (about)
+      dossiers.of(about, wanted.album, wanted.tracks.length).then(
+        (answer) => {
+          if (current) known = answer;
+        },
+        () => {},
+      );
     return () => {
       current = false;
     };
@@ -26,6 +39,9 @@
   <button class="key" title={text('Common_Cancel')} onclick={onClose}><i class="icon">{icons.back}</i></button>
   {#if sleeve}<img src={sleeve} alt="" />{/if}
   <AlbumDetail {album} columns={1} rating />
+  <div class="about">
+    <AboutCards dossier={known} artistName={album.artist} albumName={album.album} albumFirst />
+  </div>
 </section>
 
 <style>
@@ -36,6 +52,13 @@
     padding: max(8px, env(safe-area-inset-top)) 16px 90px;
     overflow-y: auto;
     background: #080a10;
+  }
+
+  .about {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-top: 24px;
   }
 
   img {
