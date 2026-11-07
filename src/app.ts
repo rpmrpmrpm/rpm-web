@@ -2,6 +2,7 @@
 
 import { CloudClient } from './api/cloud';
 import { Api } from './api/http';
+import { Profiles } from './api/profile';
 import { Session } from './api/session';
 import { HeadClips } from './audio/heads';
 import { LOCK_SCREEN_ART, Player } from './audio/player';
@@ -72,6 +73,7 @@ export const player = new Player(
 
 export const playlists = new Playlists(api, browserTransfers);
 export const favorites = new Favorites(api);
+export const profiles = new Profiles(api);
 export const sidecars = new Sidecars(api, browserTransfers);
 export const catalogEdits = new CatalogEdits(api, covers, browserTransfers, favorites, sidecars);
 export const albumRatings = new AlbumRatings(() => localStorage);

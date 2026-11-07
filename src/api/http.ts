@@ -26,6 +26,8 @@ export interface TokenSource {
 export interface CallOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
+  // Bytes sent as they are, with their own type, in place of a JSON body: a picture.
+  raw?: { bytes: Uint8Array; type: string };
   signal?: AbortSignal;
 }
 
@@ -83,13 +85,15 @@ export class Api {
   private async once(path: string, method: string, options: CallOptions, token: string | null): Promise<Response> {
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+    if (options.raw) headers['Content-Type'] = options.raw.type;
+    else if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+    const body = options.raw ? (options.raw.bytes as BodyInit) : options.body === undefined ? undefined : JSON.stringify(options.body);
 
     try {
       return await this.fetcher(`${this.base}${path}`, {
         method,
         headers,
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        body,
         signal: options.signal,
       });
     } catch (error) {

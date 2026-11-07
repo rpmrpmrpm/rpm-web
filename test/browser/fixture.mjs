@@ -118,6 +118,8 @@ export async function serve(page, site, files = FILES) {
     if (path === 'cloud/art') return answer(route, 200, { albumKeys: coverKeys.list });
     if (path.startsWith('cloud/art/')) return answer(route, 200, { url: `https://cover.test/${Math.max(0, coverKeys.list.indexOf(path.split('/').pop()))}` });
     if (path.startsWith('cloud/stream/')) return answer(route, 200, { url: `${site}/proof/tracks/flac-1.flac`, kilobits: 0, live: false, expiresInSeconds: 3600 });
+    if (path === 'profile') return answer(route, 200, { userId: 'screens', displayName: 'A Listener', hasAvatar: true, avatarUpdatedAt: 7, createdAt: 1 });
+    if (path === 'profiles/screens/avatar') return route.fulfill({ status: 200, contentType: 'image/svg+xml', body: sleeve(5) });
     // A track with no sidecar: the edit windows read the row alone, and write no sidecar.
     if (path.startsWith('cloud/sidecar/')) return answer(route, 404);
     if (path === 'artwork') return answer(route, 200, { cover: null, backgrounds: ['https://cover.test/1'], thumbs: [], logo: null });
