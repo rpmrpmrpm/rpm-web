@@ -98,8 +98,8 @@ export function nameOf(artist: string | null | undefined, title: string | null |
 export class Recogniser {
   constructor(
     private readonly api: Api,
-    private readonly media: ImportMedia,
-    private readonly queue: ImportQueue,
+    private readonly media: Pick<ImportMedia, 'fingerprint' | 'clip'>,
+    private readonly queue: Pick<ImportQueue, 'applyRecognition'>,
   ) {}
 
   private async ask(path: string, body: unknown, signal: AbortSignal): Promise<Said> {

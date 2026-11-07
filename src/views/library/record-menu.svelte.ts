@@ -12,13 +12,14 @@ import { text } from '../../strings/loc';
 import type { MenuEntry, MenuItem } from '../menu/menu.svelte';
 import { openMenu, tidy } from '../menu/menu.svelte';
 
-// Which edit window is open: one track's tags, a record's, several tracks at once, or the tracks filled from
-// a release listing.
+// Which edit window is open: one track's tags, a record's, several tracks at once, the tracks filled from a
+// release listing, or the tracks named from their audio.
 export type Editing =
   | { kind: 'track'; track: CloudTrack }
   | { kind: 'album'; album: CloudAlbum }
   | { kind: 'mass'; tracks: readonly CloudTrack[] }
-  | { kind: 'release'; tracks: readonly CloudTrack[] };
+  | { kind: 'release'; tracks: readonly CloudTrack[] }
+  | { kind: 'recognise'; tracks: readonly CloudTrack[] };
 
 class Asked {
   adding = $state.raw<readonly CloudTrack[] | null>(null);
@@ -109,6 +110,7 @@ export function trackMenu(track: CloudTrack, list: readonly CloudTrack[], index:
     'rule',
     { label: text('Review_CtxEditTrack'), glyph: icons.edit, run: () => (asked.editing = { kind: 'track', track }) },
     ...(options.album ? [{ label: text('AlbumEdit_MenuEdit'), glyph: icons.album, run: () => (asked.editing = { kind: 'album', album: options.album! }) }] : []),
+    { label: text('Review_CtxRecognize'), glyph: icons.fingerprint, run: () => (asked.editing = { kind: 'recognise', tracks: [track] }) },
     { label: text('Queue_CtxNameTracks'), glyph: icons.tag, run: () => (asked.editing = { kind: 'release', tracks: [track] }) },
     'rule',
     ...(options.album ? [{ label: text('AlbumMenu_AlbumPage'), glyph: icons.album, run: () => (asked.opening = options.album!) }] : []),
@@ -127,6 +129,7 @@ export function selectionMenu(tracks: readonly CloudTrack[]): MenuEntry[] {
     toPlaylist(tracks, text('Playlists_AddToPlaylist'), false),
     'rule',
     { label: text('MassEdit_MenuEdit'), glyph: icons.edit, run: () => (asked.editing = { kind: 'mass', tracks }) },
+    { label: text('Review_CtxRecognize'), glyph: icons.fingerprint, run: () => (asked.editing = { kind: 'recognise', tracks }) },
     { label: text('Queue_CtxNameTracks'), glyph: icons.tag, run: () => (asked.editing = { kind: 'release', tracks }) },
     'rule',
     { label: text('Delete_Cloud'), glyph: icons.trash, run: () => (asked.deleting = { tracks, name: text('AlbumPicker_Tracks', tracks.length), wholeAlbum: false }) },

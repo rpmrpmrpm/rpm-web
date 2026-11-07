@@ -168,3 +168,24 @@ test('a record gets a review with its stars, kept in this browser, and the previ
   assert.deepEqual(problems, []);
   await close();
 });
+
+test('Recognise names a track already in the cloud from its audio, and saves the name', async () => {
+  const { page, pushes, problems, close } = await open();
+  await page.route(`${site}/api/identify`, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'matched', source: 'acoustid', track: { title: 'Found Title', artist: 'Found Artist', score: 0.93 } }) }),
+  );
+  await page.click('.rail button:has-text("Albums")');
+  await page.click('button[aria-label="Data table"]');
+  await page.waitForSelector('.table .row');
+  await page.click('.table .row >> nth=0', { button: 'right' });
+  await page.click('[role=menuitem]:has-text("Recognise")');
+  await page.click('button:has-text("Recognise")');
+  await page.waitForSelector('text=Found Artist · Found Title', { timeout: 30000 });
+  await page.click('[role=dialog] button[aria-label="Cancel"], [role=dialog] button:has-text("Close")');
+  await page.waitForSelector('[role=dialog]', { state: 'detached' });
+  const item = pushes.flatMap((push) => push.items)[0];
+  assert.equal(item.title, 'Found Title');
+  assert.equal(item.artist, 'Found Artist');
+  assert.deepEqual(problems, []);
+  await close();
+});

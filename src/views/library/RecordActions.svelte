@@ -8,6 +8,7 @@
   import AddToPlaylist from './AddToPlaylist.svelte';
   import AlbumPage from './AlbumPage.svelte';
   import AlbumEditor from '../edit/AlbumEditor.svelte';
+  import LibraryRecognise from '../edit/LibraryRecognise.svelte';
   import MassEditor from '../edit/MassEditor.svelte';
   import ReleaseFill from '../edit/ReleaseFill.svelte';
   import TrackEditor from '../edit/TrackEditor.svelte';
@@ -61,6 +62,8 @@
   {/if}
 {:else if asked.editing?.kind === 'release'}
   <ReleaseFill tracks={asked.editing.tracks} onClose={() => (asked.editing = null)} />
+{:else if asked.editing?.kind === 'recognise'}
+  <LibraryRecognise tracks={asked.editing.tracks} onClose={() => (asked.editing = null)} />
 {/if}
 
 {#if asked.reviewing}

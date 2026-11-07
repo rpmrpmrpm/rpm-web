@@ -2,14 +2,16 @@
   // Recognise: one window for the whole run, as the desktop's. Which files will be looked up, what each one
   // came back as, and the way to correct an answer. The account decides how far a run reaches, and the
   // server has the last word, so there is no control for it here.
-  import { BECOME_SUPPORTER, recogniser, session } from '../../app';
+  import { BECOME_SUPPORTER, recogniser as importRecogniser, session } from '../../app';
   import { icons } from '../../design/icons';
   import { needsName, type ImportRow } from '../../import/queue';
-  import { nameOf, type Outcome, type Report } from '../../import/recognise';
+  import { nameOf, type Outcome, type Recogniser, type Report } from '../../import/recognise';
   import { currentLanguage, text } from '../../strings/loc';
   import Window from './Window.svelte';
 
-  let { rows, onClose, onEdit }: { rows: ImportRow[]; onClose: () => void; onEdit: (rows: ImportRow[]) => void } = $props();
+  // The recogniser writes what it finds to the rows of its queue. The library gives one of its own, over rows
+  // that stand for tracks already in the cloud.
+  let { rows, onClose, onEdit, recogniser = importRecogniser }: { rows: ImportRow[]; onClose: () => void; onEdit: (rows: ImportRow[]) => void; recogniser?: Recogniser } = $props();
 
   const SOURCES: Record<string, string> = {
     'own-db': 'RecogResult_SourceOwnDb',
