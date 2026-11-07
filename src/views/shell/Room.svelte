@@ -11,7 +11,7 @@
 
   let colour = $state<Colour | null>(null);
   let supporter = $state(session.user?.supporter === true);
-  session.onChange(() => (supporter = session.user?.supporter === true));
+  $effect(() => session.onChange(() => (supporter = session.user?.supporter === true)));
 
   $effect(() => {
     const track = now.track;
