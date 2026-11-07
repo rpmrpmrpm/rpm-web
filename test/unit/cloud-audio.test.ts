@@ -8,7 +8,7 @@ const track: CloudTrack = { rpmId: 'r1', sha256: 's', relativePath: 'A/B/01 Song
 describe('the audio of a cloud track, for Recognise', () => {
   function stage(ok = true) {
     const cloud = { stream: vi.fn(async () => ({ url: 'https://store.test/r1', kilobits: 0, live: false })) };
-    const media = { fingerprint: vi.fn(async (file: File) => ({ text: file.name, raw: [], seconds: file.size })), clip: vi.fn(async () => new Uint8Array([1])) };
+    const media = { fingerprint: vi.fn(async (file: File) => ({ text: file.name, raw: [], seconds: file.size })), clip: vi.fn(async (_file: File, _kilobits: number, _start: number, _seconds: number) => new Uint8Array([1])) };
     const fetcher = vi.fn(async () => (ok ? new Response(new Uint8Array([1, 2, 3])) : new Response('', { status: 403 })));
     return { cloud, media, fetcher, audio: new CloudAudio(cloud, media as never, fetcher as never) };
   }
