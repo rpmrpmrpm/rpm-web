@@ -207,7 +207,7 @@ test('the right click: a record, a song, a table row, the menu key', async () =>
   await page.click('.card >> nth=1', { button: 'right' });
   await page.waitForSelector('[role=menu]');
   const words = await page.$$eval('[role=menuitem] .label', (rows) => rows.map((row) => row.textContent));
-  assert.deepEqual(words, ['Add to playlist', 'Play', 'Shuffle', 'Play next', 'Album page', 'Edit album', 'Favourite album', 'Delete from cloud']);
+  assert.deepEqual(words, ['Add to playlist', 'Play', 'Shuffle', 'Play next', 'Album page', 'Edit album', 'Favourite album', 'Write a review', 'Delete from cloud']);
 
   const menu = await box(page, '[role=menu]');
   const row = await box(page, '[role=menuitem]');
