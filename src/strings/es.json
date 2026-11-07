@@ -65,6 +65,7 @@
 "Cloud_FailUnknown": "Error al subir",
 "Cloud_FailUnreadable": "No se pudo leer el audio",
 "Cloud_TracksNotRemoved": "No se pudieron quitar de la nube {0} de {1} pistas. {2}",
+"Coach_ArtHeader": "¿Estás escuchando algo y quieres ver la portada? Arrastra esto para abrirla, o haz doble clic para guardarla otra vez.",
 "Common_Cancel": "Cancelar",
 "Common_MoreOptions": "Más opciones",
 "Common_OK": "Aceptar",

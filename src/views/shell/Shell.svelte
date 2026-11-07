@@ -2,7 +2,7 @@
   // The window. Three shells over one set of views, chosen by the width available: the desktop's panes,
   // one pane at a time, and the phone apps' tabs.
   import '../../state.svelte';
-  import { library, now, onAir } from '../../state.svelte';
+  import { art, library, now, onAir } from '../../state.svelte';
   import { text } from '../../strings/loc';
   import { icons } from '../../design/icons';
   import Deck from '../deck/Deck.svelte';
@@ -174,7 +174,7 @@
 {:else}
   <div class="window">
     <Header />
-    <DesktopOffer />
+    {#if !(art.parked && (now.track || onAir.station))}<DesktopOffer />{/if}
 
     <div class="panes" class:leftOpen={left !== null} class:bench={left === 'import'}>
       <section class="pane left">

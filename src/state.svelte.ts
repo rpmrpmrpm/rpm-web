@@ -36,6 +36,28 @@ tuner.onChange(() => {
   onAir.wantsToPlay = tuner.wantsToPlay;
 });
 
+const PARKED_KEY = 'rpm-art-parked';
+
+function storedParked(): boolean {
+  try {
+    return localStorage.getItem(PARKED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+// The band above the panes tucked away, with a small player in its corner. It holds between visits, as on the desktop.
+export const art = $state({ parked: storedParked() });
+
+export function setParked(parked: boolean) {
+  art.parked = parked;
+  try {
+    localStorage.setItem(PARKED_KEY, String(parked));
+  } catch {
+    // It holds for this visit.
+  }
+}
+
 // What the room behind the panes takes its colour from while a page is open, ahead of the record playing.
 export const room = $state({
   album: null as CloudAlbum | null,

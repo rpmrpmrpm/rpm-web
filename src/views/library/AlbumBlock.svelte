@@ -11,7 +11,10 @@
   import AlbumTracks from './AlbumTracks.svelte';
   import { albumMenu, asked, menuAt } from './record-menu.svelte';
 
-  let { album }: { album: CloudAlbum } = $props();
+  // tall: how many times its width the sleeve stands. A DVD box is taller than a record, and is shown whole.
+  let { album, tall = 1, onTall }: { album: CloudAlbum; tall?: number; onTall?: (shape: number) => void } = $props();
+
+  const SIDE = 188;
 
   let sleeve = $state<string | null>(null);
   let ring = $state('transparent');
@@ -61,8 +64,18 @@
 
 <article use:menuOn={() => albumMenu(album, 'collection')}>
   <div class="art">
-    <span class="square">
-      {#if sleeve}<img src={sleeve} alt="" loading="lazy" />{:else}<i class="icon">{icons.album}</i>{/if}
+    <span class="square" style:height="{SIDE * tall}px">
+      {#if sleeve}
+        <img
+          src={sleeve}
+          alt=""
+          loading="lazy"
+          onload={(event) => {
+            const { naturalHeight, naturalWidth } = event.currentTarget as HTMLImageElement;
+            onTall?.(naturalHeight / naturalWidth);
+          }}
+        />
+      {:else}<i class="icon">{icons.album}</i>{/if}
       <button class="open" title={text('AlbumMenu_AlbumPage')} aria-label={text('AlbumMenu_AlbumPage')} onclick={() => (asked.opening = album)}><i class="icon">{icons.album}</i></button>
     </span>
     <span class="ring" style:background={ring}></span>
@@ -104,9 +117,9 @@
   .square {
     position: relative;
     display: grid;
+    flex: none;
     place-items: center;
     width: 188px;
-    height: 188px;
     background: rgb(0 0 0 / 0.133);
     box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.133);
     color: rgb(255 255 255 / 0.3);
@@ -114,6 +127,8 @@
   }
 
   img {
+    position: absolute;
+    inset: 0;
     display: block;
     width: 100%;
     height: 100%;

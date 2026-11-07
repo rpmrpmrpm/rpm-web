@@ -65,6 +65,7 @@
 "Cloud_FailUnknown": "Upload fehlgeschlagen",
 "Cloud_FailUnreadable": "Audio konnte nicht gelesen werden",
 "Cloud_TracksNotRemoved": "{0} von {1} Titeln konnten nicht aus der Cloud entfernt werden. {2}",
+"Coach_ArtHeader": "Läuft gerade etwas und du willst das Artwork sehen? Zieh hieran, um es zu öffnen, oder doppelklicke, um es wieder wegzupacken.",
 "Common_Cancel": "Abbrechen",
 "Common_MoreOptions": "Weitere Optionen",
 "Common_OK": "OK",

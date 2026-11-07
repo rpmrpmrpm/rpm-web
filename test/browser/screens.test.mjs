@@ -247,6 +247,50 @@ test('the right click: a record, a song, a table row, the menu key', async () =>
   await close();
 });
 
+test('the album list and the table stand on the pane, and no list wears a form field\'s style', async () => {
+  const { page, close } = await open();
+  await page.click('.pane-pill');
+  await page.waitForTimeout(500);
+  await rail(page, 'Albums');
+  await page.waitForSelector('.card');
+
+  for (const [key, selector] of [[1, 'article'], [2, '.table .row']]) {
+    await page.click(`.views .slot-key >> nth=${key}`);
+    await page.waitForSelector(selector);
+    await page.hover(selector);
+    const painted = await page.$$eval('.collection div', (rows) =>
+      rows.filter((row) => row.classList.contains('field') || (row.getBoundingClientRect().height > 300 && getComputedStyle(row).backgroundColor !== 'rgba(0, 0, 0, 0)')).length,
+    );
+    assert.equal(painted, 0, `${selector} stands on something painted`);
+  }
+  await close();
+});
+
+test('a DVD box is shown whole, with the line and the count under it', async () => {
+  const { page, close } = await open();
+  await page.click('.pane-pill');
+  await page.waitForTimeout(500);
+  await rail(page, 'Albums');
+  await page.waitForSelector('.card');
+  await page.click('.views .slot-key >> nth=1');
+  await page.waitForSelector('article:has-text("Super Trouper") .square img');
+  await page.waitForFunction(() => document.querySelector('article .square').getBoundingClientRect().height > 240);
+
+  const sleeve = await box(page, 'article .square');
+  const picture = await box(page, 'article .square img');
+  const ring = await box(page, 'article .ring');
+  const under = await box(page, 'article .under');
+  const block = await box(page, 'article');
+  assert.ok(Math.abs(sleeve.height - 188 * (720 / 512)) < 1, `the sleeve is ${sleeve.height} high`);
+  assert.equal(picture.height, sleeve.height);
+  assert.ok(ring.top >= sleeve.bottom, 'the line is under the picture');
+  assert.ok(under.bottom <= block.bottom, 'the count is inside the block');
+
+  const next = await page.$$eval('.row', (rows) => rows.map((row) => row.getBoundingClientRect().top).sort((a, b) => a - b)[1]);
+  assert.ok(next >= block.bottom, 'the next record stands below this one');
+  await close();
+});
+
 test('a playlist has a menu, and its songs have one', async () => {
   const { page, problems, close } = await open();
   await page.click('.pane-pill');
@@ -326,6 +370,42 @@ test('a new account starts on Import, on a computer and on a phone', async () =>
     await page.waitForSelector('text=Nothing queued');
     await context.close();
   }
+});
+
+test('the band tucks away to a small player in the corner, and comes back', async () => {
+  const { page, problems, close } = await open();
+  await page.click('section li button');
+  await page.waitForSelector('header.band.open h2');
+  await page.waitForSelector('header.band .grip');
+  assert.equal(await page.$('.corner'), null);
+
+  await page.dblclick('header.band .grip');
+  await page.waitForSelector('.corner strong');
+  assert.equal(await page.$('header.band.open'), null);
+  const corner = await box(page, '.corner');
+  assert.equal(corner.width, 345);
+  assert.equal(corner.right, 1416, 'it ends on the window margin');
+  assert.equal((await style(page, '.corner strong', 'fontSize')).fontSize, '15px');
+  assert.ok(await page.$('.corner .bar'), 'it can still seek');
+  assert.equal(await page.$('aside:has-text("Download rpm")'), null, 'nothing else stands in the corner');
+
+  // It holds between visits.
+  assert.equal(await page.evaluate(() => localStorage.getItem('rpm-art-parked')), 'true');
+
+  await page.click('header.band .grip');
+  await page.waitForSelector('header.band.open h2');
+  assert.equal(await page.$('.corner'), null);
+
+  // By dragging, as well, once the band has finished opening.
+  await page.waitForTimeout(500);
+  const grip = await box(page, 'header.band .grip');
+  await page.mouse.move(720, grip.top + 6);
+  await page.mouse.down();
+  await page.mouse.move(720, grip.top - 60);
+  await page.mouse.up();
+  await page.waitForSelector('.corner strong');
+  assert.deepEqual(problems, []);
+  await close();
 });
 
 test('a banner\'s photograph fills the card, with nothing faded down its left', async () => {

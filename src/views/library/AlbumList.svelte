@@ -16,15 +16,32 @@
 
   const LINE = 60;
   const EXTRA = 8;
-  const BLOCK_AIR = 48;
+  const BLOCK_AIR = 49;
   const SLEEVE_SIDE = 230;
   const HEAD = 56;
   const ROW = 22;
   const DISC_ROW = 36;
   const HEADING = 40;
+  const SIDE = 188;
+  // A DVD box stands about 1.4 times its width. Anything taller is cut to this, and anything wider stays square.
+  const TALLEST = 1.6;
 
   let scroll = $state(0);
   let viewport = $state(0);
+  let scroller = $state<HTMLElement | null>(null);
+
+  // What each sleeve's picture turned out to be. It is only known once the picture is here, and it decides the height
+  // of the block, so what is above the view moves the view by as much, and nothing on screen jumps.
+  let shapes = $state.raw<ReadonlyMap<string, number>>(new Map());
+  const tallOf = (album: CloudAlbum) => shapes.get(album.key) ?? 1;
+
+  function shapeIs(row: Row, album: CloudAlbum, shape: number) {
+    const tall = Math.min(TALLEST, Math.max(1, shape));
+    if (tall === tallOf(album)) return;
+    const grew = (tall - tallOf(album)) * SIDE;
+    shapes = new Map(shapes).set(album.key, tall);
+    if (scroller && row.top < scroll) scroller.scrollTop += grew;
+  }
 
   const genreOf = (album: CloudAlbum) => {
     const genres = new Set(album.tracks.map((track) => track.tags?.genre).filter(Boolean));
@@ -41,7 +58,7 @@
   const blockHeight = (album: CloudAlbum) => {
     const discs = new Set(album.tracks.map((track) => track.tags?.discNumber ?? 1)).size;
     const lines = Math.ceil(album.tracks.length / 2) * ROW + (discs > 1 ? Math.ceil(discs / 2) * DISC_ROW : 0);
-    return Math.max(SLEEVE_SIDE, HEAD + lines) + BLOCK_AIR;
+    return Math.max(SLEEVE_SIDE + (tallOf(album) - 1) * SIDE, HEAD + lines) + BLOCK_AIR;
   };
 
   // Gathered records only look gathered when they stand next to each other.
@@ -79,9 +96,9 @@
   const shownLines = $derived(albums.slice(first, first + Math.ceil(viewport / LINE) + EXTRA * 2));
 </script>
 
-<div class="list" class:blocks={!compact} bind:clientHeight={viewport} onscroll={(event) => (scroll = event.currentTarget.scrollTop)}>
+<div class="list" class:blocks={!compact} bind:this={scroller} bind:clientHeight={viewport} onscroll={(event) => (scroll = event.currentTarget.scrollTop)}>
   {#if compact}
-    <div class="field" style:height="{albums.length * LINE}px">
+    <div class="tall" style:height="{albums.length * LINE}px">
       {#each shownLines as album, index (album.key)}
         <button class="line" style:transform="translateY({(first + index) * LINE}px)" style:height="{LINE}px" onclick={() => onOpen(album)} use:menuOn={() => albumMenu(album, 'collection')}>
           <Sleeve {album} />
@@ -92,11 +109,11 @@
       {/each}
     </div>
   {:else}
-    <div class="field" style:height="{rows.height}px">
+    <div class="tall" style:height="{rows.height}px">
       {#each shownBlocks as row (row.key)}
         <div class="row" style:transform="translateY({row.top}px)" style:height="{row.height}px">
           {#if row.album}
-            <AlbumBlock album={row.album} />
+            <AlbumBlock album={row.album} tall={tallOf(row.album)} onTall={(shape) => shapeIs(row, row.album!, shape)} />
           {:else}
             <h3>{row.heading}</h3>
           {/if}
@@ -117,7 +134,7 @@
     padding: 0 20px;
   }
 
-  .field {
+  .tall {
     position: relative;
   }
 

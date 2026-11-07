@@ -1,6 +1,7 @@
 <script lang="ts">
   // The seek bar: a thin track, with a press or a drag anywhere on it.
-  let { seconds, duration, onSeek }: { seconds: number; duration: number; onSeek: (seconds: number) => void } = $props();
+  // bare: the line alone, for the small player in the corner.
+  let { seconds, duration, onSeek, bare = false }: { seconds: number; duration: number; onSeek: (seconds: number) => void; bare?: boolean } = $props();
 
   let bar: HTMLDivElement;
   let dragging = $state<number | null>(null);
@@ -49,8 +50,10 @@
     <div class="fill" style:width="{fraction * 100}%"></div>
     <div class="knob" style:left="{fraction * 100}%"></div>
   </div>
-  <span class="time">{time(position)}</span>
-  <span class="time total">{time(duration)}</span>
+  {#if !bare}
+    <span class="time">{time(position)}</span>
+    <span class="time total">{time(duration)}</span>
+  {/if}
 </div>
 
 <style>

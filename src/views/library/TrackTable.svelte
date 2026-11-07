@@ -74,7 +74,7 @@
     {/each}
   </div>
   <div class="rows" bind:clientHeight={viewport} onscroll={(event) => (scroll = event.currentTarget.scrollTop)}>
-    <div class="field" style:height="{sorted.length * LINE}px">
+    <div class="tall" style:height="{sorted.length * LINE}px">
       {#each shown as track, index (track.rpmId)}
         <button class="row" class:playing={now.track?.rpmId === track.rpmId} style:transform="translateY({(first + index) * LINE}px)" style:height="{LINE}px" onclick={() => player.play(sorted, first + index, { inAlbumOrder: false })} use:menuOn={() => trackMenu(track, sorted, first + index, { inAlbumOrder: false, album: catalogue.albums.find((held) => held.tracks.some((row) => row.rpmId === track.rpmId)) })}>
           {#each COLUMNS as column (column.id)}
@@ -130,7 +130,7 @@
     overflow-y: auto;
   }
 
-  .field {
+  .tall {
     position: relative;
   }
 

@@ -65,6 +65,7 @@
 "Cloud_FailUnknown": "Échec de l'envoi",
 "Cloud_FailUnreadable": "Audio illisible",
 "Cloud_TracksNotRemoved": "{0} morceaux sur {1} n'ont pas pu être retirés du cloud. {2}",
+"Coach_ArtHeader": "Vous écoutez quelque chose et voulez voir la pochette ? Faites glisser ceci pour l'ouvrir, ou double-cliquez pour la ranger.",
 "Common_Cancel": "Annuler",
 "Common_MoreOptions": "Plus d'options",
 "Common_OK": "OK",

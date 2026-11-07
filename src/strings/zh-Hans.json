@@ -65,6 +65,7 @@
 "Cloud_FailUnknown": "上传失败",
 "Cloud_FailUnreadable": "无法读取音频",
 "Cloud_TracksNotRemoved": "{1} 首中有 {0} 首无法从云端移除。{2}",
+"Coach_ArtHeader": "正在播放音乐，想看看封面？拖动这里打开，双击即可再收起来。",
 "Common_Cancel": "取消",
 "Common_MoreOptions": "更多选项",
 "Common_OK": "确定",

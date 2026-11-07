@@ -2,7 +2,12 @@
 // data: long titles, many albums, plays, playlists and stations.
 
 const PALETTE = ['#7c2d12', '#1e3a8a', '#14532d', '#581c87', '#831843', '#0f766e', '#a16207', '#3f3f46'];
-const sleeve = (index) => `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="512" height="512" fill="${PALETTE[index % PALETTE.length]}"/><circle cx="256" cy="256" r="${80 + (index % 5) * 30}" fill="#fff" opacity="0.18"/></svg>`;
+// Super Trouper, first on the shelf, wears a DVD box, which is taller than a record.
+const TALL_SLEEVE = 26;
+const sleeve = (index) => {
+  const height = index === TALL_SLEEVE ? 720 : 512;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="${height}"><rect width="512" height="${height}" fill="${PALETTE[index % PALETTE.length]}"/><circle cx="256" cy="256" r="${80 + (index % 5) * 30}" fill="#fff" opacity="0.18"/></svg>`;
+};
 
 const ALBUMS = [
   ['Back to Bedlam', 'James Blunt', 'Pop', 2004],
