@@ -1,30 +1,50 @@
 <script lang="ts">
   // The import workbench. Rows are proposed here: nothing leaves the browser until Import is pressed, and
   // the ticks are the selection.
-  import { catalogue, importer, importMedia, importQueue } from '../../app';
+  import { catalogue, importer, importMedia, importQueue, queueKeeper } from '../../app';
   import { icons } from '../../design/icons';
   import { bestPreset, FILENAME_PRESETS } from '../../import/filename-tags';
-  import { pickedFromDrop, pickedFromInput } from '../../import/pick';
+  import { handlesOfDrop, pickedFromDrop, pickedFromHandles, pickedFromInput } from '../../import/pick';
   import { tagsMissing, type ChipFilter, type ImportRow, type PickedFile, type QueueGroup } from '../../import/queue';
   import { text } from '../../strings/loc';
+  import DesktopGet from '../shell/DesktopGet.svelte';
+  import RecogniseWindow from './RecogniseWindow.svelte';
+  import ReleaseLookup from './ReleaseLookup.svelte';
   import TagPanel from './TagPanel.svelte';
+  import TagsFromTags from './TagsFromTags.svelte';
 
   const small = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
   const folderPicker = 'webkitdirectory' in HTMLInputElement.prototype && !/iPhone|iPad/.test(navigator.userAgent);
+
+  // Chrome and Edge. A folder picked this way can be opened again on the next visit.
+  type FolderChooser = { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> };
+  type AskedHandle = FileSystemHandle & { requestPermission?: (options: { mode: 'read' }) => Promise<PermissionState> };
+  const chooseFolder = (window as FolderChooser).showDirectoryPicker;
 
   // A plain counter, raised on every queue change, because the rows are not reactive objects.
   let version = $state(0);
   importQueue.onChange(() => version++);
 
   let running = $state(false);
+  let recognising = $state(false);
   let chip = $state<ChipFilter | null>(null);
   let search = $state('');
   let showTags = $state(false);
   let showNames = $state(false);
+  let lookingUp = $state(false);
+  let fromTags = $state(false);
+  let columnsOpen = $state(false);
+  let moreOpen = $state(false);
+  let toast = $state('');
   let preset = $state(0);
   let dropping = $state(false);
   let message = $state('');
   let dragged = $state<ImportRow[]>([]);
+
+  const duplicates = $derived.by(() => {
+    void version;
+    return importQueue.duplicates();
+  });
 
   type Line = { kind: 'group'; group: QueueGroup } | { kind: 'row'; row: ImportRow; group: QueueGroup };
 
@@ -35,6 +55,7 @@
       if (chip === 'missing' && !tagsMissing(row)) return false;
       if (chip === 'unreadable' && row.state !== 'unreadable' && row.state !== 'refused') return false;
       if (chip === 'ticked' && !row.ticked) return false;
+      if (chip === 'duplicates' && !duplicates.includes(row)) return false;
       if (!words) return true;
       return [row.tags.Title, row.tags.Artist, row.tags.Album, row.path].some((value) => value?.toLowerCase().includes(words));
     };
@@ -53,6 +74,17 @@
     void version;
     return importQueue.rows.filter((row) => row.ticked);
   });
+
+  // Every ticked row whose audio can be read.
+  const recognisable = $derived(ticked.filter((row) => !['reading', 'refused', 'unreadable'].includes(row.state)));
+
+  // From the report of a run. The tag panel is the editor here, and it acts on the ticks.
+  function editRecognised(rows: ImportRow[]) {
+    recognising = false;
+    importQueue.setAllTicks(false);
+    for (const row of rows) importQueue.setTick(row, true);
+    showTags = true;
+  }
 
   const importable = $derived.by(() => {
     void version;
@@ -75,22 +107,56 @@
       if (row.state !== 'reading') continue;
       try {
         const { tags, hasArt } = await importMedia.tags(row.file);
-        row.tags = tags;
-        row.hasArt = hasArt;
-        row.state = 'ready';
+        importQueue.read(row, tags, hasArt);
       } catch {
         row.state = 'unreadable';
         row.ticked = false;
         row.note = 'Cloud_FailUnreadable';
+        importQueue.changed();
       }
-      importQueue.changed();
     }
+  }
+
+  const waiting = $derived.by(() => {
+    void version;
+    return importQueue.waiting.size;
+  });
+
+  const albumFiles = $derived.by(() => {
+    void version;
+    return importQueue.albumFiles();
+  });
+
+  async function addFolder() {
+    try {
+      const folder = await chooseFolder!.call(window);
+      queueKeeper.addSources([folder]);
+      await add(await pickedFromHandles([folder]));
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) throw error;
+    }
+  }
+
+  // The browser asks the person once per folder, and a folder they refuse stays out.
+  async function reopen() {
+    const open: FileSystemHandle[] = [];
+    for (const source of queueKeeper.sources) {
+      if ((await (source as AskedHandle).requestPermission?.({ mode: 'read' })) === 'granted') open.push(source);
+    }
+    await add(await pickedFromHandles(open));
   }
 
   async function drop(event: DragEvent) {
     event.preventDefault();
     dropping = false;
-    if (event.dataTransfer?.items.length) await add(await pickedFromDrop(event.dataTransfer.items));
+    const items = event.dataTransfer?.items;
+    if (!items?.length) return;
+
+    // Both read the items, and neither can wait: they are empty once the drop is over.
+    const handles = handlesOfDrop(items);
+    const picked = pickedFromDrop(items);
+    queueKeeper.addSources((await handles).filter((handle) => handle !== null));
+    await add(await picked);
   }
 
   function picked(event: Event & { currentTarget: HTMLInputElement }) {
@@ -121,6 +187,50 @@
     running = false;
     if (outcome === 'full') message = text('Rpm_Error_StorageFull');
     await catalogue.refresh();
+  }
+
+  const COLUMNS: { id: string; label: string; read: (row: ImportRow) => string }[] = [
+    { id: 'album', label: 'Review_ColAlbum', read: (row) => row.tags.Album ?? '' },
+    { id: 'albumartist', label: 'Review_ColAlbumArtist', read: (row) => row.tags.AlbumArtist ?? '' },
+    { id: 'year', label: 'Review_ColYear', read: (row) => (row.tags.Year ? String(row.tags.Year) : '') },
+    { id: 'genre', label: 'Review_ColGenre', read: (row) => row.tags.Genre ?? '' },
+    { id: 'disc', label: 'Review_ColDisc', read: (row) => (row.tags.DiscNumber ? String(row.tags.DiscNumber) : '') },
+    { id: 'codec', label: 'Review_ColCodec', read: (row) => row.tags.CodecDescription ?? '' },
+    { id: 'bitrate', label: 'Review_ColBitrate', read: (row) => (row.tags.BitrateKbps ? String(Math.round(row.tags.BitrateKbps)) : '') },
+    { id: 'file', label: 'Review_ColFile', read: (row) => row.file.name },
+  ];
+  const COLUMNS_KEY = 'rpm-import-columns';
+
+  function storedColumns(): string[] {
+    try {
+      return JSON.parse(localStorage.getItem(COLUMNS_KEY) ?? '[]') as string[];
+    } catch {
+      return [];
+    }
+  }
+
+  let columns = $state<string[]>(storedColumns());
+  const shownColumns = $derived(COLUMNS.filter((column) => columns.includes(column.id)));
+
+  function toggleColumn(id: string) {
+    columns = columns.includes(id) ? columns.filter((held) => held !== id) : [...columns, id];
+    try {
+      localStorage.setItem(COLUMNS_KEY, JSON.stringify(columns));
+    } catch {
+      // It holds for this visit.
+    }
+  }
+
+  // A note of what the last tool did stays for a while, then the footer goes back to saying where things are.
+  $effect(() => {
+    if (!toast) return;
+    const clearing = setTimeout(() => (toast = ''), 6000);
+    return () => clearTimeout(clearing);
+  });
+
+  function numberDiscs() {
+    const written = importQueue.numberDiscs(ticked);
+    toast = written ? text('Queue_DiscsNumbered', written) : text('Queue_DiscsNoneFound');
   }
 
   function clearDone() {
@@ -174,8 +284,16 @@
 >
   <header>
     <h2 class="heading">{text('Queue_PaneTitle')}</h2>
+    <p class="rip">{text('Web_ImportRipNote')}</p>
     {#if counts.total > 0}
       <p>{counts.total === 1 ? text('Queue_StatusFileOne') : text('Queue_StatusFiles', counts.total)}  •  {size(counts.bytes)}</p>
+    {/if}
+    {#if waiting > 0}
+      <div class="saved">
+        <p>{text('Web_ImportSavedNote', waiting)}</p>
+        {#if queueKeeper.sources.length}<button class="tool" onclick={reopen}>{text('Web_ImportSavedReopen')}</button>{/if}
+        <button class="tool" onclick={() => queueKeeper.forget()}>{text('Web_ImportSavedForget')}</button>
+      </div>
     {/if}
   </header>
 
@@ -185,25 +303,53 @@
       <p>{text('Web_ImportEmptyHint')}</p>
       <div class="adds">
         <label class="glass-button primary">{text('Web_ImportAddFiles')}<input type="file" multiple accept="audio/*,.flac,.m4a,.opus,.ogg,.oga,.wv,.wma,.aif,.aiff" hidden onchange={picked} /></label>
-        {#if folderPicker}
+        {#if chooseFolder}
+          <button class="glass-button" onclick={addFolder}>{text('Web_ImportAddFolder')}</button>
+        {:else if folderPicker}
           <label class="glass-button">{text('Web_ImportAddFolder')}<input type="file" webkitdirectory hidden onchange={picked} /></label>
         {/if}
       </div>
+      <div class="get"><DesktopGet /></div>
     </div>
   {:else}
     <div class="tools">
       <button class="tool" class:on={showTags} onclick={() => (showTags = !showTags)}>{text('Queue_TagPanelTitle')}</button>
-      <button class="tool" class:on={showNames} onclick={() => (showNames = !showNames)}>{text('Queue_ActionTagsFromFilename')}</button>
+      <button class="tool" disabled={running || !recognisable.length} onclick={() => (recognising = true)}>{text('Queue_ToolRecognize')}</button>
+      <button class="tool" disabled={!ticked.length} onclick={() => (lookingUp = true)}>{text('Queue_ToolTagsFromRelease')}</button>
       <button class="tool" onclick={() => importQueue.numberTracks(ticked)}>{text('Queue_ActionNumberTracks')}</button>
+      <div class="columns">
+        <button class="tool" class:on={moreOpen} onclick={() => { moreOpen = !moreOpen; columnsOpen = false; }}>{text('Queue_ActionMore')}</button>
+        {#if moreOpen}
+          <div class="menu">
+            <button class:on={showNames} onclick={() => { moreOpen = false; showNames = !showNames; }}>{text('Queue_ActionTagsFromFilename')}</button>
+            <button disabled={!ticked.length} onclick={() => { moreOpen = false; fromTags = true; }}>{text('Queue_ToolTagsFromTags')}</button>
+            <button onclick={() => { moreOpen = false; numberDiscs(); }}>{text('Queue_CtxNumberDiscs')}</button>
+            <button onclick={() => { moreOpen = false; columnsOpen = !columnsOpen; }}>{text('Queue_Columns')}</button>
+          </div>
+        {/if}
+        {#if columnsOpen}
+          <div class="menu">
+            {#each COLUMNS as column}
+              <label><input type="checkbox" checked={columns.includes(column.id)} onchange={() => toggleColumn(column.id)} /> {text(column.label)}</label>
+            {/each}
+          </div>
+        {/if}
+      </div>
       <button class="tool" onclick={() => importQueue.remove(ticked)}>{text('Queue_CtxRemove')}</button>
       <label class="search"><i class="icon">{icons.search}</i><input type="search" placeholder={text('Review_SearchPlaceholder')} bind:value={search} /></label>
     </div>
 
     <div class="chips">
-      {#each [['missing', text('Queue_ChipNotIdentified'), counts.missing], ['unreadable', text('Queue_ChipUnreadable'), counts.unreadable], ['ticked', text('Queue_ChipTicked'), counts.ticked]] as [id, label, count] (id)}
+      {#each [['missing', text('Queue_ChipNotIdentified'), counts.missing], ['unreadable', text('Queue_ChipUnreadable'), counts.unreadable], ['duplicates', text('Queue_ChipDuplicates'), duplicates.length], ['ticked', text('Queue_ChipTicked'), counts.ticked]] as [id, label, count] (id)}
         <button class="chip" class:on={chip === id} onclick={() => (chip = chip === id ? null : (id as ChipFilter))}>{label} <span>{count}</span></button>
       {/each}
     </div>
+
+    {#if duplicates.length}
+      <div class="names">
+        <button class="tool" onclick={() => importQueue.remove(duplicates)}>{text('Queue_RemoveDuplicates')}</button>
+      </div>
+    {/if}
 
     {#if showNames}
       <div class="names">
@@ -244,6 +390,12 @@
                   <span class="number">{line.row.tags.TrackNumber || ''}</span>
                   <span class="title" class:missing={!line.row.tags.Title}>{line.row.tags.Title ?? line.row.file.name}</span>
                   <span class="artist">{line.row.tags.Artist ?? ''}</span>
+                  {#each shownColumns as column (column.id)}
+                    <span class="extra" title={text(column.label)}>{column.read(line.row)}</span>
+                  {/each}
+                  {#if albumFiles.has(line.row)}
+                    <button class="split" title={text('Web_ImportAlbumFileTip')} aria-label={text('Web_ImportAlbumFileTip')} onclick={() => (toast = text('Web_ImportAlbumFileTip'))}><i class="icon">{icons.scissors}</i></button>
+                  {/if}
                   <span class="length">{seconds(line.row.tags.DurationSeconds)}</span>
                   <span class="state {line.row.state}">{statusOf(line.row)}</span>
                 </div>
@@ -261,7 +413,7 @@
         <button class="tool" onclick={() => importQueue.setAllTicks(false)}>{text('Queue_SelectNoneWord')}</button>
       </div>
       <p class="status" role="status">
-        {#if message}<span class="error">{message}</span>{:else if running}{text('Web_ImportKeepOpen')}{:else if counts.done > 0}{counts.done} {text('Web_ImportDone').toLowerCase()}{/if}
+        {#if message}<span class="error">{message}</span>{:else if toast}{toast}{:else if running}{text('Web_ImportKeepOpen')}{:else if counts.done > 0}{counts.done} {text('Web_ImportDone').toLowerCase()}{/if}
       </p>
       {#if counts.done > 0 && !running}<button class="tool" onclick={clearDone}>{text('Web_ImportClearDone')}</button>{/if}
       <label class="tool add">{text('AddMusic_Title')}<input type="file" multiple hidden onchange={picked} /></label>
@@ -270,7 +422,30 @@
   {/if}
 </div>
 
+{#if lookingUp}
+  <ReleaseLookup rows={ticked} onClose={() => (lookingUp = false)} onDone={(note) => (toast = note)} />
+{/if}
+{#if fromTags}
+  <TagsFromTags rows={ticked} onClose={() => (fromTags = false)} onDone={(note) => (toast = note)} />
+{/if}
+
+{#if recognising}
+  <RecogniseWindow rows={recognisable} onClose={() => (recognising = false)} onEdit={editRecognised} />
+{/if}
+
 <style>
+  .saved {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    align-items: center;
+    margin-top: 8px;
+  }
+
+  .saved p {
+    flex: 1 1 100%;
+  }
+
   .bench {
     display: flex;
     flex-direction: column;
@@ -285,6 +460,62 @@
 
   header {
     padding: 14px 16px 6px;
+  }
+
+  .rip {
+    color: var(--text-faint);
+  }
+
+  .get {
+    margin-top: 14px;
+  }
+
+  .columns {
+    position: relative;
+  }
+
+  .menu {
+    position: absolute;
+    z-index: 5;
+    top: calc(100% + 4px);
+    left: 0;
+    display: grid;
+    gap: 6px;
+    min-width: 170px;
+    padding: 10px 12px;
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    background: var(--ground);
+    font-size: 12.5px;
+  }
+
+  .menu button {
+    padding: 4px 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .menu button:disabled {
+    opacity: 0.5;
+  }
+
+  .extra {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-soft);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 480px) {
+    .extra {
+      display: none;
+    }
   }
 
   header p {
@@ -340,21 +571,7 @@
     padding: 4px 16px;
   }
 
-  .tool {
-    display: inline-grid;
-    place-items: center;
-    height: 28px;
-    padding: 0 10px;
-    border: 1px solid var(--hairline);
-    border-radius: 6px;
-    background: rgb(255 255 255 / 0.05);
-    font-size: 12px;
-    cursor: pointer;
-  }
 
-  .tool.on {
-    background: rgb(255 255 255 / 0.2);
-  }
 
   .search {
     display: flex;
@@ -500,6 +717,16 @@
     color: var(--text-soft);
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .split {
+    flex: none;
+    padding: 2px;
+    border: 0;
+    background: none;
+    color: var(--warning);
+    font-size: 11px;
+    cursor: help;
   }
 
   .length {

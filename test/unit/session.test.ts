@@ -257,3 +257,47 @@ describe('the code from a beta mail', () => {
     expect(session.state).toBe('signed-in');
   });
 });
+
+describe('deleting the account', () => {
+  it('sends the address typed, and signs out', async () => {
+    const { session, fetcher } = make((path) => (path === 'auth/account' ? new Response(null, { status: 204 }) : signedIn(path)));
+    await session.restore();
+
+    expect(await session.deleteAccount(' a@b.c ')).toBe(true);
+
+    const [, init] = fetcher.mock.calls.find(([url]) => String(url).endsWith('auth/account'))!;
+    expect(init?.method).toBe('DELETE');
+    expect(JSON.parse(String(init?.body))).toEqual({ confirmEmail: 'a@b.c' });
+    expect(session.state).toBe('signed-out');
+  });
+
+  it('stays signed in when the service refuses', async () => {
+    const { session } = make((path) => (path === 'auth/account' ? json(400) : signedIn(path)));
+    await session.restore();
+
+    expect(await session.deleteAccount('wrong@b.c')).toBe(false);
+    expect(session.state).toBe('signed-in');
+  });
+});
+
+describe('Discogs', () => {
+  it('asks to come back to the web app', async () => {
+    const { session, fetcher } = make((path) => (path === 'connections/discogs/start' ? json(200, { authorizeUrl: 'https://discogs.com/authorize' }) : signedIn(path)));
+    await session.restore();
+
+    expect(await session.startDiscogs()).toBe('https://discogs.com/authorize');
+
+    const [, init] = fetcher.mock.calls.find(([url]) => String(url).endsWith('discogs/start'))!;
+    expect(JSON.parse(String(init?.body))).toEqual({ nativeScheme: 'webapp' });
+  });
+
+  it('reads the status, and a failure as not known', async () => {
+    let up = true;
+    const { session } = make((path) => (path === 'connections/discogs' ? (up ? json(200, { connected: true, configured: true, username: 'me' }) : json(500)) : signedIn(path)));
+    await session.restore();
+
+    expect(await session.discogsStatus()).toMatchObject({ connected: true, username: 'me' });
+    up = false;
+    expect(await session.discogsStatus()).toBeNull();
+  });
+});

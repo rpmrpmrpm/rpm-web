@@ -57,6 +57,12 @@ static void log_to_last_error(void *object, int level, const char *format, va_li
 
 const char *rpm_last_error(void) { return last_error; }
 
+void rpm_set_error(const char *text)
+{
+    clear_error();
+    add_error(text);
+}
+
 // The state the tool keeps per stream, on the input side and the output side.
 typedef struct CopyStream {
     AVStream *in;

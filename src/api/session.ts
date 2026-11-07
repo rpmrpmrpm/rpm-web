@@ -8,11 +8,19 @@ export interface User {
   email: string;
   displayName: string;
   supporter: boolean;
+  // Unix seconds. 0 when there is no end date to show.
+  supporterUntil: number;
   tester: boolean;
 }
 
 // unreachable means the service gave no answer. It is not the same as signed out: the session may be
 // fine, and showing the sign-in form would be wrong.
+export interface DiscogsStatus {
+  connected: boolean;
+  configured: boolean;
+  username?: string | null;
+}
+
 export type SessionState = 'restoring' | 'signed-in' | 'signed-out' | 'unreachable';
 
 // The strings.json key to show, or null when the step worked.
@@ -171,6 +179,7 @@ export class Session implements TokenSource {
       email: me.email ?? '',
       displayName: me.displayName ?? '',
       supporter: me.grSupporter === true,
+      supporterUntil: me.grSupporterUntil ?? 0,
       tester: me.grTester === true,
     };
   }
@@ -227,6 +236,68 @@ export class Session implements TokenSource {
       return null;
     } catch {
       return 'Web_CodeFailed';
+    }
+  }
+
+  // A short-lived address for a desktop installer, or null when there is none to give.
+  async desktopDownload(platform: string): Promise<string | null> {
+    try {
+      const token = await this.accessToken();
+      const response = await this.post('auth/desktop-download', { platform }, { Authorization: `Bearer ${token}` });
+      if (!response.ok) return null;
+      return (await response.json()).url ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Removes the account for good. The address typed must be the account's own, which the server checks.
+  async deleteAccount(confirmEmail: string): Promise<boolean> {
+    try {
+      const token = await this.accessToken();
+      const response = await this.environment.fetcher(`${this.base}auth/account`, {
+        method: 'DELETE',
+        headers: { ...SESSION_HEADER, 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ confirmEmail: confirmEmail.trim() }),
+      });
+      if (!response.ok) return false;
+      this.environment.announce();
+      this.forget();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // The account's link to Discogs, which is kept in the cloud, so linking it once links it everywhere.
+  async discogsStatus(): Promise<DiscogsStatus | null> {
+    try {
+      const token = await this.accessToken();
+      const response = await this.environment.fetcher(`${this.base}connections/discogs`, { headers: { Authorization: `Bearer ${token}` } });
+      return response.ok ? ((await response.json()) as DiscogsStatus) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // The Discogs page to send the browser to. It comes back to this app when it is done.
+  async startDiscogs(): Promise<string | null> {
+    try {
+      const token = await this.accessToken();
+      const response = await this.post('connections/discogs/start', { nativeScheme: 'webapp' }, { Authorization: `Bearer ${token}` });
+      return response.ok ? (((await response.json()) as { authorizeUrl?: string }).authorizeUrl ?? null) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async disconnectDiscogs(): Promise<boolean> {
+    try {
+      const token = await this.accessToken();
+      const response = await this.environment.fetcher(`${this.base}connections/discogs`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      return response.ok;
+    } catch {
+      return false;
     }
   }
 

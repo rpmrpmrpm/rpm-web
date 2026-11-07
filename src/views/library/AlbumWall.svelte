@@ -17,7 +17,9 @@
   let viewport = $state(0);
   let scroll = $state(0);
   let bandHeight = $state(0);
-  let open = $state<CloudAlbum | null>(null);
+  // By key, because a refresh makes new albums, and the open one stays open through it.
+  let openKey = $state<string | null>(null);
+  const open = $derived(openKey === null ? null : (albums.find((album) => album.key === openKey) ?? null));
 
   const usable = $derived(Math.max(0, width - PADDING * 2));
   const columns = $derived(compact ? 2 : Math.max(1, Math.round((usable + GAP) / (target + GAP))));
@@ -49,14 +51,14 @@
     return out;
   });
 
-  const toggle = (album: CloudAlbum) => (open = open === album ? null : album);
+  const toggle = (album: CloudAlbum) => (openKey = openKey === album.key ? null : album.key);
 </script>
 
 <div class="scroller" bind:clientWidth={width} bind:clientHeight={viewport} onscroll={(event) => (scroll = event.currentTarget.scrollTop)}>
   <div class="rows" style:height="{Math.max(0, rows * rowHeight + drawer)}px">
     {#each visible as { album, row, column } (album.key)}
       <div class="slot" style:transform="translate({PADDING + column * (art + GAP)}px, {top(row)}px)" style:width="{art}px">
-        <AlbumCard {album} size={art} open={album === open} onOpen={() => toggle(album)} />
+        <AlbumCard {album} size={art} open={album.key === openKey} onOpen={() => toggle(album)} />
       </div>
     {/each}
 
@@ -69,7 +71,7 @@
 </div>
 
 {#if open && compact}
-  <AlbumPage album={open} onClose={() => (open = null)} />
+  <AlbumPage album={open} onClose={() => (openKey = null)} />
 {/if}
 
 <style>

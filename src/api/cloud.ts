@@ -1,6 +1,7 @@
 // The cloud library.
 
 import type { Api } from './http';
+import type { PlaysEntry, PlaysRow } from '../library/plays';
 import { readPage, readQuota, readStream, type CloudPage, type CloudQuota, type CloudStream, type CloudTrack } from './wire';
 
 const PAGE_SIZE = 2000;
@@ -31,11 +32,24 @@ export class CloudClient {
     return tracks;
   }
 
+  async trackPlays(since: number): Promise<PlaysRow[]> {
+    const answer = await this.api.json(`cloud/track-plays?since=${since}`, (raw) => raw as { tracks?: PlaysRow[] });
+    return answer.tracks ?? [];
+  }
+
+  async sendTrackPlays(deviceId: string, tracks: PlaysEntry[]): Promise<void> {
+    await this.api.call('cloud/track-plays', { method: 'PUT', body: { deviceId, tracks } });
+  }
+
+  async remove(rpmId: string): Promise<void> {
+    await this.api.call(`cloud/file/${encodeURIComponent(rpmId)}`, { method: 'DELETE' });
+  }
+
   stream(rpmId: string, rate: number, signal?: AbortSignal): Promise<CloudStream> {
     return this.api.json(`cloud/stream/${encodeURIComponent(rpmId)}?rate=${rate}`, readStream, { signal });
   }
 
-  // Asks the store to make a rendition, without waiting for it. See PLAN-TRANSCODE: the look-ahead goes
+  // Asks the store to make a rendition, without waiting for it. The look-ahead goes
   // through this and never through a live address.
   async requestRendition(rpmIds: string[], kilobits: number): Promise<void> {
     await this.api.call('cloud/transcode', { method: 'POST', body: { rpmIds, kilobits } });

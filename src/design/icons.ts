@@ -31,4 +31,10 @@ export const icons = {
   chevronDown: '\uf078',
   warning: '\uf071',
   queue: '\uf8c9',
+  trash: '\uf2ed',
+  fingerprint: '\uf577',
+  lock: '\uf023',
+  check: '\uf00c',
+  pen: '\uf304',
+  scissors: '\uf0c4',
 } as const;

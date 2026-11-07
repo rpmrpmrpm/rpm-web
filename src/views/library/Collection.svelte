@@ -2,15 +2,50 @@
   // The library pane: its heading, its keys, and the wall.
   import { catalogue } from '../../app';
   import { icons } from '../../design/icons';
-  import type { AlbumOrdering } from '../../library/albums';
+  import type { AlbumOrdering, CloudAlbum } from '../../library/albums';
   import { library } from '../../state.svelte';
+  import { albumCount, trackCount } from '../../strings/counts';
   import { text } from '../../strings/loc';
+  import { searchSongs } from '../../library/search';
+  import AlbumList from './AlbumList.svelte';
   import AlbumWall from './AlbumWall.svelte';
+  import TrackTable from './TrackTable.svelte';
 
-  let { compact = false, onImport }: { compact?: boolean; onImport: () => void } = $props();
+  let { compact = false, onImport, onOpen }: { compact?: boolean; onImport: () => void; onOpen: (album: CloudAlbum) => void } = $props();
+
+  type View = 'grid' | 'list' | 'table';
+  const VIEW_KEY = 'rpm-library-view';
+
+  function storedView(): View {
+    try {
+      const stored = localStorage.getItem(VIEW_KEY);
+      return stored === 'list' || stored === 'table' ? stored : 'grid';
+    } catch {
+      return 'grid';
+    }
+  }
 
   let search = $state('');
   let target = $state(166);
+  let view = $state<View>(storedView());
+
+  function pickView(next: View) {
+    view = next;
+    try {
+      localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // It holds for this visit.
+    }
+  }
+
+  const VIEWS: [View, string, string][] = [
+    ['grid', icons.grid, 'Library_ViewGrid'],
+    ['list', icons.album, 'Library_ViewAlbums'],
+    ['table', icons.list, 'Library_ViewTable'],
+  ];
+
+  const allTracks = $derived(library.albums.flatMap((album) => album.tracks));
+  const hits = $derived(search.trim() ? searchSongs(library.albums, search).map((hit) => hit.track) : allTracks);
 
   const orderings: [AlbumOrdering, string][] = [
     ['Artist', 'AlbumSort_Artist'],
@@ -27,7 +62,7 @@
         : days === 1
           ? text('Stats_DaysHoursOne', hours % 24)
           : text('Stats_HoursMinutes', hours, Math.floor((library.seconds % 3600) / 60));
-    return [text('Stats_Albums', library.albums.length), text('Stats_Songs', library.songs), time].join('  •  ');
+    return [albumCount(library.albums.length), trackCount(library.songs), time].join('  •  ');
   });
 
   const shown = $derived.by(() => {
@@ -59,7 +94,12 @@
           <option value={ordering}>{text(key)}</option>
         {/each}
       </select>
-      {#if !compact}
+      <div class="views" role="group" aria-label={text('Library_ViewGrid')}>
+        {#each VIEWS as [id, icon, label]}
+          <button class="tool" class:on={view === id} title={text(label)} aria-label={text(label)} onclick={() => pickView(id)}><i class="icon">{icon}</i></button>
+        {/each}
+      </div>
+      {#if !compact && view === 'grid'}
         <input class="size" type="range" min="120" max="280" step="2" aria-label={text('Library_ViewGrid')} bind:value={target} />
       {/if}
     </div>
@@ -73,7 +113,13 @@
   {/if}
 
   {#if library.state === 'ready' && library.albums.length > 0}
-    <AlbumWall albums={shown} {target} {compact} />
+    {#if view === 'table'}
+      <TrackTable tracks={hits} />
+    {:else if view === 'list'}
+      <AlbumList albums={shown} {onOpen} />
+    {:else}
+      <AlbumWall albums={shown} {target} {compact} />
+    {/if}
   {:else if library.state === 'ready'}
     <div class="message">
       <p>{text('Web_LibraryEmpty')}</p>
@@ -153,6 +199,11 @@
     border-radius: 6px;
     background: rgb(0 0 0 / 0.15);
     font-size: 12px;
+  }
+
+  .views {
+    display: flex;
+    gap: 2px;
   }
 
   .size {

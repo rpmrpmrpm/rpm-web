@@ -1,14 +1,16 @@
 <script lang="ts">
   // A record: its name, its keys, and its tracklist by disc. The drawer on the wall and the page on a
   // phone both show this.
-  import { covers, player } from '../../app';
+  import { catalogue, cloud, covers, player } from '../../app';
   import { durationSeconds, isExplicit, type CloudTrack } from '../../api/wire';
   import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
   import { discOf, trackOf } from '../../library/grouping';
   import { byDisc } from '../../library/tracklist';
   import { now } from '../../state.svelte';
+  import { trackCount } from '../../strings/counts';
   import { text } from '../../strings/loc';
+  import AddToPlaylist from './AddToPlaylist.svelte';
 
   let { album, columns = 2, onSleeve }: { album: CloudAlbum; columns?: number; onSleeve?: (url: string) => void } = $props();
 
@@ -36,6 +38,35 @@
   };
 
   const play = (track: CloudTrack) => player.play(album.tracks, album.tracks.indexOf(track));
+
+  let adding = $state<readonly CloudTrack[] | null>(null);
+
+  // Deleting is asked about first, on the page, because it cannot be undone.
+  let asking = $state<readonly CloudTrack[] | null>(null);
+  let deleting = $state(false);
+  let refusal = $state('');
+
+  const asked = $derived(text('Web_DeleteAsk', asking?.length === 1 ? (asking[0]!.title ?? '') : album.album));
+
+  async function confirmDelete() {
+    const tracks = asking ?? [];
+    deleting = true;
+    refusal = '';
+    if (tracks.some((track) => track.rpmId === now.track?.rpmId)) player.stop();
+    // One at a time: each delete changes the account's usage total in a transaction, so two at once conflict.
+    let failed = 0;
+    for (const track of tracks) {
+      try {
+        await cloud.remove(track.rpmId);
+      } catch {
+        failed++;
+      }
+    }
+    deleting = false;
+    asking = null;
+    if (failed) refusal = text('Cloud_TracksNotRemoved', failed, tracks.length, '').trim();
+    await catalogue.refresh();
+  }
 </script>
 
 <div class="detail">
@@ -43,7 +74,7 @@
     <header>
       <h3>{album.album}</h3>
       <p>
-        {album.artist}{album.year ? ` • ${album.year}` : ''} • {text('Rpm_Album_Tracks', album.tracks.length)}
+        {album.artist}{album.year ? ` • ${album.year}` : ''} • {trackCount(album.tracks.length)}
         {seconds ? ` • ${Math.round(seconds / 60)} min` : ''}
       </p>
       <div class="keys">
@@ -55,7 +86,17 @@
             player.toggleShuffle();
           }}><i class="icon">{icons.shuffle}</i> {text('AlbumMenu_Shuffle')}</button
         >
+        <button class="glass-button" onclick={() => (adding = album.tracks)}><i class="icon">{icons.plus}</i> {text('Playlists_AddToPlaylist')}</button>
+        <button class="glass-button" onclick={() => (asking = album.tracks)}><i class="icon">{icons.trash}</i> {text('Delete_Cloud')}</button>
       </div>
+      {#if asking}
+        <div class="ask" role="alert">
+          <span>{asked}</span>
+          <button class="glass-button primary" disabled={deleting} onclick={confirmDelete}>{text('Delete_Menu')}</button>
+          <button class="glass-button" disabled={deleting} onclick={() => (asking = null)}>{text('Common_Cancel')}</button>
+        </div>
+      {/if}
+      {#if refusal}<p class="refusal" role="alert">{refusal}</p>{/if}
     </header>
 
     <div class="tracks" style:column-count={columns}>
@@ -64,11 +105,14 @@
           <div class="disc">{text('Album_DiscHeader', disc.discNumber)}</div>
         {/if}
         {#each disc.tracks as track (track.rpmId)}
-          <button class="track" class:playing={now.track?.rpmId === track.rpmId} onclick={() => play(track)}>
-            <span class="number">{trackOf(track) || ''}</span>
-            <span class="name">{track.title}{#if isExplicit(track)}<span class="badge">E</span>{/if}</span>
-            <span class="length">{time(durationSeconds(track))}</span>
-          </button>
+          <div class="track" class:playing={now.track?.rpmId === track.rpmId}>
+            <button class="play" onclick={() => play(track)}>
+              <span class="number">{trackOf(track) || ''}</span>
+              <span class="name">{track.title}{#if isExplicit(track)}<span class="badge">E</span>{/if}</span>
+              <span class="length">{time(durationSeconds(track))}</span>
+            </button>
+            <button class="bin" title={text('Delete_Cloud')} aria-label={text('Delete_Cloud')} onclick={() => (asking = [track])}><i class="icon">{icons.trash}</i></button>
+          </div>
         {/each}
       {/each}
     </div>
@@ -78,6 +122,10 @@
     <img src={sleeve} alt="" />
   {/if}
 </div>
+
+{#if adding}
+  <AddToPlaylist tracks={adding} onClose={() => (adding = null)} />
+{/if}
 
 <style>
   .detail {
@@ -131,19 +179,66 @@
     break-after: avoid;
   }
 
+  .ask {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 12.5px;
+  }
+
+  .ask span {
+    flex: 1 1 220px;
+  }
+
+  .refusal {
+    color: var(--error);
+  }
+
   .track {
+    display: flex;
+    align-items: center;
+    border-radius: 4px;
+    break-inside: avoid;
+  }
+
+  .play {
     display: grid;
+    flex: 1;
     grid-template-columns: 22px minmax(0, 1fr) auto;
     gap: 8px;
-    width: 100%;
+    min-width: 0;
     min-height: 26px;
     padding: 3px 6px;
     border: 0;
-    border-radius: 4px;
     background: none;
+    color: inherit;
+    font: inherit;
     text-align: left;
     cursor: pointer;
-    break-inside: avoid;
+  }
+
+  .bin {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    background: none;
+    color: var(--text-faint);
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  @media (hover: hover) {
+    .bin {
+      visibility: hidden;
+    }
+
+    .track:hover .bin,
+    .bin:focus-visible {
+      visibility: visible;
+    }
   }
 
   @media (hover: hover) {

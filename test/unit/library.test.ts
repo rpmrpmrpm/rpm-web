@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { readTrack, type CloudTrack, type CloudTrackTags } from '../../src/api/wire';
 import { addedOf, groupAlbums, sortAlbums, yearOf } from '../../src/library/albums';
-import { coverKey, coverKeyForTrack, coverSpellings } from '../../src/library/art-key';
+import { coverKey, coverKeyForTrack, coverSpellings, discKeyForTrack } from '../../src/library/art-key';
 import { albumArtistOf, albumKey, albumNameOf, folderOf, normalizedAlbumName } from '../../src/library/grouping';
 import { byDisc } from '../../src/library/tracklist';
 
@@ -125,6 +125,8 @@ describe('the order of the wall', () => {
 describe('the cover key, a contract with the other apps', () => {
   it('matches what the desktop writes', async () => {
     expect(await coverKey('Manu Chao', 'Clandestino')).toBe('d90d382db82e7ba38c335b59ae3eaf33');
+    expect(await discKeyForTrack('ABBA', 'Someone', ' Arrival ')).toBe('f245c4a44d16d5ca62f1abdf5da5458d');
+    expect(await discKeyForTrack('  ', 'ABBA', 'Arrival')).toBe('f245c4a44d16d5ca62f1abdf5da5458d');
   });
 
   it('is the same however the name is written', async () => {

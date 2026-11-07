@@ -1,5 +1,7 @@
 // The player: the queue, what the keys do, and which track is signed and handed to the stream.
 
+import { EQ_BANDS } from './equalizer.js';
+import { ListenTally, listenCounts, type Listened } from './listen';
 import type { CloudClient } from '../api/cloud';
 import type { CloudStream, CloudTrack } from '../api/wire';
 import { gainFor, levelOf, levelOfRecord, type Level, type NormalizeMode } from './level';
@@ -15,6 +17,10 @@ export interface QueueRow {
 export type Repeat = 'off' | 'all' | 'one';
 
 const VOLUME_KEY = 'rpm-volume';
+const EQUALIZER_KEY = 'rpm-equalizer';
+// A larger step of the playhead between two ticks is a seek, or a jump to the next audio.
+const MOST_STEP_SECONDS = 2;
+export const LOCK_SCREEN_ART = 512;
 const SMALL = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
 const COMPUTER_RATE = 0;
 const PHONE_RATE = 320;
@@ -22,6 +28,14 @@ const PHONE_RATE = 320;
 const name = (track: CloudTrack) => track.relativePath?.split('/').pop() ?? `${track.rpmId}.flac`;
 
 export type Signer = Pick<CloudClient, 'stream' | 'requestRendition'>;
+
+export interface EqualizerSettings {
+  on: boolean;
+  preamp: number;
+  bands: number[];
+}
+
+const FLAT: EqualizerSettings = { on: false, preamp: 0, bands: EQ_BANDS.map(() => 0) };
 
 export class Player {
   queue: QueueRow[] = [];
@@ -44,6 +58,14 @@ export class Player {
   private readonly listeners = new Set<() => void>();
   private beforeShuffle: QueueRow[] | null = null;
   private recordLevel: Level = { lufs: null, truePeak: null };
+  private readonly tally = new ListenTally();
+  private listenSession = 0;
+  private listenStart = 0;
+  private heard = 0;
+  private lastTime = 0;
+  equalizer: EqualizerSettings = FLAT;
+  private artworkOf = '';
+  private artwork: MediaImage[] = [];
   private inAlbumOrder = true;
 
   // Which entry of the stream is which row. An entry is one handing of a row to the stream.
@@ -60,7 +82,11 @@ export class Player {
   // Set from a key press until the audio of that press is under the playhead.
   private settling = false;
 
-  constructor(private readonly cloud: Signer) {
+  constructor(
+    private readonly cloud: Signer,
+    private readonly findArtwork: (track: CloudTrack) => Promise<string | null> = async () => null,
+    private readonly listened: (rpmId: string) => void = () => {},
+  ) {
     this.audio = new Audio();
     this.audio.preload = 'auto';
     this.audio.setAttribute('playsinline', '');
@@ -80,6 +106,34 @@ export class Player {
       if (this.loaded === 'playing') this.setLoaded('paused');
     });
     this.controls();
+    this.equalizer = this.storedEqualizer();
+    if (this.equalizer.on) this.sendEqualizer();
+  }
+
+  private storedEqualizer(): EqualizerSettings {
+    try {
+      const stored = JSON.parse(localStorage.getItem(EQUALIZER_KEY) ?? 'null') as EqualizerSettings | null;
+      return stored && stored.bands?.length === EQ_BANDS.length ? stored : FLAT;
+    } catch {
+      return FLAT;
+    }
+  }
+
+  private sendEqualizer() {
+    const { on, preamp, bands } = this.equalizer;
+    this.stream.setEqualizer(on ? preamp : 0, on ? bands : FLAT.bands);
+  }
+
+  // What is buffered was made with the old curve, so the track is opened again from where it is.
+  setEqualizer(settings: EqualizerSettings) {
+    this.equalizer = settings;
+    try {
+      localStorage.setItem(EQUALIZER_KEY, JSON.stringify(settings));
+    } catch {
+      // The curve holds until the page closes.
+    }
+    this.sendEqualizer();
+    if (this.stream.isOpen && this.index >= 0) this.moveTo(this.index, this.seconds);
   }
 
   onChange(listener: () => void): () => void {
@@ -169,6 +223,9 @@ export class Player {
     if (!row) return;
 
     this.moves++;
+    this.listenSession++;
+    this.listenStart = startAt ?? 0;
+    this.heard = 0;
     this.waitingLive = null;
     this.index = index;
     this.seconds = startAt ?? 0;
@@ -185,13 +242,22 @@ export class Player {
     const attempt = this.gate.begin();
 
     const opening = !this.stream.isOpen;
-    if (opening) this.stream.open();
-
-    // The old track stops at once. The element stays playing, because a locked phone could not start
-    // it again, so it is silenced until the new audio is under the playhead.
-    this.audio.muted = true;
-    void this.audio.play().catch(() => {
-      // Refused until a key is pressed, or replaced by a later play. Neither is a failure of the track.
+    if (opening) {
+      this.setAudioSession();
+      this.stream.open();
+    } else {
+      // The old track stops at once. The element stays playing, because a locked phone could not start
+      // it again, so it is silenced until the new audio is under the playhead. A first start has nothing
+      // to silence, and on an iPhone it has to be audible for the tap to count.
+      this.audio.muted = true;
+    }
+    void this.audio.play().catch((error: unknown) => {
+      // Replaced by a later play is nothing. Refused means the audio arrives paused, with the key showing
+      // Play, because a press is what it needs.
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        this.transport.pause(this.starting, this.loaded);
+        this.changed();
+      }
     });
 
     this.publishSession();
@@ -334,6 +400,9 @@ export class Player {
     if (now.id !== this.currentEntry) {
       const crossed = this.currentEntry !== null;
       this.currentEntry = now.id;
+      this.listenSession++;
+      this.listenStart = 0;
+      this.heard = 0;
       const position = this.queue.indexOf(row);
       if (position >= 0) this.index = position;
       if (crossed) this.retries.forget();
@@ -343,11 +412,26 @@ export class Player {
 
     this.seconds = now.seconds;
     this.duration = row.track.tags?.durationSeconds || now.duration;
+    this.countListening(row.track.rpmId);
     this.publishPosition();
     this.changed();
   }
 
+  // Time heard, not position: a seek is not listening, and neither is the audio sitting paused.
+  private countListening(rpmId: string) {
+    const time = this.audio.currentTime;
+    const step = time - this.lastTime;
+    this.lastTime = time;
+    if (step > 0 && step < MOST_STEP_SECONDS && !this.audio.paused) this.heard += step;
+    this.reportListen(this.tally.read(rpmId, this.listenSession, this.listenStart, this.heard, this.duration));
+  }
+
+  private reportListen(done: Listened | null) {
+    if (done && listenCounts(done.heardSeconds, done.lengthSeconds)) this.listened(done.track);
+  }
+
   private onEnded() {
+    this.reportListen(this.tally.settle());
     this.loaded = 'nothing';
     this.starting = false;
     this.changed();
@@ -439,10 +523,32 @@ export class Player {
   private publishSession() {
     if (!('mediaSession' in navigator)) return;
     const track = this.current;
+    if (track) this.wantArtwork(track);
     navigator.mediaSession.metadata = track
-      ? new MediaMetadata({ title: track.title ?? '', artist: track.artist ?? '', album: track.album ?? '' })
+      ? new MediaMetadata({ title: track.title ?? '', artist: track.artist ?? '', album: track.album ?? '', artwork: this.artwork })
       : null;
     navigator.mediaSession.playbackState = this.wantsToPlay ? 'playing' : 'paused';
+  }
+
+  // The lock screen's picture. It comes later than the words, and only for the track still playing.
+  private wantArtwork(track: CloudTrack) {
+    if (this.artworkOf === track.rpmId) return;
+    this.artworkOf = track.rpmId;
+    this.artwork = [];
+    void this.findArtwork(track)
+      .then((url) => {
+        if (!url || this.artworkOf !== track.rpmId) return;
+        this.artwork = [{ src: url, sizes: `${LOCK_SCREEN_ART}x${LOCK_SCREEN_ART}` }];
+        this.publishSession();
+      })
+      .catch(() => {
+        // The lock screen shows the words alone.
+      });
+  }
+
+  private setAudioSession() {
+    const audio = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+    if (audio) audio.type = 'playback';
   }
 
   private publishPosition() {
@@ -470,7 +576,5 @@ export class Player {
     session.setActionHandler('seekto', (details) => {
       if (details.seekTime !== undefined) this.seek(details.seekTime);
     });
-    const audio = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
-    if (audio) audio.type = 'playback';
   }
 }

@@ -143,6 +143,11 @@ export class Stream {
     return this.source !== null && !this.finished;
   }
 
+  // Kept by the worker, so it holds for every stream after this one too.
+  setEqualizer(preamp: number, bands: number[]) {
+    void this.startWorker().then(() => this.worker!.postMessage({ type: 'equalizer', preamp, bands } satisfies ToWorker));
+  }
+
   add(track: WorkerTrack, first = false) {
     this.send({ type: 'add', track, first });
     this.drained = false;

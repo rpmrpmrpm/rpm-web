@@ -50,7 +50,7 @@ const signer: Signer = {
 };
 (window as unknown as { signs: string[] }).signs = [];
 
-const player = new Player(signer);
+const player = new Player(signer, async (track) => `/art/${track.rpmId}.png`);
 let shown: CloudTrack | null = null;
 player.onChange(() => {
   if (player.current !== shown) {

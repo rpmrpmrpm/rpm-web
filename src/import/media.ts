@@ -1,6 +1,6 @@
 // Calls to the import worker, as promises.
 
-import type { ArtBytes, ToImportWorker } from './import.worker';
+import type { ArtBytes, Fingerprint, Loudness, ToImportWorker } from './import.worker';
 import type { TrackTags } from './queue';
 
 type Message = ToImportWorker extends infer M ? (M extends { id: number } ? Omit<M, 'id'> : never) : never;
@@ -9,6 +9,9 @@ export interface ImportMedia {
   tags(file: File): Promise<{ tags: TrackTags; hasArt: boolean }>;
   art(file: File): Promise<ArtBytes | null>;
   canonical(file: File, extension: string): Promise<{ bytes: Uint8Array; sha256: string }>;
+  loudness(file: File): Promise<Loudness | null>;
+  fingerprint(file: File): Promise<Fingerprint>;
+  clip(file: File, kilobits: number, start: number, seconds: number): Promise<Uint8Array>;
   renditions(file: File, kilobits: number, headKilobits: number, headSeconds: number): Promise<{ head: Uint8Array; rendition: Uint8Array }>;
 }
 
@@ -44,6 +47,18 @@ export class WorkerMedia implements ImportMedia {
 
   tags(file: File) {
     return this.call<{ tags: TrackTags; hasArt: boolean }>({ type: 'tags', file });
+  }
+
+  loudness(file: File) {
+    return this.call<Loudness | null>({ type: 'loudness', file });
+  }
+
+  fingerprint(file: File) {
+    return this.call<Fingerprint>({ type: 'fingerprint', file });
+  }
+
+  clip(file: File, kilobits: number, start: number, seconds: number) {
+    return this.call<Uint8Array>({ type: 'clip', file, kilobits, start, seconds });
   }
 
   art(file: File) {

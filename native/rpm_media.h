@@ -1,6 +1,12 @@
 #ifndef RPM_MEDIA_H
 #define RPM_MEDIA_H
 
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Writes the canonical form of in_path to out_path: its audio with every tag removed and nothing
 // re-encoded. The muxer is chosen by the extension of out_path, or is the generic mp4 muxer when
 // force_mp4 is not zero. Returns 0, or a negative FFmpeg error with the words in rpm_last_error().
@@ -8,6 +14,9 @@ int rpm_canonical(const char *in_path, const char *out_path, int force_mp4);
 
 // What FFmpeg said at error level during the last call.
 const char *rpm_last_error(void);
+
+// Sets what rpm_last_error() says.
+void rpm_set_error(const char *text);
 
 // Reading a track. The bytes come from the page through Module.rmSources, which holds the sources by
 // number: a File, or a presigned URL read by range.
@@ -58,5 +67,25 @@ int rm_output_size(const RmOutput *output);
 void rm_output_clear(RmOutput *output);
 
 void rm_output_close(RmOutput *output);
+
+// The Chromaprint fingerprint of a whole file, as fpcalc gives it. path is a path in the module's file
+// system. Returns NULL with the words in rpm_last_error().
+typedef struct RmFingerprint RmFingerprint;
+RmFingerprint *rm_fingerprint(const char *path);
+
+// The compressed form, in the base64 that AcoustID reads.
+const char *rm_fingerprint_text(const RmFingerprint *fingerprint);
+
+// The sub-fingerprints, which the rpm database matches on.
+const int32_t *rm_fingerprint_raw(const RmFingerprint *fingerprint);
+int rm_fingerprint_frames(const RmFingerprint *fingerprint);
+
+double rm_fingerprint_seconds(const RmFingerprint *fingerprint);
+
+void rm_fingerprint_close(RmFingerprint *fingerprint);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

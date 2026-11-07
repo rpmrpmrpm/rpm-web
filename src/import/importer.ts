@@ -5,7 +5,7 @@
 import { ApiError, type Api } from '../api/http';
 import type { CloudQuota } from '../api/wire';
 import { readQuota } from '../api/wire';
-import { coverKeyForTrack } from '../library/art-key';
+import { coverKeyForTrack, discKeyForTrack } from '../library/art-key';
 import type { ImportMedia } from './media';
 import { relativePath } from './naming';
 import type { ImportQueue, ImportRow } from './queue';
@@ -147,6 +147,7 @@ export class Importer {
   stopped = false;
   private quota: CloudQuota | null = null;
   private readonly coversDone = new Set<string>();
+  private readonly discsDone = new Set<string>();
 
   constructor(
     private readonly api: Api,
@@ -173,7 +174,8 @@ export class Importer {
     return own && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(own) ? own.toLowerCase() : this.newId();
   }
 
-  private async coverOf(row: ImportRow): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  async coverOf(row: ImportRow): Promise<{ bytes: Uint8Array; mime: string } | null> {
+    if (row.cover) return row.cover;
     if (row.hasArt) {
       const embedded = await this.media.art(row.file);
       if (embedded) return embedded;
@@ -198,6 +200,22 @@ export class Importer {
     }
   }
 
+  // The disc label, by the same rules as the cover, under its own key.
+  private async uploadDisc(row: ImportRow) {
+    const disc = row.disc;
+    if (!disc || disc.bytes.length > MAX_COVER_BYTES) return;
+    try {
+      const key = await discKeyForTrack(row.tags.AlbumArtist, row.tags.Artist, row.tags.Album);
+      if (this.discsDone.has(key)) return;
+      this.discsDone.add(key);
+      const mime = normalizeMime(disc.mime);
+      const slot = await this.post<{ url: string }>(`cloud/art/${key}?contentType=${encodeURIComponent(mime)}`, undefined);
+      await this.transfers.put(slot.url, disc.bytes, { contentType: mime });
+    } catch {
+      // Best effort.
+    }
+  }
+
   private async sendRendition(rpmId: string, rate: number, bytes: Uint8Array) {
     const slot = await this.api.json(`cloud/rendition/${rpmId}/upload?rate=${rate}`, (raw) => raw as { url: string });
     await this.transfers.put(slot.url, bytes, { contentType: 'audio/mp4' });
@@ -216,6 +234,17 @@ export class Importer {
     }
   }
 
+  // Levelling needs a measurement, and an account with no desktop has nothing else to make one. It is
+  // written to the catalogue, so every app plays the track at the same level.
+  private async measureLoudness(row: ImportRow, rpmId: string) {
+    try {
+      const reading = await this.media.loudness(row.file);
+      if (reading) await this.post('cloud/catalog/tags', { items: [{ rpmId, tags: { loudnessLufs: reading.lufs, truePeak: reading.truePeak } }] });
+    } catch {
+      // Best effort. The track plays unlevelled until something measures it.
+    }
+  }
+
   private async importRow(row: ImportRow) {
     this.note(row, 'working', 'Web_ImportStagePreparing');
     const { bytes, sha256 } = await this.media.canonical(row.file, row.extension);
@@ -230,6 +259,9 @@ export class Importer {
     if (known) {
       const verdict = await this.post<{ files: { rpmId: string; ok: boolean }[] }>('cloud/verify', { rpmIds: [known] });
       if (verdict.files.some((file) => file.rpmId === known && file.ok)) {
+        // A cover picked here is news even when the audio is not.
+        if (row.cover) await this.uploadCover(row, row.cover);
+        await this.uploadDisc(row);
         this.note(row, 'known', 'Web_ImportAlreadyThere');
         return;
       }
@@ -238,7 +270,7 @@ export class Importer {
     const rpmId = this.idFor(row);
     const path = relativePath(row.tags, row.file.name, row.extension);
     const cover = await this.coverOf(row);
-    const sidecar = buildSidecar(row, rpmId, path, row.hasArt ? cover : null);
+    const sidecar = buildSidecar(row, rpmId, path, row.hasArt || row.cover ? cover : null);
 
     this.note(row, 'working', 'Web_ImportStageUploading');
     const init = await this.post<InitAnswer>('cloud/upload/init', {
@@ -276,7 +308,9 @@ export class Importer {
     // From here the track is in the cloud, and nothing below can undo that.
     this.note(row, 'done');
     await this.uploadCover(row, cover);
+    await this.uploadDisc(row);
     await this.makeRenditions(row, rpmId);
+    await this.measureLoudness(row, rpmId);
   }
 
   private async withTries(row: ImportRow) {
@@ -303,6 +337,7 @@ export class Importer {
     this.running = true;
     this.stopped = false;
     this.coversDone.clear();
+    this.discsDone.clear();
     let full = false;
 
     for (const row of rows) this.note(row, 'waiting');

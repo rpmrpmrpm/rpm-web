@@ -4,6 +4,8 @@
 // The stream is continuous because the queue never starts a new track. A locked iPhone cannot call
 // play(), so the next track is written into the stream that is already playing.
 
+import { Equalizer } from './equalizer.js';
+
 export const STREAM_RATE = 44100;
 
 // The two spellings of the same codec. Safari accepts only the first, Chrome and Firefox the second.
@@ -160,6 +162,7 @@ export class Chain {
   failures = [];
 
   constructor(media) {
+    this.equalizer = new Equalizer(STREAM_RATE);
     this.media = media;
     this.table = new SourceTable();
     media.rmSources = this.table;
@@ -295,10 +298,11 @@ export class Chain {
           break;
         }
 
+        const samples = media.HEAPF32.subarray(pointer >> 2, (pointer >> 2) + got * 2);
         if (this.current.gain !== undefined && this.current.gain !== 1) {
-          const samples = media.HEAPF32.subarray(pointer >> 2, (pointer >> 2) + got * 2);
           for (let i = 0; i < samples.length; i++) samples[i] *= this.current.gain;
         }
+        this.equalizer.process(samples);
 
         const ret = media._rm_output_write(output, pointer, got);
         if (ret < 0) throw new Error(this.lastError());

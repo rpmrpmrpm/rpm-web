@@ -2,15 +2,22 @@ import { mount } from 'svelte';
 
 import App from './App.svelte';
 import { keepCodeFromAddress } from './api/beta-code';
-import { api, catalogue, covers, session } from './app';
+import { api, catalogue, covers, importQueue, playLog, queueKeeper, session, syncPlays } from './app';
 import './design/base.css';
 import { captureCrashes, sendHeldCrashes } from './report/report';
-import { chooseLanguage, loadStrings } from './strings/loc';
+import { chooseLanguage, loadStrings, pickedLanguage } from './strings/loc';
 
 captureCrashes();
 keepCodeFromAddress();
 
-await loadStrings(chooseLanguage(navigator.languages));
+// Discogs sends the browser back here, to a tab of its own. The tab the person came from hears about it.
+if (new URLSearchParams(location.search).has('discogs')) {
+  new BroadcastChannel('rpm-discogs').postMessage('changed');
+  history.replaceState(null, '', '/');
+  window.close();
+}
+
+await loadStrings(pickedLanguage() ?? chooseLanguage(navigator.languages));
 
 mount(App, { target: document.getElementById('app')! });
 
@@ -20,10 +27,16 @@ function accountChanged() {
   const userId = session.user?.userId ?? '';
   if (userId === opened) return;
   opened = userId;
-  if (userId) void catalogue.open(userId);
-  else {
+  if (userId) {
+    void catalogue.open(userId);
+    void playLog.open(userId).then(syncPlays);
+    void queueKeeper.open(userId);
+  } else {
     catalogue.close();
+    playLog.close();
     covers.forget();
+    queueKeeper.close();
+    importQueue.remove([...importQueue.rows]);
   }
 }
 session.onChange(accountChanged);
@@ -39,4 +52,7 @@ if (location.pathname === '/signed-in') {
 if (session.state === 'restoring') await session.restore();
 if (session.state === 'signed-in') void sendHeldCrashes(api);
 
-addEventListener('focus', () => catalogue.focused());
+addEventListener('focus', () => {
+  catalogue.focused();
+  syncPlays();
+});

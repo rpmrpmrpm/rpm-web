@@ -20,7 +20,7 @@ function hex(bytes: number): string {
 }
 
 // A random id for this browser, used only to tell installs apart.
-function installId(): string {
+export function installId(): string {
   try {
     const known = localStorage.getItem(INSTALL_KEY);
     if (known) return known;
@@ -45,6 +45,7 @@ export interface Feedback {
   kind: 'problem' | 'idea';
   area: string;
   message: string;
+  replyTo?: string | null;
 }
 
 // True when the report arrived. The caller keeps the text on screen when it did not.
@@ -52,7 +53,7 @@ export async function sendFeedback(api: Api, feedback: Feedback): Promise<boolea
   try {
     await api.call('errors/feedback', {
       method: 'POST',
-      body: { ...feedback, ...context(), recent: null, screenshotPng: null, atUtcTicks: utcTicks(new Date()), replyTo: null },
+      body: { ...feedback, ...context(), recent: null, screenshotPng: null, atUtcTicks: utcTicks(new Date()) },
     });
     return true;
   } catch {

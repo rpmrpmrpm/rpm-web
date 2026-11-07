@@ -18,7 +18,8 @@ export type ToWorker =
   | { type: 'add'; track: WorkerTrack; first: boolean }
   | { type: 'render'; epoch: number; seconds: number }
   | { type: 'stop'; epoch: number }
-  | { type: 'finish'; epoch: number };
+  | { type: 'finish'; epoch: number }
+  | { type: 'equalizer'; preamp: number; bands: number[] };
 
 export type FromWorker =
   | { type: 'ready' }
@@ -50,6 +51,8 @@ const media = await createRpmMedia();
 let chain: InstanceType<typeof Chain> | null = null;
 let epoch = 0;
 let failuresSent = 0;
+// A curve set before the chain exists is applied when it does.
+let pendingEqualizer: { preamp: number; bands: number[] } | null = null;
 let boundariesSent = 0;
 
 function post(message: FromWorker, transfer: Transferable[] = []) {
@@ -79,6 +82,7 @@ const handlers = {
   start(message: { epoch: number }) {
     chain?.close();
     chain = new Chain(media);
+    if (pendingEqualizer) chain.equalizer.setGains(pendingEqualizer.preamp, pendingEqualizer.bands);
     epoch = message.epoch;
     failuresSent = 0;
     boundariesSent = 0;
@@ -101,6 +105,11 @@ const handlers = {
     chain.stop();
     epoch = message.epoch;
     post({ type: 'stopped', epoch, at: chain.framesWritten / STREAM_RATE });
+  },
+
+  equalizer(message: { preamp: number; bands: number[] }) {
+    pendingEqualizer = message;
+    if (chain) chain.equalizer.setGains(message.preamp, message.bands);
   },
 
   finish(message: { epoch: number }) {

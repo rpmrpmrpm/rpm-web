@@ -26,6 +26,16 @@ export function coverKeyForTrack(
   return coverKey(blank(albumArtist) ? artist : albumArtist, album);
 }
 
+// The disc label: the transparent picture of the record itself. The same hash with one word in front, so it
+// is a second object in the same store, and a label put on a record here is on it in every app.
+export function discKeyForTrack(
+  albumArtist: string | null | undefined,
+  artist: string | null | undefined,
+  album: string | null | undefined,
+): Promise<string> {
+  return digest(`disc|${normalize(blank(albumArtist) ? artist : albumArtist)}|${normalize(album)}`);
+}
+
 // Every key a whole record could be stored under, in the order found. It reads every track, because
 // the tags of a record are not always the same on all of them: a cover is uploaded under the tags of
 // whichever track the uploader held, so it can be stored under a form only the ninth track knows.

@@ -37,6 +37,16 @@ jobs:
             | gunzip > "$RUNNER_TEMP/ffmpeg"
           chmod +x "$RUNNER_TEMP/ffmpeg"
 
+      # The fingerprint test compares with the fpcalc the desktop app ships, from Chromaprint's release.
+      - name: Fetch the desktop's fpcalc
+        run: |
+          source scripts/tool-versions.txt
+          curl -fsSL "https://github.com/acoustid/chromaprint/releases/download/v$CHROMAPRINT_VERSION/chromaprint-fpcalc-$CHROMAPRINT_VERSION-linux-x86_64.tar.gz" \
+            | tar -xzO --wildcards '*/fpcalc' > "$RUNNER_TEMP/fpcalc"
+          chmod +x "$RUNNER_TEMP/fpcalc"
+          echo "$FPCALC_BINARY_SHA256_LINUX_X64  $RUNNER_TEMP/fpcalc" | sha256sum -c -
+
       - run: npm run test:media
         env:
           RPM_FFMPEG: ${{ runner.temp }}/ffmpeg
+          RPM_FPCALC: ${{ runner.temp }}/fpcalc

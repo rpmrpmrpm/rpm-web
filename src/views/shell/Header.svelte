@@ -4,6 +4,10 @@
   import { now } from '../../state.svelte';
   import { text } from '../../strings/loc';
   import SeekBar from '../deck/SeekBar.svelte';
+  import { taglineParts } from './tagline';
+  import Mark from './Mark.svelte';
+
+  const tagline = taglineParts(text('Art_ParkedTagline'));
 
   let sleeve = $state<string | null>(null);
 
@@ -25,7 +29,7 @@
 
 {#if now.track}
   <header class="playing">
-    <span class="logo small">rpm</span>
+    <Mark strength={0.25} />
     <div class="record">
       {#if sleeve}<img src={sleeve} alt="" />{:else}<div class="sleeve"></div>{/if}
       <div class="words">
@@ -38,24 +42,39 @@
   </header>
 {:else}
   <header class="rest">
-    <span class="logo">rpm</span>
-    <p>{text('Art_ParkedTagline')}</p>
+    <Mark size={2} />
+    <p class="tagline"><span class="head">{tagline.head}</span>{tagline.tail}</p>
   </header>
 {/if}
 
 <style>
+  /* The measures of the desktop's parked mark. It sits 25 from the top and the left: the window's padding
+     is 24, and the panes' surface starts inside their 1 px border. The band ends 94 down, less the gap. */
+  header {
+    padding: 25px 0 0 1px;
+  }
+
   .rest {
-    padding: 34px 0 12px;
+    box-sizing: border-box;
+    height: 78px;
   }
 
-  .rest p {
-    margin: 6px 0 0 8px;
-    color: var(--text-soft);
-    font-size: 13px;
+  /* Stands on the stem of the p, 114 of the mark's 507 across, with the line just under its foot. The head
+     hangs to the left, so the word starts before the letter and the d lands on the stem. */
+  .tagline {
+    position: relative;
+    width: fit-content;
+    margin: 1px 0 0 20.91px;
+    color: rgb(255 255 255 / 0.65);
+    font-size: 11px;
+    line-height: 14px;
+    white-space: nowrap;
   }
 
-  .playing {
-    padding: 14px 0 0;
+  .head {
+    position: absolute;
+    right: 100%;
+    color: rgb(255 255 255 / 0.4);
   }
 
   .record {

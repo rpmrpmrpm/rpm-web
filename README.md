@@ -9,7 +9,7 @@ You need Node.js 22 or later.
 
 ```
 npm install
-npm run media      # builds FFmpeg for the browser, once; it takes a few minutes
+npm run media      # builds FFmpeg and Chromaprint for the browser, once; it takes a few minutes
 npm run dev
 ```
 
@@ -25,14 +25,14 @@ Icons use Font Awesome Pro where `../rpm-fonts-pro` is checked out, and Font Awe
 ```
 npm test                # the logic
 npm run check           # the types
-npm run test:media      # the audio: hash parity and the joins between tracks
+npm run test:media      # the audio: hash and fingerprint parity, and the joins between tracks
 ```
 
-`npm run test:media` compares with the ffmpeg of the desktop app. It reads it from
-`../rpm-desktop/RPM.Desktop/NativeLibs/tools/<rid>/`, or from `RPM_FFMPEG`.
+`npm run test:media` compares with the ffmpeg and fpcalc of the desktop app. It reads them from
+`../rpm-desktop/RPM.Desktop/NativeLibs/tools/<rid>/`, or from `RPM_FFMPEG` and `RPM_FPCALC`.
 
 ## Licence
 
-The code is under the [Mozilla Public License 2.0](LICENSE). FFmpeg is under the LGPL 2.1 or later,
-and `scripts/build-media.sh` builds it from its published source. The name and logo of rpm are not
-covered by the code licence: see [TRADEMARKS.md](TRADEMARKS.md).
+The code is under the [Mozilla Public License 2.0](LICENSE). FFmpeg and Chromaprint are under the LGPL
+2.1 or later, and `scripts/build-media.sh` builds them from their published source. The name and logo of
+rpm are not covered by the code licence: see [TRADEMARKS.md](TRADEMARKS.md).

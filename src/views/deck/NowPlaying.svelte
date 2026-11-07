@@ -4,6 +4,7 @@
   import { icons } from '../../design/icons';
   import { now } from '../../state.svelte';
   import { text } from '../../strings/loc';
+  import Equalizer from './Equalizer.svelte';
   import SeekBar from './SeekBar.svelte';
 
   let { onClose }: { onClose: () => void } = $props();
@@ -23,6 +24,7 @@
       current = false;
     };
   });
+  let equalizerOpen = $state(false);
 </script>
 
 <section class="player">
@@ -37,6 +39,10 @@
 
   <SeekBar seconds={now.seconds} duration={now.duration} onSeek={(s) => player.seek(s)} />
 
+  {#if equalizerOpen}
+    <Equalizer />
+  {/if}
+
   <div class="keys">
     <button class="key" title={text('Transport_Shuffle')} class:on={now.shuffled} onclick={() => player.toggleShuffle()}><i class="icon">{icons.shuffle}</i></button>
     <button class="key" title={text('Transport_Previous')} onclick={() => player.previous()}><i class="icon wide">{icons.previous}</i></button>
@@ -44,6 +50,7 @@
     <button class="key" title={text('Transport_Next')} onclick={() => player.next()}><i class="icon wide">{icons.next}</i></button>
     <button class="key" title={text('Transport_Repeat')} class:on={now.repeat !== 'off'} onclick={() => player.cycleRepeat()}><i class="icon">{icons.repeat}</i></button>
   </div>
+  <button class="tool sound" class:on={equalizerOpen} onclick={() => (equalizerOpen = !equalizerOpen)}>{text('Amp_Eq')}</button>
 </section>
 
 <style>

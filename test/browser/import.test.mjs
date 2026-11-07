@@ -115,7 +115,9 @@ test('a real import through the workbench', { skip: !email, timeout: 300_000 }, 
 
   await signIn(page);
   console.log(`left by earlier runs: ${await clearEarlierRuns(page)}`);
-  await page.click('.rail button:has-text("Import")');
+  // An empty library opens the workbench by itself, once it has been read.
+  await page.waitForFunction(() => document.querySelector('.card') || document.body.textContent.includes('Add files'));
+  if (!(await page.$('text=Add files'))) await page.click('.rail button:has-text("Import")');
   await page.setInputFiles('input[type=file][multiple]', files);
 
   // The tags were read from the files themselves.
@@ -125,6 +127,9 @@ test('a real import through the workbench', { skip: !email, timeout: 300_000 }, 
 
   await page.click('footer button:text-is("Import")');
   await page.waitForFunction(() => document.querySelectorAll('.state.done').length === 3, null, { timeout: 120_000 });
+
+  // A row says Imported once the track is in the cloud. The 128 copy and the measuring come after that.
+  await page.waitForFunction(() => !document.querySelector('footer')?.textContent.includes('Keep this page open'), null, { timeout: 120_000 });
 
   const stored = await ours(page);
   try {
@@ -147,11 +152,19 @@ test('a real import through the workbench', { skip: !email, timeout: 300_000 }, 
     assert.equal(sidecar.status, 200);
 
     // The album is on the wall, with the cover that was in the files, and it plays.
+    await page.click('.rail button:has-text("Albums")');
     await page.waitForSelector(`.card:has-text("${album}") img`, { timeout: 30_000 });
     await page.click(`.card:has-text("${album}")`);
     await page.click('.track:has-text("Tone 2")');
     await page.waitForFunction(() => /TONE 2/i.test(document.querySelector('.playing')?.textContent ?? ''), null, { timeout: 20_000 });
     await page.waitForFunction(() => /0:0[1-5]/.test(document.querySelector('.seek .time')?.textContent ?? ''), null, { timeout: 20_000 });
+
+    // The track was measured, so every app can level it.
+    const measured = (await ours(page)).find((file) => file.title === 'Tone 2')?.tags?.loudnessLufs;
+    assert.ok(measured < -5 && measured > -40, `loudness read ${measured}`);
+
+    // The lock screen has the cover, at an address it can load itself.
+    await page.waitForFunction(() => navigator.mediaSession.metadata?.artwork?.[0]?.src.startsWith('https://'), null, { timeout: 20_000 });
 
     // The room takes its colour from the cover. A failure here is silent on screen.
     await page.waitForFunction(() => document.querySelector('.room')?.style.getPropertyValue('--wash').startsWith('rgb'), null, { timeout: 20_000 });
@@ -164,6 +177,12 @@ test('a real import through the workbench', { skip: !email, timeout: 300_000 }, 
     await page.waitForFunction(() => document.querySelectorAll('.state.known').length === 1, null, { timeout: 60_000 });
     assert.equal((await ours(page)).length, 3);
 
+    // Removed from the album page, after being asked.
+    await page.click('button:has-text("Delete from cloud") >> nth=0');
+    await page.click('.ask button:text-is("Delete")');
+    await page.waitForFunction((name) => ![...document.querySelectorAll('.card')].some((card) => card.textContent.includes(name)), album, { timeout: 30_000 });
+    assert.equal((await ours(page)).length, 0);
+
     assert.deepEqual(problems, []);
   } catch (error) {
     await page.screenshot({ path: join(work, 'failed.png') });
@@ -171,7 +190,6 @@ test('a real import through the workbench', { skip: !email, timeout: 300_000 }, 
     console.log(await page.evaluate(() => document.querySelector('footer')?.textContent));
     throw error;
   } finally {
-    for (const file of stored) await api(page, `cloud/file/${file.rpmId}`, 'DELETE');
     for (const file of await ours(page)) await api(page, `cloud/file/${file.rpmId}`, 'DELETE');
     assert.equal((await ours(page)).length, 0, 'the test left tracks behind');
   }

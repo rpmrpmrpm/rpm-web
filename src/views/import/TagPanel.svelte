@@ -1,9 +1,13 @@
 <script lang="ts">
   // The tags of what is ticked. Only the fields changed here are applied. A field whose value differs
   // between the rows says so, and stays as each row has it unless something is typed.
-  import { importQueue } from '../../app';
+  import { covers, importQueue } from '../../app';
+  import { albumFields } from '../../import/from-collection';
   import type { ImportRow, TrackTags } from '../../import/queue';
+  import type { CloudAlbum } from '../../library/albums';
   import { text } from '../../strings/loc';
+  import AlbumPicker from './AlbumPicker.svelte';
+  import CoverPanel from './CoverPanel.svelte';
 
   let { rows, version }: { rows: ImportRow[]; version: number } = $props();
 
@@ -20,6 +24,23 @@
     { key: 'Genre', label: text('Review_ColGenre') },
   ];
 
+  const more: Field[] = [
+    { key: 'Subgenre', label: text('Review_ColSubgenre') },
+    { key: 'Composers', label: text('Review_ColComposer') },
+    { key: 'Work', label: text('Review_ColWork') },
+    { key: 'DiscSubtitle', label: text('Review_ColDiscTitle') },
+    { key: 'DiscCount', label: text('Details_DiscCount'), number: true },
+    { key: 'TrackCount', label: text('Details_TrackCount'), number: true },
+    { key: 'Publisher', label: text('Details_Publisher') },
+    { key: 'CatalogNumber', label: text('Lookup_CatalogNumber') },
+    { key: 'Barcode', label: text('Lookup_Barcode') },
+    { key: 'ReleaseCountry', label: text('Lookup_Country') },
+    { key: 'Comment', label: text('Details_Comment') },
+  ];
+
+  let showMore = $state(false);
+  const showing = $derived(showMore ? [...fields, ...more] : fields);
+
   let edits = $state<Record<string, string>>({});
 
   const common = (key: string): string | null => {
@@ -33,7 +54,7 @@
 
   function apply() {
     const values: Partial<TrackTags> = {};
-    for (const field of fields) {
+    for (const field of [...fields, ...more]) {
       const value = edits[field.key];
       if (value === undefined) continue;
       values[field.key] = field.number ? Number(value) || 0 : value.trim() || null;
@@ -41,13 +62,25 @@
     importQueue.applyTags(rows, values);
     edits = {};
   }
+
+  let picking = $state(false);
+
+  // What the record says, and its cover. Nobody is asked: pointing at a record is the whole purpose.
+  async function takeAlbum(album: CloudAlbum) {
+    picking = false;
+    importQueue.applyTags(rows, albumFields(album));
+    const picture = await covers.picture(album).catch(() => null);
+    if (picture) importQueue.setCover(rows, picture);
+  }
 </script>
 
 <aside class="panel">
   {#if rows.length === 0}
     <p>{text('Queue_TagPanelEmpty')}</p>
   {:else}
-    {#each fields as field (field.key)}
+    <CoverPanel {rows} {version} />
+    <button class="tool" onclick={() => (picking = true)}>{text('Lookup_FromLibrary')}</button>
+    {#each showing as field (field.key)}
       <label>
         <span>{field.label}</span>
         <input
@@ -59,6 +92,7 @@
         />
       </label>
     {/each}
+    <button class="tool" onclick={() => (showMore = !showMore)}>{text('Common_MoreOptions')}</button>
     <div class="keys">
       <button class="glass-button" disabled={!changed} onclick={() => (edits = {})}>{text('Queue_TagPanelRevert')}</button>
       <button class="glass-button primary" disabled={!changed} onclick={apply}>
@@ -67,6 +101,10 @@
     </div>
   {/if}
 </aside>
+
+{#if picking}
+  <AlbumPicker seed={rows[0]?.tags.Album || rows[0]?.tags.Artist || ''} onPick={takeAlbum} onClose={() => (picking = false)} />
+{/if}
 
 <style>
   .panel {

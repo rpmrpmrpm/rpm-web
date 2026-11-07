@@ -9,9 +9,9 @@
     "build": "vite build",
     "check": "svelte-check --threshold warning",
     "test": "vitest run",
-    "test:browser": "node --test test/browser/player.test.mjs test/browser/signup.test.mjs",
+    "test:browser": "node --test test/browser/player.test.mjs test/browser/signup.test.mjs test/browser/lookup.test.mjs test/browser/library.test.mjs",
     "media": "scripts/build-media.sh",
-    "test:media": "node --test test/parity/parity.test.mjs test/chain/chain.test.mjs",
+    "test:media": "node --test test/parity/parity.test.mjs test/parity/fingerprint.test.mjs test/chain/chain.test.mjs",
     "icons": "node scripts/make-icons.mjs",
     "predev": "npm run icons",
     "prebuild": "npm run icons"

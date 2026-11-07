@@ -66,8 +66,7 @@ test('the link in the mail goes from sign-up to an empty library, with nothing t
   await page.waitForSelector('.rail');
   assert.deepEqual(account.redeemed, ['K7QM-2XPD']);
 
-  // The empty library leads to Import.
-  await page.click('.message button');
+  // A first run on an empty library starts at Import.
   await page.waitForSelector('text=Add files');
   await page.close();
 });
@@ -77,7 +76,6 @@ test('the same, at phone width', async () => {
 
   await page.waitForSelector('input[autocomplete=name]');
   await signUp(page);
-  await page.click('.message button');
   await page.waitForSelector('text=Add files');
   await page.close();
 });
@@ -99,7 +97,7 @@ test('with no code, sign-up says what is needed, and the app waits for the code'
 
   await page.fill('input[autocapitalize=characters]', 'K7QM-2XPD');
   await page.click('button[type=submit]');
-  await page.waitForSelector('.message button');
+  await page.waitForSelector('text=Add files');
   assert.deepEqual(account.redeemed, ['WRONGONE', 'K7QM-2XPD']);
   await page.close();
 });
@@ -118,6 +116,59 @@ test('a code in a tester\'s link is left alone', async () => {
 
   await page.waitForSelector('.rail');
   assert.deepEqual(account.redeemed, []);
+  await page.close();
+});
+
+test('on a computer the deck menu leads to the account and to feedback, and feedback is sent', async () => {
+  const { page } = await open('/', { signedIn: true, tester: true });
+  const sent = [];
+  await page.route(`http://localhost:${port}/api/errors/feedback`, async (route) => {
+    sent.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+
+  await page.waitForSelector('.rail');
+  await page.click('button[title="Open menu"], .deck .side.end button:last-child');
+  await page.click('.menu button:has-text("Account")');
+  await page.waitForSelector('h3:has-text("Cloud storage")');
+
+  await page.click('.profile button:has-text("Send feedback")');
+  await page.click('form button[type=submit]');
+  await page.waitForSelector('[role=alert]');
+  assert.deepEqual(sent, [], 'an empty report went out');
+
+  await page.fill('textarea', 'The queue forgets its place.');
+  await page.click('form button[type=submit]');
+  await page.waitForSelector('text=Your feedback was sent');
+  assert.equal(sent[0].message, 'The queue forgets its place.');
+  assert.equal(sent[0].head, 'web');
+  assert.equal(sent[0].replyTo, 'a@b.c');
+  await page.close();
+});
+
+test('on a phone the account has a tab, with a way to sign out', async () => {
+  const { page } = await open('/', { signedIn: true, tester: true, viewport: { width: 390, height: 844 } });
+
+  await page.click('nav.tabs button:has-text("Account")');
+  await page.waitForSelector('h3:has-text("Cloud storage")');
+  await page.click('.profile button:has-text("Sign out")');
+  await page.waitForSelector('button:has-text("Create account")');
+  await page.close();
+});
+
+test('the wordmark and the line under it sit where the desktop has them', async () => {
+  const { page } = await open('/', { signedIn: true, tester: true });
+
+  await page.waitForSelector('.rest svg');
+  const place = await page.evaluate(() => {
+    const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+    return { mark: box('.rest svg'), line: box('.tagline'), head: box('.head'), panes: box('.panes') };
+  });
+  assert.deepEqual([place.mark.x, place.mark.y, place.mark.width, place.mark.height], [25, 25, 93, 36]);
+  assert.equal(place.line.y, place.mark.bottom + 1);
+  assert.ok(Math.abs(place.line.x - (25 + (114 / 507) * 93)) < 0.05, 'the d stands on the stem of the p');
+  assert.ok(Math.abs(place.head.right - place.line.x) < 0.05, 'the head hangs left of the stem');
+  assert.equal(place.panes.y, 94);
   await page.close();
 });
 

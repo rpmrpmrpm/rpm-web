@@ -2,7 +2,7 @@
 // know nothing about Svelte.
 
 import type { CloudTrack } from './api/wire';
-import { catalogue, player } from './app';
+import { catalogue, player, playLog } from './app';
 import type { Repeat } from './audio/player';
 import type { CloudAlbum } from './library/albums';
 import type { CatalogueState } from './library/catalogue';
@@ -28,7 +28,11 @@ export const library = $state({
   read: 0,
   songs: 0,
   seconds: 0,
+  // Raised when a play is counted. The counts themselves stay in the log.
+  playsVersion: 0,
 });
+
+playLog.onChange(() => library.playsVersion++);
 
 player.onChange(() => {
   if (now.track !== player.current) now.track = player.current;

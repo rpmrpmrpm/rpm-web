@@ -111,6 +111,47 @@ for (const [name, engine, options] of [
     await browser.close();
   });
 
+  test(`${name}: a first start is audible from the press, and only a change of track is silenced`, { timeout: 60_000 }, async () => {
+    const { browser, page, problems } = await open(engine, options);
+    await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac'), 0); window.mutedAtStart = window.player.audio.muted;");
+    assert.equal(await page.evaluate(() => window.mutedAtStart), false);
+    await playing(page, 'flac 1');
+
+    assert.equal(await page.evaluate(() => { window.player.next(); return window.player.audio.muted; }), true);
+    await playing(page, 'flac 2');
+    assert.equal(await page.evaluate(() => window.player.audio.muted), false);
+    assert.deepEqual(problems, []);
+    await browser.close();
+  });
+
+  test(`${name}: a start the browser refuses arrives paused, and the key then starts it`, { timeout: 60_000 }, async () => {
+    const { browser, page, problems } = await open(engine, options);
+    await start(page, `
+      window.player.audio.play = () => Promise.reject(new DOMException('refused', 'NotAllowedError'));
+      window.player.setVolume(0.01);
+      window.player.play(window.album('flac'), 0);
+    `);
+    await page.waitForFunction(() => window.player.loaded === 'paused', null, { timeout: 30_000 });
+    assert.equal((await read(page)).wants, false);
+
+    await page.evaluate(() => {
+      delete window.player.audio.play;
+      window.player.toggle();
+    });
+    await playing(page, 'flac 1');
+    assert.deepEqual(problems, []);
+    await browser.close();
+  });
+
+  test(`${name}: the lock screen gets the cover of the track that is playing`, { timeout: 60_000 }, async () => {
+    const { browser, page } = await open(engine, options);
+    await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac'), 0);");
+    await playing(page, 'flac 1');
+    const artwork = await page.evaluate(() => navigator.mediaSession?.metadata?.artwork?.[0]?.src ?? null);
+    if (artwork !== null) assert.match(artwork, /\/art\/flac-1\.png$/);
+    await browser.close();
+  });
+
   test(`${name}: a track that cannot be read is tried again, then the queue moves on`, { timeout: 90_000 }, async () => {
     const { browser, page } = await open(engine, options);
     await start(page, `

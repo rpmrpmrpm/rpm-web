@@ -79,6 +79,29 @@ export class Covers {
     return URL.createObjectURL(answer);
   }
 
+  // A signed address for the album's cover, for the lock screen, which loads the picture itself.
+  async address(album: CloudAlbum, edge: number): Promise<string | null> {
+    const index = await this.stored();
+    for (const key of await coverSpellings(album.tracks)) {
+      if (index.has(key)) return (await this.api.json(`cloud/art/${key}?size=${edge}`, (raw) => raw as { url: string })).url;
+    }
+    return null;
+  }
+
+  // The picture itself, as it is stored, to put on other tracks. Null when the store holds none.
+  async picture(album: CloudAlbum): Promise<{ bytes: Uint8Array; mime: string } | null> {
+    const index = await this.stored();
+    for (const key of await coverSpellings(album.tracks)) {
+      if (!index.has(key)) continue;
+      const signed = await this.api.json(`cloud/art/${key}`, (raw) => raw as { url: string });
+      const answer = await fetch(signed.url);
+      if (!answer.ok) return null;
+      const blob = await answer.blob();
+      return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: blob.type || 'image/jpeg' };
+    }
+    return null;
+  }
+
   // A blob address for the album's cover, or null when the store holds none.
   async url(album: CloudAlbum, edge: number): Promise<string | null> {
     let index: Map<string, number>;

@@ -4,11 +4,15 @@
   import { icons } from '../../design/icons';
   import { now } from '../../state.svelte';
   import { text } from '../../strings/loc';
+  import Equalizer from './Equalizer.svelte';
   import QueueCard from './QueueCard.svelte';
+
+  let { onAccount, onFeedback }: { onAccount: () => void; onFeedback: () => void } = $props();
 
   const canSetVolume = player.volumeWorks;
   let queueOpen = $state(false);
   let menuOpen = $state(false);
+  let equalizerOpen = $state(false);
 </script>
 
 <footer class="pane deck">
@@ -54,8 +58,18 @@
     <QueueCard onClose={() => (queueOpen = false)} />
   {/if}
 
+  {#if equalizerOpen}
+    <div class="menu sound pane">
+      <Equalizer />
+      <button class="tool" onclick={() => (equalizerOpen = false)}>{text('Settings_Close')}</button>
+    </div>
+  {/if}
+
   {#if menuOpen}
     <div class="menu pane">
+      <button onclick={() => { menuOpen = false; equalizerOpen = true; }}>{text('Settings_Eq')}</button>
+      <button onclick={() => { menuOpen = false; onAccount(); }}>{text('Rpm_Profile_Account')}</button>
+      <button onclick={() => { menuOpen = false; onFeedback(); }}>{text('Shell_Feedback')}</button>
       <button onclick={() => session.signOut()}>{text('Login_SignOut')}</button>
     </div>
   {/if}
@@ -153,7 +167,12 @@
     background: rgb(20 22 28 / 0.92);
   }
 
-  .menu button {
+  .menu.sound {
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .menu button:not(.tool) {
     padding: 10px 12px;
     border: 0;
     border-radius: 8px;

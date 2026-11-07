@@ -190,6 +190,9 @@ describe('the upload sequence', () => {
     art: async () => null,
     canonical: async () => ({ bytes: new Uint8Array([1, 2, 3]), sha256: 'a'.repeat(64) }),
     renditions: async () => ({ head: new Uint8Array(1), rendition: new Uint8Array(2) }),
+    loudness: async () => ({ lufs: -14.5, truePeak: 0.9 }),
+    fingerprint: async () => ({ text: 'print', raw: [1], seconds: 1 }),
+    clip: async () => new Uint8Array(1),
   };
 
   function importer(queue: ImportQueue, overrides: Partial<ImportMedia> = {}) {
@@ -226,6 +229,44 @@ describe('the upload sequence', () => {
     const order = ['POST cloud/upload/init', 'PUT sidecar', 'PUT blob', 'POST cloud/upload/complete'];
     expect(calls.filter((call) => order.includes(call))).toEqual(order);
     expect(calls.filter((call) => call === 'PUT rendition')).toHaveLength(2);
+  });
+
+  it('sends a disc label under its own key, once per album', async () => {
+    answers['cloud/art/'] = () => json({ url: 'art' });
+    const { queue, rows } = queueOf('A/1.flac', 'A/2.flac');
+    queue.applyTags(rows, { Artist: 'ABBA', Album: 'Arrival' });
+    const label = { bytes: new Uint8Array([1]), mime: 'image/png' };
+    queue.setDisc(rows, label);
+    await importer(queue).run(rows, 1);
+    expect(calls).toContain('POST cloud/art/f245c4a44d16d5ca62f1abdf5da5458d');
+    expect(calls.filter((call) => call === 'POST cloud/art/f245c4a44d16d5ca62f1abdf5da5458d')).toHaveLength(1);
+  });
+
+  it('sends nothing for a disc when none was picked', async () => {
+    const { queue, rows } = queueOf('A/1.flac');
+    queue.applyTags(rows, { Artist: 'ABBA', Album: 'Arrival' });
+    await importer(queue).run(rows, 1);
+    expect(calls).not.toContain('POST cloud/art/f245c4a44d16d5ca62f1abdf5da5458d');
+  });
+
+  it('still sends a disc picked for a track the account already holds', async () => {
+    held.set('a'.repeat(64), 'known-id');
+    answers['cloud/verify'] = () => json({ files: [{ rpmId: 'known-id', ok: true }] });
+    answers['cloud/art/'] = () => json({ url: 'art' });
+    const { queue, rows } = queueOf('A/1.flac');
+    queue.applyTags(rows, { Artist: 'ABBA', Album: 'Arrival' });
+    queue.setDisc(rows, { bytes: new Uint8Array([1]), mime: 'image/png' });
+    await importer(queue).run(rows, 1);
+    expect(rows[0]!.state).toBe('known');
+    expect(calls).toContain('POST cloud/art/f245c4a44d16d5ca62f1abdf5da5458d');
+  });
+
+  it('does not fail a track over a disc label that will not upload', async () => {
+    answers['cloud/art/'] = () => json({}, 500);
+    const { queue, rows } = queueOf('A/1.flac');
+    queue.setDisc(rows, { bytes: new Uint8Array([1]), mime: 'image/png' });
+    await importer(queue).run(rows, 1);
+    expect(rows[0]!.state).toBe('done');
   });
 
   it('proves possession instead of uploading when the store has the bytes', async () => {

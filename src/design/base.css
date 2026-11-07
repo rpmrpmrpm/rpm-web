@@ -37,6 +37,8 @@
   --hairline: rgb(255 255 255 / 0.15);
   --ground: #0b0b0e;
   --error: #ff8b96;
+  --warning: #ffd466;
+  --found: #4cd964;
   --glass-face: rgb(255 255 255 / 0.1);
   --glass-primary: rgb(255 255 255 / 0.2);
 
@@ -188,13 +190,24 @@ textarea {
   white-space: nowrap;
 }
 
-.logo {
-  display: block;
-  color: rgb(255 255 255 / 0.5);
-  font: 400 230px / 64px Thiamine, Cabin, sans-serif;
+/* A small key of the workbench. */
+.tool {
+  display: inline-grid;
+  place-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.05);
+  font-size: 12px;
+  cursor: pointer;
 }
 
-.logo.small {
-  font-size: 120px;
-  line-height: 34px;
+.tool.on {
+  background: rgb(255 255 255 / 0.2);
+}
+
+.tool:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

@@ -2,27 +2,50 @@
   // The window. Three shells over one set of views, chosen by the width available: the desktop's panes,
   // one pane at a time, and the phone apps' tabs.
   import '../../state.svelte';
-  import { now } from '../../state.svelte';
+  import { library, now } from '../../state.svelte';
   import { text } from '../../strings/loc';
   import { icons } from '../../design/icons';
   import Deck from '../deck/Deck.svelte';
   import MiniPlayer from '../deck/MiniPlayer.svelte';
   import NowPlaying from '../deck/NowPlaying.svelte';
   import ImportPane from '../import/ImportPane.svelte';
-  import Collection from '../library/Collection.svelte';
+  import Profile from '../profile/Profile.svelte';
+  import Library, { type LibraryMode } from '../library/Library.svelte';
+  import DesktopOffer from './DesktopOffer.svelte';
   import Header from './Header.svelte';
+  import Mark from './Mark.svelte';
   import Room from './Room.svelte';
 
-  type Left = 'info' | 'import' | null;
+  type Left = 'info' | 'import' | 'account' | 'feedback' | null;
 
   let width = $state(innerWidth);
   let left = $state<Left>(null);
-  let tab = $state<'library' | 'import'>('library');
+  let tab = $state<'home' | 'library' | 'import' | 'profile'>('home');
+  let mode = $state<LibraryMode>('home');
+
+  const RIGHT: [LibraryMode, string, string][] = [
+    ['home', icons.home, 'Rpm_Tab_Home'],
+    ['albums', icons.album, 'RightNav_Albums'],
+    ['artists', icons.artist, 'RightNav_Artists'],
+    ['genres', icons.genre, 'RightNav_Genres'],
+    ['playlists', icons.playlist, 'Playlists_Title'],
+  ];
   let playerOpen = $state(false);
 
   const layout = $derived(width >= 1100 ? 'wide' : width >= 700 ? 'medium' : 'narrow');
 
   const pickLeft = (view: Left) => (left = left === view ? null : view);
+
+  // A first run on an empty library starts at Import, which is what there is to do.
+  let started = false;
+  $effect(() => {
+    if (started || library.state !== 'ready') return;
+    started = true;
+    if (library.albums.length === 0) {
+      left = 'import';
+      tab = 'import';
+    }
+  });
 </script>
 
 <svelte:window bind:innerWidth={width} />
@@ -31,13 +54,17 @@
 
 {#if layout === 'narrow'}
   <div class="narrow">
-    <header class="top"><span class="logo small">rpm</span></header>
+    <header class="top"><Mark size={1.33} /></header>
 
     <main>
-      {#if tab === 'library'}
-        <Collection compact onImport={() => (tab = 'import')} />
-      {:else}
+      {#if tab === 'home'}
+        <Library compact mode="home" onImport={() => (tab = 'import')} />
+      {:else if tab === 'library'}
+        <Library compact mode={mode === 'home' ? 'albums' : mode} picker onPick={(picked) => (mode = picked)} onImport={() => (tab = 'import')} />
+      {:else if tab === 'import'}
         <ImportPane />
+      {:else}
+        <Profile />
       {/if}
     </main>
 
@@ -46,11 +73,17 @@
     {/if}
 
     <nav class="tabs">
+      <button class:on={tab === 'home'} onclick={() => (tab = 'home')}>
+        <i class="icon">{icons.home}</i>{text('Rpm_Tab_Home')}
+      </button>
       <button class:on={tab === 'library'} onclick={() => (tab = 'library')}>
         <i class="icon">{icons.album}</i>{text('RightNav_Albums')}
       </button>
       <button class:on={tab === 'import'} onclick={() => (tab = 'import')}>
         <i class="icon">{icons.import}</i>{text('Queue_Title')}
+      </button>
+      <button class:on={tab === 'profile'} onclick={() => (tab = 'profile')}>
+        <i class="icon">{icons.artist}</i>{text('Rpm_Profile_Account')}
       </button>
     </nav>
 
@@ -61,6 +94,7 @@
 {:else}
   <div class="window">
     <Header />
+    <DesktopOffer />
 
     <div class="panes" class:leftOpen={left !== null}>
       <section class="pane left">
@@ -71,20 +105,26 @@
         </nav>
         {#if left === 'import'}
           <div class="view"><ImportPane /></div>
+        {:else if left === 'account' || left === 'feedback'}
+          {#key left}
+            <div class="view"><Profile startOn={left} /></div>
+          {/key}
         {/if}
       </section>
 
       {#if layout === 'wide' || left === null}
         <section class="pane right">
-          <div class="view"><Collection onImport={() => (left = 'import')} /></div>
+          <div class="view"><Library {mode} onImport={() => (left = 'import')} /></div>
           <nav class="rail">
-            <button class="on"><i class="icon">{icons.album}</i>{text('RightNav_Albums')}</button>
+            {#each RIGHT as [id, icon, label]}
+              <button class:on={mode === id} onclick={() => (mode = id)}><i class="icon">{icon}</i>{text(label)}</button>
+            {/each}
           </nav>
         </section>
       {/if}
     </div>
 
-    <Deck />
+    <Deck onAccount={() => (left = 'account')} onFeedback={() => (left = 'feedback')} />
   </div>
 {/if}
 
