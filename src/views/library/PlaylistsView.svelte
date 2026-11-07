@@ -5,13 +5,14 @@
   import { onMount } from 'svelte';
 
   import { durationSeconds, type CloudTrack } from '../../api/wire';
-  import { favorites, playlists } from '../../app';
+  import { favorites, player, playlists } from '../../app';
   import { icons } from '../../design/icons';
   import { foldersIn, listsIn, PlaylistGone, type CloudPlaylist, type GeneratedList } from '../../library/playlists';
   import { library, now } from '../../state.svelte';
   import { trackCount } from '../../strings/counts';
   import { text } from '../../strings/loc';
   import Window from '../import/Window.svelte';
+  import { menuOn, type MenuEntry } from '../menu/menu.svelte';
   import DesktopGet from '../shell/DesktopGet.svelte';
   import PlaylistCover from './PlaylistCover.svelte';
   import PlaylistDetail from './PlaylistDetail.svelte';
@@ -206,6 +207,35 @@
     return walk([], 0);
   });
 
+  // The app's own lists and a folder play. Only a list somebody made can be changed.
+  const playingMenu = (tracks: readonly CloudTrack[]): MenuEntry[] => [
+    { label: text('Playlists_Play'), glyph: icons.play, disabled: !tracks.length, run: () => player.play(tracks, 0, { inAlbumOrder: false }) },
+    { label: text('Playlists_AddToNowPlaying'), glyph: icons.playlist, disabled: !tracks.length, run: () => player.addToQueue(tracks) },
+  ];
+
+  const openThen = (list: CloudPlaylist, run: () => void) => () => {
+    opened = { kind: 'list', id: list.playlistId };
+    run();
+  };
+
+  const listMenu = (list: CloudPlaylist): MenuEntry[] => [
+    ...playingMenu(tracksOf(list.trackIds)),
+    'rule',
+    { label: text('Playlists_Rename'), glyph: icons.pen, run: openThen(list, () => { naming = 'rename'; typed = list.name; }) },
+    { label: text('Playlists_ChangeCover'), glyph: icons.image, run: openThen(list, () => (naming = 'cover')) },
+    { label: text('Playlists_Delete'), glyph: icons.trash, run: openThen(list, () => void remove()) },
+  ];
+
+  function folderMenu(folder: string[]): MenuEntry[] {
+    const under = (held ?? []).filter((list) => folder.every((name, index) => list.folder[index] === name));
+    return [
+      ...playingMenu(under.flatMap((list) => tracksOf(list.trackIds))),
+      'rule',
+      { label: text('Playlists_NewPlaylist'), glyph: icons.plus, run: () => { path = folder; ask('playlist'); } },
+      { label: text('Playlists_NewFolder'), glyph: icons.folderClosed, run: () => { path = folder; ask('folder'); } },
+    ];
+  }
+
   function toggle(folder: string[]) {
     const key = folder.join('/');
     const next = new Set(expanded);
@@ -215,9 +245,9 @@
   }
 </script>
 
-{#snippet tileFace(name: string, cover: import('svelte').Snippet, onclick: () => void)}
+{#snippet tileFace(name: string, cover: import('svelte').Snippet, onclick: () => void, menu: () => MenuEntry[] = () => [])}
   <li>
-    <button class="tile" title={name} {onclick}>
+    <button class="tile" title={name} {onclick} use:menuOn={menu}>
       <span class="face">{@render cover()}</span>
       <strong>{name}</strong>
     </button>
@@ -251,7 +281,7 @@
     <div class="top">
       <div class="titles">
         <h2 class="heading">{text('Playlists_Title')}</h2>
-        <p class="sub">{subheading}</p>
+        <p class="pane-line">{subheading}</p>
       </div>
       <div class="views">
         <div class="toggle">
@@ -262,11 +292,6 @@
           <input class="size slider" style:--fill="{((tile - SMALLEST) / (LARGEST - SMALLEST)) * 100}%" type="range" min={SMALLEST} max={LARGEST} step="2" aria-label={text('AlbumGrid_CoverSize')} value={tile} oninput={setTile} />
         {/if}
       </div>
-    </div>
-
-    <div class="note">
-      <p>{text('Web_PlaylistsDesktopNote')}</p>
-      <DesktopGet />
     </div>
 
     {#if failed}
@@ -302,30 +327,30 @@
             {/if}
             {#each inHere as playlist (playlist.playlistId)}
               {#snippet listCover()}<PlaylistCover id={playlist.playlistId} tracks={tracksOf(playlist.trackIds)} version={coverVersion} />{/snippet}
-              {@render tileFace(playlist.name, listCover, () => (opened = { kind: 'list', id: playlist.playlistId }))}
+              {@render tileFace(playlist.name, listCover, () => (opened = { kind: 'list', id: playlist.playlistId }), () => listMenu(playlist))}
             {/each}
             {#each automaticLists as list, index (`${list.kind}-${index}`)}
               {#snippet autoCover()}<PlaylistCover tracks={tracksOf(list.trackIds)} />{/snippet}
-              {@render tileFace(generatedName(list), autoCover, () => (opened = { kind: 'generated', list }))}
+              {@render tileFace(generatedName(list), autoCover, () => (opened = { kind: 'generated', list }), () => playingMenu(tracksOf(list.trackIds)))}
             {/each}
             {#each folders as name (name)}
               {#snippet folderCover()}<PlaylistCover tracks={[]} glyph={icons.folderClosed} />{/snippet}
-              {@render tileFace(name, folderCover, () => (path = [...path, name]))}
+              {@render tileFace(name, folderCover, () => (path = [...path, name]), () => folderMenu([...path, name]))}
             {/each}
           </ul>
         {/if}
       {:else}
         <ul class="tree">
           {#each favourite.trackIds.length ? [favourite, ...generated] : generated as list, index (`${list.kind}-${index}`)}
-            <li><button style:padding-left="22px" onclick={() => (opened = { kind: 'generated', list })}><i class="icon">{icons.playlist}</i><span>{generatedName(list)}</span></button></li>
+            <li><button style:padding-left="22px" onclick={() => (opened = { kind: 'generated', list })} use:menuOn={() => playingMenu(tracksOf(list.trackIds))}><i class="icon">{icons.playlist}</i><span>{generatedName(list)}</span></button></li>
           {/each}
           {#each rows as row (`${row.folder?.join('/') ?? row.list?.playlistId}`)}
             <li>
               {#if row.list}
-                <button style:padding-left="{22 + row.depth * 18}px" onclick={() => (opened = { kind: 'list', id: row.list!.playlistId })}><i class="icon">{icons.playlist}</i><span>{row.name}</span></button>
+                <button style:padding-left="{22 + row.depth * 18}px" onclick={() => (opened = { kind: 'list', id: row.list!.playlistId })} use:menuOn={() => listMenu(row.list!)}><i class="icon">{icons.playlist}</i><span>{row.name}</span></button>
               {:else}
                 {@const open = expanded.has(row.folder!.join('/'))}
-                <button style:padding-left="{4 + row.depth * 18}px" title={text(open ? 'Playlists_Collapse' : 'Playlists_Expand')} aria-expanded={open} onclick={() => toggle(row.folder!)}>
+                <button style:padding-left="{4 + row.depth * 18}px" title={text(open ? 'Playlists_Collapse' : 'Playlists_Expand')} aria-expanded={open} onclick={() => toggle(row.folder!)} use:menuOn={() => folderMenu(row.folder!)}>
                   <i class="icon chevron" class:open>{icons.forward}</i><i class="icon">{icons.folderClosed}</i><span>{row.name}</span>
                 </button>
               {/if}
@@ -334,6 +359,10 @@
         </ul>
       {/if}
     {/if}
+    <div class="note">
+      <p>{text('Web_PlaylistsDesktopNote')}</p>
+      <DesktopGet />
+    </div>
   </div>
 {/if}
 
@@ -401,8 +430,11 @@
   .titles {
     display: flex;
     flex-direction: column;
-    gap: 6px;
     min-width: 0;
+  }
+
+  .titles .pane-line {
+    margin-bottom: 2px;
   }
 
   p {
@@ -454,18 +486,20 @@
     width: 96px;
   }
 
+  /* At the foot, where the desktop keeps its card of lists to unlock: this is news, not the page. */
   .note {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px 16px;
+    gap: 8px 16px;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 12px;
-    border: 1px solid var(--hairline);
+    margin-top: auto;
+    padding: 12px 16px;
+    border: 1px solid rgb(255 255 255 / 0.094);
     border-radius: 8px;
-    background: rgb(255 255 255 / 0.04);
-    color: var(--text-soft);
-    font-size: 12.5px;
+    background: rgb(255 255 255 / 0.039);
+    color: rgb(255 255 255 / 0.64);
+    font-size: 12px;
   }
 
   .keys {
@@ -479,11 +513,13 @@
     align-items: center;
     height: 30px;
     padding: 0 10px;
-    border: 0;
-    border-radius: 4px;
-    background: rgb(255 255 255 / 0.13);
-    color: rgb(255 255 255 / 0.9);
-    font-size: 12px;
+    border: 1px solid rgb(255 255 255 / 0.133);
+    border-radius: 6px;
+    background: rgb(255 255 255 / 0.078);
+    color: rgb(255 255 255 / 0.94);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
     cursor: pointer;
   }
 

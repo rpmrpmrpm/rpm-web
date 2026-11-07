@@ -39,6 +39,10 @@ export const cloud = new CloudClient(api);
 export const covers = new Covers(api);
 export const catalogue = new Catalogue(cloud, browserStore, Date.now, () => covers.reread());
 export const playLog = new PlayLog(browserPlays);
+catalogue.playsOf = (album) => {
+  const plays = playLog.everythingPlayed();
+  return album.tracks.reduce((sum, track) => sum + (plays.get(track.rpmId)?.plays ?? 0), 0);
+};
 
 export const headClips = new HeadClips(cloud);
 

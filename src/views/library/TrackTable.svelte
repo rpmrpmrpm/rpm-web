@@ -2,9 +2,11 @@
   // The data table: every track, sorted by any column, drawn only near the view. A row plays the table from
   // there, in the order on screen.
   import { durationSeconds, type CloudTrack } from '../../api/wire';
-  import { player, playLog } from '../../app';
+  import { catalogue, player, playLog } from '../../app';
   import { library, now } from '../../state.svelte';
   import { text } from '../../strings/loc';
+  import { menuOn } from '../menu/menu.svelte';
+  import { trackMenu } from './record-menu.svelte';
 
   let { tracks }: { tracks: CloudTrack[] } = $props();
 
@@ -74,7 +76,7 @@
   <div class="rows" bind:clientHeight={viewport} onscroll={(event) => (scroll = event.currentTarget.scrollTop)}>
     <div class="field" style:height="{sorted.length * LINE}px">
       {#each shown as track, index (track.rpmId)}
-        <button class="row" class:playing={now.track?.rpmId === track.rpmId} style:transform="translateY({(first + index) * LINE}px)" style:height="{LINE}px" onclick={() => player.play(sorted, first + index, { inAlbumOrder: false })}>
+        <button class="row" class:playing={now.track?.rpmId === track.rpmId} style:transform="translateY({(first + index) * LINE}px)" style:height="{LINE}px" onclick={() => player.play(sorted, first + index, { inAlbumOrder: false })} use:menuOn={() => trackMenu(track, sorted, first + index, { inAlbumOrder: false, album: catalogue.albums.find((held) => held.tracks.some((row) => row.rpmId === track.rpmId)) })}>
           {#each COLUMNS as column (column.id)}
             <span class={column.id} class:phone={column.phone}>{cell(column, track)}</span>
           {/each}

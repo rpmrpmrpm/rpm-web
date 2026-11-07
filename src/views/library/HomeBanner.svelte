@@ -6,7 +6,9 @@
   import { bannerLayout, DWELL_MS, type Feature } from '../../library/home-features';
   import type { CloudAlbum } from '../../library/albums';
   import { text } from '../../strings/loc';
+  import { menuOn } from '../menu/menu.svelte';
   import FeatureFace from './FeatureFace.svelte';
+  import { albumMenu } from './record-menu.svelte';
 
   let { cards, albumOf, onOpen }: { cards: Feature[]; albumOf: (key: string) => CloudAlbum | undefined; onOpen: (album: CloudAlbum) => void } = $props();
 
@@ -59,6 +61,10 @@
           <button
             class="plate"
             style:width="{layout.plate}px"
+            use:menuOn={() => {
+              const album = albumOf(card(at).key);
+              return album ? albumMenu(album, 'collection') : [];
+            }}
             onclick={() => {
               const album = albumOf(card(at).key);
               if (album) onOpen(album);

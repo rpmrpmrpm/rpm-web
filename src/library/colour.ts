@@ -35,6 +35,16 @@ export function pickColour(pixels: Uint8ClampedArray): Colour {
   return best ?? { r: Math.round(mean.r), g: Math.round(mean.g), b: Math.round(mean.b) };
 }
 
+const VEIL_FLOOR = 0.14;
+const VEIL_CEILING = 0.62;
+const VEIL_FROM = 0.18;
+
+// How much black a wash of this colour needs for white words to read on it. CoverColor.Veil on the desktop.
+export function veilOver({ r, g, b }: Colour): number {
+  const lightness = (Math.max(r, g, b) + Math.min(r, g, b)) / 510;
+  return Math.min(VEIL_CEILING, Math.max(VEIL_FLOOR, VEIL_FLOOR + (lightness - VEIL_FROM) * 0.9));
+}
+
 // Read through an image, because the site's content policy allows a blob address for a picture and
 // not for a fetch.
 export async function colourOf(url: string): Promise<Colour | null> {

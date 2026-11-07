@@ -13,6 +13,9 @@
   import FeedbackWindow from '../profile/FeedbackWindow.svelte';
   import Settings from '../profile/Settings.svelte';
   import Library, { type LibraryMode } from '../library/Library.svelte';
+  import RecordActions from '../library/RecordActions.svelte';
+  import { asked } from '../library/record-menu.svelte';
+  import ContextMenu from '../menu/ContextMenu.svelte';
   import TrackInfo from '../library/TrackInfo.svelte';
   import RadioPane from '../radio/RadioPane.svelte';
   import AboutWindow from './AboutWindow.svelte';
@@ -32,9 +35,13 @@
   let tab = $state<'home' | 'library' | 'radio' | 'import' | 'profile'>('home');
 
   // left is where the pane is going. drawer is what stands in it: it stays until the pane has closed.
-  let left = $state<Left>(null);
-  let drawer = $state<Left>(null);
-  let drawerClear = $state(false);
+  // On a computer the window opens as the desktop's does, with Track info out.
+  const WIDE = 1100;
+  const SMALLEST_HOME = 25;
+  const opensOut: Left = innerWidth >= WIDE ? 'info' : null;
+  let left = $state<Left>(opensOut);
+  let drawer = $state<Left>(opensOut);
+  let drawerClear = $state(opensOut !== null);
   let lastLeft: Exclude<Left, null> = 'info';
   let moving: ReturnType<typeof setTimeout> | undefined;
 
@@ -57,7 +64,19 @@
   ];
   let playerOpen = $state(false);
 
-  const layout = $derived(width >= 1100 ? 'wide' : width >= 700 ? 'medium' : 'narrow');
+  const layout = $derived(width >= WIDE ? 'wide' : width >= 700 ? 'medium' : 'narrow');
+
+  // A collection too small for Home opens on the library, where the music is. Once, so it never undoes a choice.
+  let landed = false;
+
+  $effect(() => {
+    if (landed || library.state !== 'ready') return;
+    landed = true;
+    if (library.albums.length >= SMALLEST_HOME) return;
+    mode = 'albums';
+    shownMode = 'albums';
+    tab = 'library';
+  });
 
   function moveLeft(next: Left) {
     clearTimeout(moving);
@@ -76,6 +95,7 @@
   const pickLeft = (view: Left) => moveLeft(left === view ? null : view);
 
   function pickMode(next: LibraryMode) {
+    asked.opening = null;
     if (next === mode) return;
     clearTimeout(swapping);
     mode = next;
@@ -101,6 +121,8 @@
 <svelte:window bind:innerWidth={width} />
 
 <Room />
+<ContextMenu />
+<RecordActions compact={layout === 'narrow'} />
 
 {#if layout === 'narrow'}
   <div class="narrow">
@@ -154,7 +176,7 @@
     <Header />
     <DesktopOffer />
 
-    <div class="panes" class:leftOpen={left !== null}>
+    <div class="panes" class:leftOpen={left !== null} class:bench={left === 'import'}>
       <section class="pane left">
         <nav class="rail">
           <button class:on={left === 'info'} onclick={() => pickLeft('info')}>
@@ -179,10 +201,10 @@
         {/if}
       </section>
 
-      {#if layout === 'wide' || left === null}
+      {#if (layout === 'wide' && left !== 'import') || left === null}
         <section class="pane right">
           <div class="view" class:clear={modeClear}><Library mode={shownMode} onPick={pickMode} onImport={() => moveLeft('import')} /></div>
-          <nav class="rail">
+          <nav class="rail right">
             {#each RIGHT as [id, icon, label]}
               <button class:on={mode === id} onclick={() => pickMode(id)}><i class="icon">{icon}</i>{text(label)}</button>
             {/each}
@@ -224,15 +246,17 @@
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+    gap: 12px;
     height: 100dvh;
-    padding: 0 24px 16px;
+    padding: 0 24px 24px;
   }
 
+  /* The band above ends at 78, and the panes stand at 94: 12 of the gap, and these 4. */
   .panes {
     display: flex;
-    gap: 18px;
+    gap: 16px;
     min-height: 0;
+    margin-top: 4px;
   }
 
   .pane {
@@ -244,12 +268,17 @@
 
   /* The column moves after the content has faded, and the rail stays where it is. */
   .pane.left {
-    flex: 0 0 92px;
+    flex: 0 0 84px;
     transition: flex-basis 240ms var(--move) 110ms;
   }
 
   .panes.leftOpen .pane.left {
-    flex-basis: 41.6%;
+    flex-basis: min(520px, 40%);
+  }
+
+  /* The bench takes the window, because a grid of tags needs every column it can have. */
+  .panes.bench .pane.left {
+    flex: 1 1 100%;
   }
 
   .pane.right {
@@ -276,6 +305,11 @@
     overflow-y: auto;
   }
 
+  /* The page scrolls as a whole, so nothing in it may be squeezed to fit. */
+  .account > :global(*) {
+    flex: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .pane.left,
     .view {
@@ -287,20 +321,28 @@
     display: flex;
     flex: none;
     flex-direction: column;
-    width: 92px;
+    width: 82px;
+    border-right: 1px solid rgb(255 255 255 / 0.094);
+    background: rgb(0 0 0 / 0.133);
+  }
+
+  .rail.right {
+    border-right: 0;
+    border-left: 1px solid rgb(255 255 255 / 0.094);
   }
 
   .rail button {
     display: grid;
     align-content: center;
-    gap: 7px;
+    gap: 5px;
     justify-items: center;
-    height: 80px;
-    padding: 0;
+    height: 71px;
+    padding: 2px;
     border: 0;
     background: none;
-    color: var(--text-soft);
-    font-size: 11.5px;
+    color: rgb(255 255 255 / 0.8);
+    font-size: 10px;
+    line-height: 12px;
     cursor: pointer;
   }
 
@@ -308,8 +350,15 @@
     font-size: 16px;
   }
 
+  @media (hover: hover) {
+    .rail button:hover {
+      background: rgb(255 255 255 / 0.094);
+      color: #fff;
+    }
+  }
+
   .rail button.on {
-    background: rgb(3 113 208 / 0.22);
+    background: var(--selected);
     color: #fff;
   }
 
@@ -320,6 +369,7 @@
     height: 30px;
     margin: auto 0 8px;
     color: rgb(255 255 255 / 0.67);
+    border-radius: 4px;
   }
 
   .fold .icon {
@@ -336,6 +386,7 @@
     position: relative;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr);
     height: 100dvh;
   }
 

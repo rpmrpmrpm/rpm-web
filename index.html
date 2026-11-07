@@ -3,14 +3,52 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0b0e">
+<meta name="theme-color" content="#0e1520">
 <title>rpm</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
+<style>
+/* The opening, as on the website and in the apps: on the ink before anything else has loaded, so no style sheet can
+   be waited for. The band starts wholly before the first letter and ends wholly after the last. The card stays until
+   the interface is there to fade into (src/opening.ts). */
+html { background: #0e1520; }
+#app { opacity: 0; transition: opacity 420ms ease; }
+.opened #app { opacity: 1; }
+#opening { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: #0e1520; pointer-events: none; transition: opacity 300ms ease; }
+.opened #opening { opacity: 0; }
+#opening svg { width: clamp(150px, 22vw, 252px); height: auto; overflow: visible; }
+.opening-dim { fill: rgb(255 255 255 / 0.32); }
+.opening-band { animation: opening-sweep 1s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite; }
+@keyframes opening-sweep { to { transform: translateX(811.2px); } }
+@media (prefers-reduced-motion: reduce) { .opening-band { animation: none; transform: translateX(405.6px); } }
+</style>
 </head>
 <body>
+<div id="opening" aria-hidden="true">
+  <svg viewBox="18 -143 507 195">
+    <defs>
+      <path id="openingMark" d="M109 -143H102C85 -143 73 -136 66 -121V-140H18V0H67V-55C67 -81 76 -94 93 -94C98 -94 103 -94 109 -93ZM207 -34C189 -34 180 -46 180 -71C180 -94 189 -106 207 -106C226 -106 236 -94 236 -71C236 -46 226 -34 207 -34ZM218 3C259 3 284 -29 284 -69C284 -110 260 -143 216 -143C199 -143 187 -137 180 -126V-140H132V52H178V-14C186 -3 199 3 218 3ZM525 -96C525 -127 510 -143 480 -143C462 -143 448 -136 437 -123C427 -136 414 -143 399 -143C383 -143 369 -136 358 -122V-140H312V0H361V-79C361 -96 367 -104 378 -104C389 -104 395 -97 395 -83V0H442V-79C442 -96 448 -104 459 -104C470 -104 476 -97 476 -83V0H525Z"/>
+      <clipPath id="openingShape"><use href="#openingMark"/></clipPath>
+      <linearGradient id="openingBand">
+        <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+        <stop offset=".1" stop-color="#fff" stop-opacity=".058"/>
+        <stop offset=".2" stop-color="#fff" stop-opacity=".317"/>
+        <stop offset=".3" stop-color="#fff" stop-opacity=".683"/>
+        <stop offset=".4" stop-color="#fff" stop-opacity=".942"/>
+        <stop offset=".5" stop-color="#fff" stop-opacity="1"/>
+        <stop offset=".6" stop-color="#fff" stop-opacity=".942"/>
+        <stop offset=".7" stop-color="#fff" stop-opacity=".683"/>
+        <stop offset=".8" stop-color="#fff" stop-opacity=".317"/>
+        <stop offset=".9" stop-color="#fff" stop-opacity=".058"/>
+        <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <use class="opening-dim" href="#openingMark"/>
+    <g clip-path="url(#openingShape)"><rect class="opening-band" x="-286.2" y="-143" width="304.2" height="195" fill="url(#openingBand)"/></g>
+  </svg>
+</div>
 <div id="app"></div>
 <script type="module" src="/src/main.ts"></script>
 </body>

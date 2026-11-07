@@ -57,7 +57,7 @@
     <header>
       <div>
         <h2 class="heading">{text('Artists_Title')}</h2>
-        <p>{shown.length === 1 ? text('Artists_CountOne') : text('Artists_Count', shown.length)}</p>
+        <p class="pane-line">{shown.length === 1 ? text('Artists_CountOne') : text('Artists_Count', shown.length)}</p>
       </div>
       <label class="search">
         <i class="icon">{icons.search}</i>
@@ -97,27 +97,19 @@
     gap: 16px;
     align-items: flex-start;
     justify-content: space-between;
-    margin-bottom: 14px;
     padding-right: 18px;
-  }
-
-  header p {
-    margin: 8px 0 0;
-    color: rgb(255 255 255 / 0.6);
-    font-size: 11.5px;
   }
 
   .search {
     display: flex;
     gap: 8px;
     align-items: center;
-    width: 200px;
-    height: 30px;
-    padding: 0 10px;
-    border: 1px solid var(--hairline);
+    width: 180px;
+    height: 28px;
+    padding: 0 9px;
+    border: 1px solid rgb(255 255 255 / 0.133);
     border-radius: 6px;
-    background: rgb(0 0 0 / 0.2);
-    color: var(--text-faint);
+    color: rgb(255 255 255 / 0.6);
   }
 
   .search .icon {

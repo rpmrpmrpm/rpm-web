@@ -111,6 +111,13 @@ describe('the order of the wall', () => {
     expect(sortAlbums([album('beta', 'x'), album('Alpha', 'y')], 'Artist')[0]!.artist).toBe('Alpha');
   });
 
+  it('puts the most played first, and what was never played after it by shelf', () => {
+    const albums = [album('B', 'never'), album('A', 'never too'), album('C', 'loved')];
+    const plays = { loved: 9 } as Record<string, number>;
+    const order = sortAlbums(albums, 'Plays', (held) => plays[held.key] ?? 0);
+    expect(order.map((held) => held.key)).toEqual(['loved', 'never too', 'never']);
+  });
+
   it('dates a record by its newest track', () => {
     expect(addedOf([row('a', { addedAt: 5 }), row('b', { addedAt: 9 })])).toBe(9);
   });

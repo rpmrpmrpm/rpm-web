@@ -15,20 +15,29 @@
   const label = $derived(text(on ? 'Track_UnsetFavorite' : 'Track_SetFavorite'));
 </script>
 
-<button class="heart" class:on aria-pressed={on} title={label} aria-label={label} onclick={() => favorites.mark(track, !on)}><i class="icon">{icons.heart}</i></button>
+<button class="heart" class:on aria-pressed={on} title={label} aria-label={label} onclick={() => favorites.mark(track, !on)}><i class="icon" class:outline={!on}>{icons.heart}</i></button>
 
 <style>
   .heart {
     flex: none;
-    padding: 4px;
+    width: 18px;
+    height: 18px;
+    padding: 0;
     border: 0;
+    border-radius: 4px;
     background: none;
-    color: var(--text-faint);
-    font-size: 12px;
+    color: var(--favorite-idle);
+    font-size: 11px;
     cursor: pointer;
   }
 
   .heart.on {
     color: var(--favorite);
+  }
+
+  @media (hover: hover) {
+    .heart:hover {
+      background: rgb(255 255 255 / 0.133);
+    }
   }
 </style>

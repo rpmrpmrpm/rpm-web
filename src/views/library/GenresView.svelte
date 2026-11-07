@@ -7,7 +7,7 @@
   import { genreArtTable, photoAddress, type GenreArt } from '../../library/genre-art';
   import { shelvesOf, UNCLASSIFIED, type GenreWallItem } from '../../library/genres';
   import { albumsByKey, artistWall, genreWall } from '../../library/walls';
-  import { library } from '../../state.svelte';
+  import { library, room } from '../../state.svelte';
   import { text } from '../../strings/loc';
   import ArticleBlock from './ArticleBlock.svelte';
   import GenreCard from './GenreCard.svelte';
@@ -41,18 +41,26 @@
 
   const openArt = $derived(open ? table[open.name] : undefined);
   const openPhoto = $derived(openArt ? photoAddress(openArt) : null);
+
+  // The room takes the shelf's own colour while its page is open.
+  $effect(() => {
+    room.colour = open ? (openArt?.colour ?? null) : null;
+    return () => {
+      room.colour = null;
+    };
+  });
 </script>
 
 {#if open && page}
   <div class="page detail" style:--colour={openArt?.colour ?? '#30343c'}>
     <header class="head" style:background-image={openPhoto ? `url(${openPhoto})` : null}>
       <span class="across"></span>
-      <button class="key back" title={text('Genres_Title')} aria-label={text('Genres_Title')} onclick={() => (openName = null)}><i class="icon">{icons.back}</i></button>
+      <button class="back-key back" title={text('Genres_Title')} aria-label={text('Genres_Title')} onclick={() => (openName = null)}><i class="icon">{icons.backArrow}</i></button>
       <div class="title">
         <span class="mark" style:aspect-ratio={openArt?.aspect ?? 'auto'}><GenreMark art={openArt} name={shown(open.name)} /></span>
         <p>{text('Genres_InLibrary', open.albums.length, page.acts.length)}</p>
       </div>
-      <button class="glass-button play" onclick={() => player.play(recordsOf(open.albums).flatMap((album) => album.tracks), 0, { inAlbumOrder: false })}><i class="icon">{icons.play}</i>{text('Genres_PopularPlayAll')}</button>
+      <button class="deck-pill play" onclick={() => player.play(recordsOf(open.albums).flatMap((album) => album.tracks), 0, { inAlbumOrder: false })}><i class="icon">{icons.play}</i>{text('Genres_PopularPlayAll')}</button>
     </header>
 
     <div class="columns">
@@ -63,11 +71,11 @@
     </aside>
 
     <div class="shelves">
-      {#if page.added.length}<Shelf title={text('Genres_RecentlyAdded', shown(open.name))} albums={recordsOf(page.added)} {onOpen} />{/if}
+      {#if page.added.length}<Shelf big title={text('Genres_RecentlyAdded', shown(open.name))} albums={recordsOf(page.added)} {onOpen} />{/if}
 
       {#if page.acts.length}
         <section>
-          <h3>{text('Genres_NotableArtists', shown(open.name))}</h3>
+          <h3 class="shelf-title">{text('Genres_NotableArtists', shown(open.name))}</h3>
           <div class="acts">
             {#each page.acts as act (act.name)}
               <ArtistTile name={act.name} album={recordsOf(act.albums)[0]} onOpen={() => onArtist(act.name)} />
@@ -77,9 +85,9 @@
       {/if}
 
       {#each page.eras as era (era.decade)}
-        <Shelf title={text('Genres_Decade', era.decade)} albums={recordsOf(era.albums)} {onOpen} />
+        <Shelf big title={text('Genres_Decade', era.decade)} albums={recordsOf(era.albums)} {onOpen} />
       {/each}
-      {#if !page.added.length && !page.eras.length}<Shelf title={text('RightNav_Albums')} albums={recordsOf(open.albums)} {onOpen} />{/if}
+      {#if !page.added.length && !page.eras.length}<Shelf big title={text('RightNav_Albums')} albums={recordsOf(open.albums)} {onOpen} />{/if}
     </div>
     </div>
   </div>
@@ -87,7 +95,7 @@
   <div class="page">
     <header class="wall-head">
       <h2 class="heading">{text('Genres_Title')}</h2>
-      <p>{wall.length === 1 ? text('Genres_CountOne') : text('Genres_Count', wall.length)}</p>
+      <p class="pane-line">{wall.length === 1 ? text('Genres_CountOne') : text('Genres_Count', wall.length)}</p>
     </header>
     {#if wall.length}
       <div class="wall">
@@ -109,11 +117,6 @@
     overflow-y: auto;
   }
 
-  .wall-head {
-    margin-bottom: 14px;
-  }
-
-  .wall-head p,
   .empty {
     margin: 8px 0 0;
     color: rgb(255 255 255 / 0.6);
@@ -193,13 +196,6 @@
     .columns {
       grid-template-columns: minmax(0, 1fr);
     }
-  }
-
-  h3 {
-    margin: 0 0 8px;
-    color: rgb(255 255 255 / 0.8);
-    font-size: 12.5px;
-    font-weight: 400;
   }
 
   section {

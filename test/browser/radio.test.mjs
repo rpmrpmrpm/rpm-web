@@ -101,8 +101,7 @@ test('the pane lists one row per station, with the admin\'s name, and tuning fil
 test('a station and a record stop each other', async () => {
   const { page, problems } = await open();
   await page.click('.card >> nth=0');
-  await page.click('[role=dialog] button:has-text("Play") >> nth=0');
-  await page.keyboard.press('Escape');
+  await page.click('.drawer .mini-key >> nth=0');
   await page.waitForSelector('.band h2:has-text("Alpha")');
 
   await page.click('.rail button:has-text("Internet Radio")');
@@ -115,9 +114,8 @@ test('a station and a record stop each other', async () => {
   await page.click('.deck button[title="Stop"]');
   await page.waitForFunction(() => !document.querySelector('.band').classList.contains('open'));
 
-  await page.click('.card >> nth=0');
-  await page.click('[role=dialog] button:has-text("Play") >> nth=0');
-  await page.keyboard.press('Escape');
+  await page.click('.card >> nth=0', { button: 'right' });
+  await page.click('[role=menuitem] .label:text-is("Play")');
   await page.waitForSelector('.band h2:has-text("Alpha")');
   assert.ok(await onAir(page));
   assert.deepEqual(problems, []);

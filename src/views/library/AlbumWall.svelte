@@ -29,6 +29,7 @@
 
   const openIndex = $derived(open ? albums.indexOf(open) : -1);
   const openRow = $derived(!compact && openIndex >= 0 ? Math.floor(openIndex / columns) : -1);
+  const openColumn = $derived(openIndex >= 0 ? openIndex % columns : 0);
   const drawer = $derived(openRow >= 0 ? bandHeight + GAP : 0);
 
   const top = (row: number) => row * rowHeight + (openRow >= 0 && row > openRow ? drawer : 0);
@@ -64,7 +65,7 @@
 
     {#if open && openRow >= 0}
       <div class="drawer" style:top="{top(openRow) + rowHeight - GAP / 2}px" bind:clientHeight={bandHeight}>
-        <AlbumBand album={open} />
+        <AlbumBand album={open} notch={openColumn * (art + GAP) + art / 2} />
       </div>
     {/if}
   </div>

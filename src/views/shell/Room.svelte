@@ -3,18 +3,17 @@
   import type { CloudAlbum } from '../../library/albums';
   import { catalogue, covers } from '../../app';
   import { colourOf, css, type Colour } from '../../library/colour';
-  import { now } from '../../state.svelte';
+  import { now, room } from '../../state.svelte';
 
   let colour = $state<Colour | null>(null);
 
   $effect(() => {
     const track = now.track;
-    if (!track) {
+    const album: CloudAlbum | undefined = room.album ?? catalogue.albums.find((a) => a.tracks.some((t) => t.rpmId === track?.rpmId));
+    if (!album) {
       colour = null;
       return;
     }
-    const album: CloudAlbum | undefined = catalogue.albums.find((a) => a.tracks.some((t) => t.rpmId === track.rpmId));
-    if (!album) return;
     let current = true;
     void covers.url(album, 256).then(async (url) => {
       const found = url ? await colourOf(url) : null;
@@ -26,7 +25,7 @@
   });
 </script>
 
-<div class="room" style:--wash={colour ? css(colour, 0.55) : '#0a2a54'}></div>
+<div class="room" style:--wash={room.colour ?? (colour ? css(colour, 0.55) : '#0a2a54')}></div>
 
 <style>
   /* A registered colour, because a gradient itself cannot be animated. */

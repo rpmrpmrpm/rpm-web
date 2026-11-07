@@ -36,7 +36,8 @@
     footnote?: Snippet;
   } = $props();
 
-  const TALLEST_TITLE = 74;
+  // The title fills a box 92 high, as a Viewbox does. Thiamine's line is 0.4875 of its size, so that is this size.
+  const TALLEST_TITLE = 188.7;
 
   let width = $state(untrack(() => openWidth ?? maxWidth));
   let height = $state(untrack(() => openHeight));
@@ -91,7 +92,7 @@
     <header style:background-image="url({vinyl})">
       {#if glyph}<i class="icon mark">{glyph}</i>{/if}
       <div class="title"><h2 bind:this={heading}>{title.toLowerCase()}</h2></div>
-      <button class="key" title={text('Common_Cancel')} aria-label={text('Common_Cancel')} onclick={onClose}><i class="icon">{icons.close}</i></button>
+      {#if !footer}<button class="key" title={text('Common_Cancel')} aria-label={text('Common_Cancel')} onclick={onClose}><i class="icon">{icons.close}</i></button>{/if}
     </header>
     <div class="body">
       {@render children()}
@@ -140,19 +141,21 @@
     flex: none;
     align-items: stretch;
     height: 112px;
-    padding: 17px 20px 3px 26px;
-    background-position: center;
+    padding: 17px 120px 3px 26px;
+    background-position: top;
     background-size: cover;
   }
 
   .mark {
     position: absolute;
-    top: 50%;
+    top: 16px;
     left: 18px;
+    width: 80px;
     color: #0e141e;
     font-size: 80px;
+    line-height: 80px;
     pointer-events: none;
-    transform: translateY(-50%);
+    text-align: center;
   }
 
   .title {
@@ -161,22 +164,21 @@
     flex: 1;
     align-items: center;
     min-width: 0;
-    overflow: hidden;
   }
 
   h2 {
     width: fit-content;
     margin: 0;
     color: rgb(255 255 255 / 0.5);
-    font: 400 74px / 92px Thiamine, Cabin, sans-serif;
-    letter-spacing: 0.02em;
+    font: 400 188.7px / 92px Thiamine, Cabin, sans-serif;
     white-space: nowrap;
   }
 
   .key {
-    position: relative;
-    align-self: center;
-    margin-left: 12px;
+    position: absolute;
+    top: 50%;
+    right: 20px;
+    transform: translateY(-50%);
   }
 
   .body {

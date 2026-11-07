@@ -94,7 +94,7 @@ async function open(viewport = { width: 1440, height: 900 }, library = []) {
 test('a release is found, laid against the files, and written to them', async () => {
   const { page, asked, problems } = await open();
 
-  await page.click('button:has-text("Tags from release")');
+  await page.click('.tool-key[aria-label="Tags from release"]');
   await page.waitForSelector('text=Search releases');
   await page.fill('[role=dialog] form input >> nth=0', 'Found Album');
   await page.click('[role=dialog] form button[type=submit]');
@@ -118,8 +118,7 @@ test('a release is found, laid against the files, and written to them', async ()
 test('a tag is written from a pattern, with the result shown first', async () => {
   const { page, problems } = await open();
 
-  await page.click('button:text-is("More")');
-  await page.click('.menu button:has-text("Tags from tags")');
+  await page.click('.tool-key[aria-label="Tags from tags"]');
   await page.selectOption('[role=dialog] select', 'Album');
   await page.fill('[role=dialog] input[list]', 'Pattern {artist}');
   await page.waitForSelector('[role=dialog] td:has-text("Pattern")');
@@ -132,7 +131,7 @@ test('a tag is written from a pattern, with the result shown first', async () =>
 test('a cover is chosen from disk, and found by name through the API', async () => {
   const { page, asked, problems } = await open();
 
-  await page.click('button.tool:text-is("Tags")');
+  await page.click('.tool-key[aria-label="Tags"]');
   await page.setInputFiles('.cover input[type=file]', { name: 'mine.png', mimeType: 'image/png', buffer: PNG });
   await page.waitForSelector('.cover .art img');
   await page.waitForSelector('button:has-text("Remove picture")');
@@ -151,7 +150,7 @@ test('a cover is chosen from disk, and found by name through the API', async () 
 test('a picture that is no picture is refused', async () => {
   const { page } = await open();
 
-  await page.click('button.tool:text-is("Tags")');
+  await page.click('.tool-key[aria-label="Tags"]');
   await page.setInputFiles('.cover input[type=file]', { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
   await page.waitForSelector('.cover [role=alert]');
   await page.close();
@@ -160,7 +159,7 @@ test('a picture that is no picture is refused', async () => {
 test('tracks are recognised from their audio, and only what the basic layers miss is sent as a clip', async () => {
   const { page, sent, problems } = await open();
 
-  await page.click('button.tool:text-is("Recognise")');
+  await page.click('.tool-key[aria-label="Recognise"]');
   await page.waitForSelector('text=Identify 2 track(s) from the audio itself.');
   await page.waitForSelector('text=Advanced recognition');
   await page.click('[role=dialog] .primary:text-is("Recognise")');
@@ -184,7 +183,7 @@ test('tracks are recognised from their audio, and only what the basic layers mis
   await page.click('button:text-is("Edit all 2")');
   await page.waitForSelector('[role=dialog]', { state: 'detached' });
   assert.deepEqual((await page.$$eval('.row .title', (rows) => rows.map((row) => row.textContent))).sort(), ['Clip Song', 'Heard Song']);
-  await page.waitForSelector('.tool.on:text-is("Tags")');
+  await page.waitForSelector('.tool-key.on[aria-label="Tags"]');
   assert.deepEqual(problems, []);
   await page.close();
 });
@@ -192,7 +191,7 @@ test('tracks are recognised from their audio, and only what the basic layers mis
 test('Recognise is one click from the same list again, and shows the new names', async () => {
   const { page } = await open();
 
-  await page.click('button.tool:text-is("Recognise")');
+  await page.click('.tool-key[aria-label="Recognise"]');
   await page.click('[role=dialog] .primary:text-is("Recognise")');
   await page.waitForSelector('text=2 of 2 recognised', { timeout: 30000 });
   await page.click('[role=dialog] .primary:text-is("Recognise more")');
@@ -204,7 +203,7 @@ test('on a phone Recognise is a page of its own, and nothing runs off the side',
   const { page } = await open({ width: 1440, height: 900 });
   await page.setViewportSize({ width: 390, height: 844 });
 
-  await page.click('button.tool:text-is("Recognise")');
+  await page.click('.tool-key[aria-label="Recognise"]');
   await page.click('[role=dialog] .primary:text-is("Recognise")');
   await page.waitForSelector('text=2 of 2 recognised', { timeout: 30000 });
   const sizes = await page.$eval('[role=dialog]', (element) => ({ width: element.getBoundingClientRect().width, scroll: element.querySelector('.body').scrollWidth, client: element.querySelector('.body').clientWidth }));
@@ -216,7 +215,7 @@ test('on a phone Recognise is a page of its own, and nothing runs off the side',
 test('what was done to the queue is still there on the next visit', async () => {
   const { page } = await open();
 
-  await page.click('button.tool:text-is("Recognise")');
+  await page.click('.tool-key[aria-label="Recognise"]');
   await page.click('[role=dialog] .primary:text-is("Recognise")');
   await page.waitForSelector('text=2 of 2 recognised', { timeout: 30000 });
   await page.click('[role=dialog] button:text-is("Close")');
@@ -234,7 +233,7 @@ test('what was done to the queue is still there on the next visit', async () => 
 test('files take their album and cover from a record in the collection', async () => {
   const { page, problems } = await open(undefined, LIBRARY);
 
-  await page.click('button.tool:text-is("Tags")');
+  await page.click('.tool-key[aria-label="Tags"]');
   await page.click('button:text-is("From an album in your collection…")');
   await page.fill('[role=dialog] input', 'clandest');
   await page.click('[role=dialog] button:has-text("Manu Chao")');
@@ -249,7 +248,7 @@ test('a disc label is found by name or chosen from disk, beside the cover', asyn
   const { page, asked } = await open();
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 
-  await page.click('button.tool:text-is("Tags")');
+  await page.click('.tool-key[aria-label="Tags"]');
   await page.setInputFiles('.cover:has-text("Disc") input[type=file]', { name: 'disc.png', mimeType: 'image/png', buffer: png });
   await page.waitForSelector('.cover:has-text("Disc") img');
   await page.click('.cover:has-text("Disc") button:text-is("Remove picture")');
@@ -316,12 +315,12 @@ test('a folder is opened again with one press where the browser allows it', asyn
     window.showDirectoryPicker = async () => (await navigator.storage.getDirectory()).getDirectoryHandle('Album');
   });
 
-  await page.click('button.tool:text-is("Remove from queue")');
+  await page.click('.tool-key[aria-label="Remove from queue"]');
   await page.waitForTimeout(800);
   await page.reload();
   await page.click('button:text-is("Add a folder")');
   await page.waitForFunction(() => document.querySelectorAll('.row').length === 1);
-  await page.click('button.tool:text-is("Recognise")');
+  await page.click('.tool-key[aria-label="Recognise"]');
   await page.click('[role=dialog] .primary:text-is("Recognise")');
   await page.waitForSelector('[role=dialog] .primary:text-is("Recognise more")', { timeout: 30000 });
   await page.click('[role=dialog] button:text-is("Close")');
@@ -338,12 +337,10 @@ test('a folder is opened again with one press where the browser allows it', asyn
 test('duplicates, columns and disc numbers are on the toolbar', async () => {
   const { page } = await open();
 
-  await page.click('button:text-is("More")');
-  await page.click('.menu button:text-is("Columns")');
-  await page.check('.menu label:has-text("Genre")');
-  await page.waitForSelector('.row .extra', { state: 'attached' });
-  await page.click('button:text-is("More")');
-  await page.click('.menu button:text-is("Number discs from folders")');
+  await page.click('.tool-key[aria-label="Columns"]');
+  await page.click('[role=menuitem]:has-text("Size")');
+  await page.waitForSelector('.grid .head span:text-is("Size")');
+  await page.click('.tool-key[aria-label="Number discs from folders"]');
   await page.waitForSelector('text=No folder here says which disc it is');
   await page.close();
 });
@@ -352,7 +349,7 @@ test('on a phone the lookup is a page of its own', async () => {
   const { page } = await open({ width: 1440, height: 900 });
   await page.setViewportSize({ width: 390, height: 844 });
 
-  await page.click('button:has-text("Tags from release")');
+  await page.click('.tool-key[aria-label="Tags from release"]');
   await page.waitForSelector('text=Search releases');
   const box = await page.$eval('[role=dialog]', (element) => element.getBoundingClientRect().toJSON());
   assert.equal(box.width, 390);

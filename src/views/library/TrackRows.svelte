@@ -5,9 +5,19 @@
   import { icons } from '../../design/icons';
   import { now } from '../../state.svelte';
   import { text } from '../../strings/loc';
+  import { catalogue } from '../../app';
+  import { menuOn, type MenuEntry } from '../menu/menu.svelte';
   import Heart from './Heart.svelte';
+  import { menuAt, trackMenu } from './record-menu.svelte';
 
-  let { tracks, onRemove }: { tracks: CloudTrack[]; onRemove?: (track: CloudTrack, index: number) => void } = $props();
+  // plain: every song is the same act's, so the row says only its name, and they stand in two columns.
+  let { tracks, onRemove, plain = false }: { tracks: CloudTrack[]; onRemove?: (track: CloudTrack, index: number) => void; plain?: boolean } = $props();
+
+  function menuOfTrack(track: CloudTrack, index: number): MenuEntry[] {
+    const album = catalogue.albums.find((held) => held.tracks.some((row) => row.rpmId === track.rpmId));
+    const entries = trackMenu(track, tracks, index, { inAlbumOrder: false, album });
+    return onRemove ? [...entries, 'rule', { label: text('Playlists_Remove'), glyph: icons.minus, run: () => onRemove(track, index) }] : entries;
+  }
 
   const time = (track: CloudTrack) => {
     const total = Math.round(durationSeconds(track));
@@ -15,18 +25,16 @@
   };
 </script>
 
-<ol>
+<ol class:plain>
   {#each tracks as track, index (`${track.rpmId}-${index}`)}
-    <li class:playing={now.track?.rpmId === track.rpmId}>
+    <li class:playing={now.track?.rpmId === track.rpmId} use:menuOn={() => menuOfTrack(track, index)}>
       <button class="song" onclick={() => player.play(tracks, index, { inAlbumOrder: false })}>
         <span class="title">{track.title}</span>
-        <span class="by">{track.artist ?? ''}{track.album ? `  •  ${track.album}` : ''}</span>
+        {#if !plain}<span class="by">{track.artist ?? ''}{track.album ? `  •  ${track.album}` : ''}</span>{/if}
         <span class="length">{time(track)}</span>
       </button>
       <Heart {track} />
-      {#if onRemove}
-        <button class="bin" title={text('Playlists_Remove')} aria-label={text('Playlists_Remove')} onclick={() => onRemove(track, index)}><i class="icon">{icons.trash}</i></button>
-      {/if}
+      <button class="more" title={text('Common_MoreOptions')} aria-label={text('Common_MoreOptions')} onclick={(event) => menuAt(event, menuOfTrack(track, index))}><i class="icon">{icons.more}</i></button>
     </li>
   {/each}
 </ol>
@@ -36,6 +44,26 @@
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+
+  ol.plain {
+    column-gap: 28px;
+    column-count: 2;
+  }
+
+  .plain li {
+    break-inside: avoid;
+  }
+
+  .plain .song {
+    grid-template-columns: minmax(0, 1fr) auto;
+    font-size: 12.5px;
+  }
+
+  @media (max-width: 899px) {
+    ol.plain {
+      column-count: 1;
+    }
   }
 
   li {
@@ -77,13 +105,16 @@
     font-size: 12px;
   }
 
-  .bin {
+  .more {
     flex: none;
-    width: 30px;
-    height: 30px;
+    width: 22px;
+    height: 22px;
+    margin-right: 2px;
+    padding: 0;
     border: 0;
+    border-radius: 4px;
     background: none;
-    color: var(--text-faint);
+    color: rgb(255 255 255 / 0.6);
     font-size: 11px;
     cursor: pointer;
   }
@@ -98,9 +129,21 @@
     }
   }
 
+  /* Marks appear under the pointer. A phone has no pointer to bring them out. */
   @media (hover: hover) {
     li:hover {
-      background: rgb(255 255 255 / 0.07);
+      background: rgb(255 255 255 / 0.094);
+    }
+
+    li :global(.heart:not(.on)),
+    .more {
+      opacity: 0;
+    }
+
+    li:hover :global(.heart),
+    li:hover .more,
+    .more:focus-visible {
+      opacity: 1;
     }
   }
 </style>

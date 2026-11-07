@@ -48,6 +48,7 @@ const dossier = {
 
 async function open(viewport = { width: 1440, height: 900 }, words = {}) {
   const page = await browser.newPage({ viewport });
+  page.setDefaultTimeout(6000);
   const problems = [];
   const marks = [];
   const pushes = [];
@@ -133,24 +134,6 @@ test('the page names its icons, and each of them is there', async () => {
   await page.close();
 });
 
-test('Home starts with Recently added, and opens a record', async () => {
-  const { page, problems } = await open();
-
-  await page.waitForSelector('h3:has-text("Recently added")');
-  assert.equal(await page.$('h3:has-text("Recently listened")'), null);
-
-  await page.click('.card >> nth=0');
-  await page.waitForSelector('[role=dialog] .track');
-  assert.deepEqual(problems, []);
-  await page.close();
-});
-
-test('Home counts the collection in plain words', async () => {
-  const { page } = await open();
-  await page.waitForSelector('p:text-is("4 albums")');
-  await page.close();
-});
-
 test('Artists files each act once, a guest included, and opens a page', async () => {
   const { page, problems } = await open();
 
@@ -190,7 +173,7 @@ test('The album list and the data table show the same collection', async () => {
 
   await rail(page, 'Albums');
   await page.click('button[aria-label="Album list"]');
-  await page.waitForSelector('.line:has-text("Kid A")');
+  await page.waitForSelector('article:has-text("Kid A")');
 
   await page.click('button[aria-label="Data table"]');
   await page.waitForSelector('.row:has-text("Gamma")');
@@ -231,11 +214,15 @@ test('Playlists says what is in the desktop app, and can be made and filled here
   await page.waitForSelector('strong:text-is("Fresh")');
   assert.equal(playlists.length, 1);
 
-  await page.click('.deck button[aria-label="Home"]');
-  await page.click('.card >> nth=0');
-  await page.click('button:has-text("Add to playlist")');
-  await page.click('[role=dialog] li button:has-text("Fresh")');
-  await page.waitForFunction(() => document.querySelectorAll('[role=dialog]').length === 1);
+  await rail(page, 'Albums');
+  await page.waitForSelector('.card');
+  await page.click('.views .slot-key >> nth=0');
+  await page.click('.card >> nth=0', { button: 'right' });
+  await page.hover('[role=menuitem]:has-text("Add to playlist")');
+  await page.click('[role=menuitem]:has-text("Fresh")');
+  await page.waitForFunction(() => !document.querySelector('[role=menu]'));
+  await page.waitForFunction((lists) => lists, playlists.length);
+  await page.waitForTimeout(200);
   assert.ok(playlists[0].trackIds.length > 0);
   assert.deepEqual(problems, []);
   await page.close();
@@ -337,19 +324,19 @@ test('a song is marked a favourite, and is in the list of favourites', async () 
   const { page, marks, problems } = await open();
 
   await page.click('.card >> nth=0');
-  await page.waitForSelector('[role=dialog] .track');
-  await page.click('[role=dialog] .track .heart >> nth=0');
-  await page.waitForSelector('[role=dialog] .track .heart.on');
+  await page.waitForSelector('.drawer .track');
+  await page.hover('.drawer .track >> nth=0');
+  await page.click('.drawer .track .heart >> nth=0');
+  await page.waitForSelector('.drawer .track .heart.on');
   assert.equal(marks[0].favorite, true);
   assert.ok(marks[0].path.startsWith('cloud/track-mark/'));
   assert.ok(marks[0].favoritedAt > 600_000_000_000_000_000, 'the stamp is in ticks');
 
-  await page.click('[role=dialog] .track .heart.on');
-  await page.waitForFunction(() => !document.querySelector('[role=dialog] .track .heart.on'));
+  await page.click('.drawer .track .heart.on');
+  await page.waitForFunction(() => !document.querySelector('.drawer .track .heart.on'));
   assert.deepEqual([marks[1].favorite, marks[1].favoritedAt], [false, 0]);
 
-  await page.click('[role=dialog] .track .heart >> nth=0');
-  await page.keyboard.press('Escape');
+  await page.click('.drawer .track .heart >> nth=0');
   await rail(page, 'Playlists');
   await page.click('button:has-text("Favourite tracks")');
   await page.waitForSelector('.detail .title');
@@ -364,10 +351,9 @@ test('a record is marked a favourite, and the wall can show only those', async (
   await page.waitForSelector('.card');
   const all = await page.locator('.card').count();
   await page.click('.card >> nth=0');
-  await page.click('button:has-text("Set as favourite album")');
-  await page.waitForSelector('button:has-text("Remove from favourites")');
+  await page.click('.drawer .album-heart');
+  await page.waitForSelector('.drawer .album-heart.on');
   assert.ok(marks[0].path.startsWith('cloud/album-mark/'));
-  await page.keyboard.press('Escape');
 
   await page.click('button[aria-label="Favourite albums only"]');
   await page.waitForFunction(() => document.querySelectorAll('.card').length === 1);
@@ -379,7 +365,8 @@ test('a record is marked a favourite, and the wall can show only those', async (
 test('a record gets stars, kept in this browser, and pressing them again takes them off', async () => {
   const { page } = await open();
 
-  await page.click('.card >> nth=0');
+  await page.click('.card >> nth=0', { button: 'right' });
+  await page.click('[role=menuitem]:has-text("Album page")');
   await page.click('[aria-label="4 stars"]');
   await page.waitForSelector('[aria-label="4 stars"][aria-pressed=true]');
   assert.equal(await page.locator('.stars button.on').count(), 4);
@@ -395,9 +382,9 @@ test('the tags of a track in the cloud are changed, and only what changed is sen
   const { page, pushes, problems } = await open();
 
   await page.click('.card >> nth=0');
-  await page.waitForSelector('[role=dialog] .track');
-  await page.hover('[role=dialog] .track >> nth=0');
-  await page.click('[role=dialog] .track .bin[title="Track details"] >> nth=0');
+  await page.waitForSelector('.drawer .track');
+  await page.click('.drawer .track >> nth=0', { button: 'right' });
+  await page.click('[role=menuitem]:has-text("Edit track")');
   const title = page.locator('label:has-text("Title") input');
   await title.fill('Renamed');
   await page.click('button:text-is("Save")');
@@ -415,7 +402,8 @@ test('a record is edited as a whole, for every track on it', async () => {
 
   await rail(page, 'Albums');
   await page.locator('.card', { hasText: 'Dummy' }).click();
-  await page.click('button:has-text("Edit album")');
+  await page.click('.drawer .mini-key >> nth=2');
+  await page.click('[role=menuitem]:has-text("Edit album")');
   await page.locator('label:has-text("Genre") input').fill('Bristol');
   await page.click('button:text-is("Save")');
   await page.waitForFunction(() => !document.querySelector('form .field'));
@@ -427,12 +415,12 @@ test('the Home key is on the deck beside the pane key, and not on the rail', asy
   const { page } = await open();
 
   assert.equal(await page.locator('.rail button:has-text("Home")').count(), 0);
-  assert.equal(await page.getAttribute('.deck button[aria-label="Home"]', 'aria-pressed'), 'true');
 
-  await rail(page, 'Albums');
-  await page.waitForFunction(() => document.querySelector('.deck button[aria-label="Home"]').getAttribute('aria-pressed') === 'false');
+  // A small collection lands on the records.
+  assert.equal(await page.getAttribute('.deck button[aria-label="Home"]', 'aria-pressed'), 'false');
   await page.click('.deck button[aria-label="Home"]');
-  await page.waitForSelector('h3:has-text("Recently added")');
+  await page.waitForFunction(() => document.querySelector('.deck button[aria-label="Home"]').getAttribute('aria-pressed') === 'true');
+  await page.waitForSelector('text=albums to go');
   await page.close();
 });
 
@@ -440,8 +428,14 @@ test('the left pane glides open and closed, and its content arrives after the mo
   const { page } = await open();
   const width = () => page.$eval('.pane.left', (pane) => pane.getBoundingClientRect().width);
 
+  // A computer opens with Track info out.
+  assert.equal(await width(), 520);
+  await page.click('.deck .pane-pill');
+  await page.waitForFunction(() => !document.querySelector('.pane.left .view'));
+  await page.waitForTimeout(120);
   const closed = await width();
-  assert.equal(closed, 92);
+  assert.equal(closed, 84);
+
   await page.click('.deck .pane-pill');
   await page.waitForTimeout(200);
   const moving = await width();
@@ -449,10 +443,6 @@ test('the left pane glides open and closed, and its content arrives after the mo
   await page.waitForFunction(() => document.querySelector('.pane.left .view.clear'));
   const open_ = await width();
   assert.ok(open_ > moving || open_ > 400, 'the pane is open');
-
-  await page.click('.deck .pane-pill');
-  await page.waitForFunction(() => !document.querySelector('.pane.left .view'));
-  assert.equal(await width(), 92);
   await page.close();
 });
 
@@ -462,12 +452,11 @@ test('the band above the panes opens when a record starts, and closes when it st
 
   assert.equal(await height(), 78);
   await page.click('.card >> nth=0');
-  await page.waitForSelector('[role=dialog] .track');
-  await page.click('[role=dialog] button:has-text("Play") >> nth=0');
+  await page.waitForSelector('.drawer .track');
+  await page.click('.drawer .mini-key >> nth=0');
   await page.waitForFunction(() => document.querySelector('.band').classList.contains('open'));
   await page.waitForTimeout(600);
   assert.ok((await height()) > 150, 'the band has opened');
-  await page.keyboard.press('Escape');
   await page.click('.deck button[title="Stop"]');
   await page.waitForFunction(() => !document.querySelector('.band').classList.contains('open'));
   await page.waitForTimeout(600);
@@ -478,13 +467,11 @@ test('the band above the panes opens when a record starts, and closes when it st
 test('Track info says the record, the words and what is known, and the words follow the singer', async () => {
   const { page, problems, asked } = await open();
 
-  await page.click('.rail button:has-text("Track info")');
   await page.waitForSelector('text=Nothing playing right now');
   assert.deepEqual(asked, []);
 
-  await page.click('.card >> nth=0');
-  await page.click('[role=dialog] button:has-text("Play") >> nth=0');
-  await page.keyboard.press('Escape');
+  await page.click('.card:has-text("Dummy")');
+  await page.click('.drawer .mini-key >> nth=0');
 
   await page.waitForSelector('.sheet .title h3:has-text("Alpha")');
   await page.waitForSelector('.sheet strong:text-is("Portishead")');
@@ -509,10 +496,8 @@ test('Track info says the record, the words and what is known, and the words fol
 test('the owner\'s chosen words come before LRCLIB, and another version can be tried', async () => {
   const { page, problems, asked, sheets } = await open(undefined, { chosen: '[00:00.10]Chosen on another device' });
 
-  await page.click('.rail button:has-text("Track info")');
-  await page.click('.card >> nth=0');
-  await page.click('[role=dialog] button:has-text("Play") >> nth=0');
-  await page.keyboard.press('Escape');
+  await page.click('.card:has-text("Dummy")');
+  await page.click('.drawer .mini-key >> nth=0');
 
   await page.waitForSelector('.well p:has-text("Chosen on another device")');
   assert.deepEqual(asked, []);
@@ -528,8 +513,9 @@ test('on a phone the words stand in place of the sleeve, and Track info opens fr
   const { page, problems } = await open();
   await page.setViewportSize({ width: 390, height: 844 });
 
-  await page.click('.card >> nth=0');
-  await page.click('button:has-text("Play") >> nth=0');
+  await page.click('.card:has-text("Dummy")');
+  await page.click('.page .mini-key >> nth=0');
+  await page.click('.page .key >> nth=0');
   await page.click('.mini .open');
   await page.waitForSelector('.player');
 

@@ -13,7 +13,7 @@ export interface CloudAlbum {
   year: number;
 }
 
-export type AlbumOrdering = 'Artist' | 'Album' | 'Added' | 'Year';
+export type AlbumOrdering = 'Artist' | 'Album' | 'Added' | 'Year' | 'Plays';
 
 const collator = new Intl.Collator(undefined, { sensitivity: 'accent' });
 
@@ -40,8 +40,11 @@ export function yearOf(tracks: readonly CloudTrack[]): number {
 export const addedOf = (tracks: readonly CloudTrack[]): number => tracks.reduce((newest, t) => Math.max(newest, t.addedAt), 0);
 
 // Every order falls back to artist and album, so a wall never reshuffles between two runs that agree.
-export function sortAlbums(albums: readonly CloudAlbum[], ordering: AlbumOrdering): CloudAlbum[] {
+export function sortAlbums(albums: readonly CloudAlbum[], ordering: AlbumOrdering, playsOf: (album: CloudAlbum) => number = () => 0): CloudAlbum[] {
   const shelf = (a: CloudAlbum, b: CloudAlbum) => collator.compare(a.artist, b.artist) || collator.compare(a.album, b.album);
+
+  // Read once per album, because reading one walks its tracks and a sort compares thousands of times.
+  const plays = new Map(ordering === 'Plays' ? albums.map((album) => [album, playsOf(album)]) : []);
 
   return [...albums].sort((a, b) => {
     switch (ordering) {
@@ -53,6 +56,8 @@ export function sortAlbums(albums: readonly CloudAlbum[], ordering: AlbumOrderin
         // Untagged last: a library half of which has no year would otherwise open on that half.
         if ((a.year === 0) !== (b.year === 0)) return a.year === 0 ? 1 : -1;
         return b.year - a.year || shelf(a, b);
+      case 'Plays':
+        return plays.get(b)! - plays.get(a)! || shelf(a, b);
       default:
         return shelf(a, b);
     }

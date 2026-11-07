@@ -6,12 +6,13 @@
   // The right pane: which view of the collection is showing, and a record opened from it.
   import type { CloudAlbum } from '../../library/albums';
   import { text } from '../../strings/loc';
-  import AlbumOpen from './AlbumOpen.svelte';
+  import AlbumSheet from './AlbumSheet.svelte';
   import ArtistsView from './ArtistsView.svelte';
   import Collection from './Collection.svelte';
   import GenresView from './GenresView.svelte';
   import HomeView from './HomeView.svelte';
   import PlaylistsView from './PlaylistsView.svelte';
+  import { asked } from './record-menu.svelte';
 
   let {
     mode,
@@ -28,8 +29,7 @@
     ['playlists', 'Playlists_Title'],
   ];
 
-  let openKey = $state<CloudAlbum | null>(null);
-  const onOpen = (album: CloudAlbum) => (openKey = album);
+  const onOpen = (album: CloudAlbum) => (asked.opening = album);
 
   // Pressing an act on a genre page opens their page on the artist wall.
   let openArtist = $state<string | null>(null);
@@ -48,7 +48,9 @@
     </div>
   {/if}
   <div class="view">
-    {#if mode === 'home'}
+    {#if asked.opening && !compact}
+      <AlbumSheet album={asked.opening} onBack={() => (asked.opening = null)} />
+    {:else if mode === 'home'}
       <HomeView {onOpen} {onImport} />
     {:else if mode === 'artists'}
       <ArtistsView {onOpen} bind:openName={openArtist} />
@@ -61,10 +63,6 @@
     {/if}
   </div>
 </div>
-
-{#if openKey}
-  <AlbumOpen album={openKey} {compact} onClose={() => (openKey = null)} />
-{/if}
 
 <style>
   .library {

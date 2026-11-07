@@ -6,7 +6,7 @@
   import type { CloudAlbum } from '../../library/albums';
   import { creditNames, ownAlbums, VARIOUS_ARTISTS, type ArtistWallItem } from '../../library/artists';
   import { albumsByKey } from '../../library/walls';
-  import { library } from '../../state.svelte';
+  import { library, room } from '../../state.svelte';
   import { text } from '../../strings/loc';
   import AlbumDetail from './AlbumDetail.svelte';
   import ArticleBlock from './ArticleBlock.svelte';
@@ -42,6 +42,20 @@
 
   const open = (album: CloudAlbum) => (opened = opened === album ? null : album);
 
+  // The room takes the colour of their first record while the page is open.
+  $effect(() => {
+    room.album = recordsOf(artist.albums)[0] ?? null;
+    return () => {
+      room.album = null;
+    };
+  });
+
+  let finding = $state('');
+  const foundSongs = $derived.by(() => {
+    const words = finding.trim().toLowerCase();
+    return words ? songs.filter((track) => track.title?.toLowerCase().includes(words)) : songs;
+  });
+
   // Their songs on the records they lead, and the ones naming them on anybody else's.
   const songs = $derived.by(() => {
     const compilation = artist.name === VARIOUS_ARTISTS;
@@ -56,7 +70,7 @@
     <div class="photo">
       {#if photos[at]}<img src={photos[at]} alt="" />{/if}
       {#if logo}<img class="logo" src={logo} alt={artist.name} />{:else}<h2>{artist.name}</h2>{/if}
-      <button class="key back" title={text('Artists_Back')} aria-label={text('Artists_Back')} onclick={onBack}><i class="icon">{icons.back}</i></button>
+      <button class="back-key back" title={text('Artists_Back')} aria-label={text('Artists_Back')} onclick={onBack}><i class="icon">{icons.backArrow}</i></button>
       {#if photos.length > 1}
         <div class="steps">
           <button class="tool" aria-label={text('Home_FeatureBack')} onclick={() => (at = (at + photos.length - 1) % photos.length)}><i class="icon">{icons.back}</i></button>
@@ -64,7 +78,7 @@
         </div>
       {/if}
     </div>
-    <button class="glass-button" onclick={() => player.play(songs, 0, { inAlbumOrder: false })}><i class="icon">{icons.play}</i>{text('Home_PlayAllTracks')}</button>
+    <button class="play-all" onclick={() => player.play(songs, 0, { inAlbumOrder: false })}><i class="icon">{icons.play}</i>{text('Home_PlayAllTracks')}</button>
     {#key artist.name}
       <ArticleBlock heading={text('TrackInfo_AboutArtist')} load={() => articles.ofArtist(artist.name)} />
     {/key}
@@ -72,16 +86,19 @@
 
   <div class="records">
     {#if artist.albums.length}
-      <Shelf title={text('Artists_Albums')} albums={recordsOf(artist.albums)} onOpen={open} />
+      <Shelf big title={text('Artists_Albums')} albums={recordsOf(artist.albums)} onOpen={open} />
     {/if}
     {#if opened}
       <div class="opened"><AlbumDetail album={opened} columns={2} /></div>
     {/if}
-    {#if artist.together.length}<Shelf title={text('Artists_Collaborations')} albums={recordsOf(artist.together)} onOpen={open} />{/if}
-    {#if artist.appearances.length}<Shelf title={text('Artists_AppearsOn')} albums={recordsOf(artist.appearances)} {onOpen} />{/if}
+    {#if artist.together.length}<Shelf big title={text('Artists_Collaborations')} albums={recordsOf(artist.together)} onOpen={open} />{/if}
+    {#if artist.appearances.length}<Shelf big title={text('Artists_AppearsOn')} albums={recordsOf(artist.appearances)} {onOpen} />{/if}
     <section>
-      <h3>{text('Artists_AllTracks')}</h3>
-      <TrackRows tracks={songs} />
+      <div class="tracks-head">
+        <h3 class="shelf-title">{text('Artists_AllTracks')}</h3>
+        <label class="find"><i class="icon">{icons.search}</i><input type="search" placeholder={text('Artists_SearchTracks')} aria-label={text('Artists_SearchTracks')} bind:value={finding} /></label>
+      </div>
+      <TrackRows plain tracks={foundSongs} />
     </section>
   </div>
 </div>
@@ -132,14 +149,15 @@
     left: 14px;
     margin: 0;
     color: #fff;
-    font-size: 22px;
+    font-size: 28px;
+    font-weight: 700;
     text-shadow: 0 1px 6px rgb(0 0 0 / 0.7);
   }
 
   .back {
     position: absolute;
-    top: 8px;
-    left: 8px;
+    top: 22px;
+    left: 24px;
   }
 
   .steps {
@@ -150,14 +168,68 @@
     gap: 6px;
   }
 
-  aside > .glass-button {
+  .play-all {
+    display: inline-flex;
+    flex: none;
+    gap: 7px;
+    align-items: center;
     align-self: flex-start;
+    height: 28px;
     margin-left: 14px;
+    padding: 0 14px;
+    border: 1px solid rgb(255 255 255 / 0.149);
+    border-radius: 14px;
+    background: rgb(255 255 255 / 0.078);
+    color: rgb(255 255 255 / 0.95);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .play-all .icon {
+    font-size: 10px;
+  }
+
+  .tracks-head {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .find {
+    display: flex;
+    flex: 0 1 200px;
+    gap: 8px;
+    align-items: center;
+    height: 28px;
+    padding: 0 9px;
+    border: 1px solid rgb(255 255 255 / 0.133);
+    border-radius: 6px;
+    color: rgb(255 255 255 / 0.6);
+    font-size: 12px;
+  }
+
+  .find input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    background: none;
+    color: #fff;
+    font-size: 16px;
+    outline: none;
+  }
+
+  @media (pointer: fine) {
+    .find input {
+      font-size: 12px;
+    }
   }
 
   .records {
     min-width: 0;
-    padding: 14px 0 18px;
+    padding: 16px 16px 18px 12px;
     overflow-y: auto;
   }
 
@@ -166,13 +238,6 @@
     padding: 14px;
     border-radius: 10px;
     background: rgb(255 255 255 / 0.06);
-  }
-
-  h3 {
-    margin: 0 0 8px;
-    color: rgb(255 255 255 / 0.8);
-    font-size: 12.5px;
-    font-weight: 400;
   }
 
   @media (max-width: 899px) {

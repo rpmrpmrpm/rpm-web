@@ -174,10 +174,9 @@
   h2 {
     overflow: hidden;
     margin: 0;
-    font-size: 24px;
-    font-weight: 700;
+    font-size: 22px;
+    font-weight: 600;
     text-overflow: ellipsis;
-    text-transform: uppercase;
     white-space: nowrap;
   }
 
@@ -186,13 +185,13 @@
   }
 
   .artist {
-    font-size: 16px;
-    color: var(--text-soft);
+    font-size: 15px;
+    color: rgb(255 255 255 / 0.87);
   }
 
   .album {
     margin-bottom: 8px;
-    font-size: 14px;
-    color: var(--text-soft);
+    font-size: 13px;
+    color: rgb(255 255 255 / 0.6);
   }
 </style>

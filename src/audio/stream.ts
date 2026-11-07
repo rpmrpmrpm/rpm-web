@@ -61,6 +61,7 @@ export class Stream {
   private atJoin = false;
   // The address went to the worker, so a report of waiting that crossed it on the way means nothing.
   private joinSent = false;
+  private answerWithdrawn: ((count: number) => void) | null = null;
   // The stream time the playhead is moving to after a key press. Until it gets there, the boundary
   // table says nothing true about what is playing.
   private jumpTo: number | null = null;
@@ -160,6 +161,14 @@ export class Stream {
     this.pull();
   }
 
+  // Takes back the tracks the worker has not started. The answer is how many there were.
+  withdraw(): Promise<number> {
+    return new Promise((done) => {
+      this.answerWithdrawn = done;
+      this.send({ type: 'withdraw' });
+    });
+  }
+
   // The address of a track that started on its head clip.
   join(id: string, url: string) {
     this.joinSent = true;
@@ -192,6 +201,11 @@ export class Stream {
       return;
     }
     if (data.type === 'ready') return;
+    if (data.type === 'withdrawn') {
+      this.answerWithdrawn?.(data.count);
+      this.answerWithdrawn = null;
+      return;
+    }
 
     // Audio of what was playing before the last key press.
     if (data.epoch !== this.epoch) return;

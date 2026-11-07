@@ -187,9 +187,9 @@
 <svelte:window onpointerdown={closeOnOutside} onkeydown={(event) => event.key === 'Escape' && (panel = null)} />
 
 <div class="radio">
-  <div class="head">
+  <div class="pane-head">
     <h2 class="heading">{text('Radio_Title')}</h2>
-    <p>{heading}</p>
+    <p class="pane-line">{heading}</p>
   </div>
 
   <div class="dial"><RadioDial stations={shown} tuned={onAir.station} {status} reconnecting={onAir.air === 'reconnecting'} onTune={(station) => tuner.tune(station, shown)} /></div>
@@ -204,7 +204,7 @@
     </button>
     <button class="tool opens square" class:set={order !== 'listed'} title={text('Radio_Sort')} aria-label={text('Radio_Sort')} onclick={() => (panel = panel === 'sort' ? null : 'sort')}><i class="icon">{icons.sortUp}</i></button>
     <button class="tool opens square" class:set={sieveIsOn(sieve)} title={text('Radio_Filter')} aria-label={text('Radio_Filter')} onclick={() => (panel = panel === 'filter' ? null : 'filter')}><i class="icon">{icons.filter}</i></button>
-    <button class="tool square saved" class:on={savedOnly} title={text('Radio_ShowFavorites')} aria-label={text('Radio_ShowFavorites')} aria-pressed={savedOnly} onclick={() => (savedOnly = !savedOnly)}><i class="icon">{icons.heart}</i></button>
+    <button class="tool square saved" class:on={savedOnly} title={text('Radio_ShowFavorites')} aria-label={text('Radio_ShowFavorites')} aria-pressed={savedOnly} onclick={() => (savedOnly = !savedOnly)}><i class="icon" class:outline={!savedOnly}>{icons.heart}</i></button>
 
     {#if panel === 'country'}
       <div class="panel" role="menu">
@@ -256,8 +256,8 @@
           </div>
           <span class="detail">{detail(station)}</span>
         </div>
-        <span class="sign">{callSign(displayOf(station))}</span>
-        <button class="heart" class:on={isSaved(station)} title={saveLabel} aria-label={saveLabel} aria-pressed={isSaved(station)} onclick={() => radioFavorites.toggle(station)}><i class="icon">{icons.heart}</i></button>
+        <span class="sign">({callSign(displayOf(station))})</span>
+        <button class="heart" class:on={isSaved(station)} title={saveLabel} aria-label={saveLabel} aria-pressed={isSaved(station)} onclick={() => radioFavorites.toggle(station)}><i class="icon" class:outline={!isSaved(station)}>{icons.heart}</i></button>
         <button class="glass-button primary tune" disabled={!works} title={works ? text(isTuned(station) ? 'Radio_StopStation' : 'Radio_PlayStation') : text('Web_RadioNotHere')} aria-label={text(isTuned(station) ? 'Radio_StopStation' : 'Radio_PlayStation')} onclick={() => press(station)}><i class="icon">{isTuned(station) ? icons.stop : icons.play}</i></button>
       </li>
     {/each}
@@ -274,20 +274,6 @@
     height: 100%;
     min-height: 0;
     overflow-y: auto;
-  }
-
-  .head {
-    display: flex;
-    flex-direction: column;
-    flex: none;
-    gap: 6px;
-    padding: 12px 16px 4px;
-  }
-
-  .head p {
-    margin: 0;
-    color: var(--text-soft);
-    font-size: 11.5px;
   }
 
   .dial {

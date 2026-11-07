@@ -40,11 +40,14 @@
   --warning: #ffd466;
   --accent: #04c8ff;
   --found: #4cd964;
-  --favorite: #ff6b81;
+  --favorite: #ee0709;
+  --favorite-idle: rgb(255 255 255 / 0.4);
   /* Everything that moves uses this: the desktop's cubic ease-out. */
   --move: cubic-bezier(0.215, 0.61, 0.355, 1);
   --glass-face: rgb(255 255 255 / 0.1);
   --glass-primary: rgb(255 255 255 / 0.2);
+  /* What is chosen in a row of segments: the palette's azure, thin enough for the glass to show. */
+  --selected: rgb(3 113 208 / 0.227);
 
   /* Touch targets on a device with no hover; the desktop's own sizes elsewhere. */
   --control-height: 40px;
@@ -79,9 +82,12 @@ textarea {
   color: inherit;
 }
 
+/* The desktop's button: a flat face, a hairline, and a wash under the pointer. The primary is told apart only by a
+   brighter face, so nothing on the page is whiter than it has to be. */
 .glass-button,
 .tool {
-  --face: rgb(255 255 255 / 0.08);
+  --face: rgb(255 255 255 / 0.078);
+  --wash: transparent;
   position: relative;
   display: inline-flex;
   gap: 8px;
@@ -91,10 +97,9 @@ textarea {
   height: 32px;
   min-width: 80px;
   padding: 0 15px;
-  border: 1px solid rgb(255 255 255 / 0.13);
+  border: 1px solid rgb(255 255 255 / 0.133);
   border-radius: 6px;
-  background: linear-gradient(var(--face), var(--face)), linear-gradient(rgb(255 255 255 / 0.22), rgb(255 255 255 / 0.15));
-  box-shadow: 0 3px 3px rgb(0 0 0 / 0.2);
+  background: linear-gradient(var(--wash), var(--wash)), linear-gradient(var(--face), var(--face));
   color: rgb(255 255 255 / 0.94);
   font: inherit;
   font-size: 13px;
@@ -105,67 +110,127 @@ textarea {
   cursor: pointer;
 }
 
-/* Two short glints where the light catches the rim: top left, and bottom right. */
-.glass-button::before,
-.glass-button::after,
-.tool::before,
-.tool::after {
-  position: absolute;
-  width: min(88px, 70%);
-  height: 1.5px;
-  border-radius: 1px;
-  content: '';
-  pointer-events: none;
-}
-
-.glass-button::before,
-.tool::before {
-  top: -1px;
-  left: 6px;
-  background: linear-gradient(90deg, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0.19) 18%, rgb(255 255 255 / 0.07) 50%, transparent);
-}
-
-.glass-button::after,
-.tool::after {
-  right: 6px;
-  bottom: -1px;
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.07) 50%, rgb(255 255 255 / 0.19) 82%, rgb(255 255 255 / 0.32));
-}
-
 .glass-button.primary {
   --face: rgb(255 255 255 / 0.2);
   color: #fff;
 }
 
 .glass-button.danger {
-  --face: rgb(255 107 107 / 0.15);
+  --face: rgb(255 107 107 / 0.149);
 }
 
 .glass-button:disabled,
 .tool:disabled {
-  opacity: 0.45;
+  color: rgb(255 255 255 / 0.33);
   cursor: default;
 }
 
 .glass-button:not(:disabled):active,
 .tool:not(:disabled):active {
-  box-shadow: none;
-  filter: brightness(0.87);
-  transform: translateY(1.5px);
-}
-
-.glass-button:not(:disabled):active::before,
-.glass-button:not(:disabled):active::after,
-.tool:not(:disabled):active::before,
-.tool:not(:disabled):active::after {
-  opacity: 0.3;
+  --wash: rgb(255 255 255 / 0.157);
 }
 
 @media (hover: hover) {
   .glass-button:not(:disabled):hover,
   .tool:not(:disabled):hover {
-    background-image: linear-gradient(45deg, rgb(255 255 255 / 0.01), rgb(255 255 255 / 0.07) 50%, rgb(255 255 255 / 0.01)), linear-gradient(var(--face), var(--face)), linear-gradient(rgb(255 255 255 / 0.22), rgb(255 255 255 / 0.15));
+    --wash: rgb(255 255 255 / 0.094);
   }
+
+  .glass-button:not(:disabled):active,
+  .tool:not(:disabled):active {
+    --wash: rgb(255 255 255 / 0.157);
+  }
+}
+
+/* A key on the deck or on a pane: no face at all, only a hairline, so the glass shows through. */
+.deck-pill {
+  --wash: transparent;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid rgb(255 255 255 / 0.133);
+  border-radius: 6px;
+  background: linear-gradient(var(--wash), var(--wash));
+  color: rgb(255 255 255 / 0.87);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The way back from a page: it stands on pictures, so it has an edge of its own. */
+.back-key {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.55);
+  border-radius: 6px;
+  background: none;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .back-key:hover {
+    background: rgb(0 0 0 / 0.3);
+  }
+}
+
+.back-key:active {
+  background: rgb(0 0 0 / 0.4);
+}
+
+/* A shelf on a page of its own, where the heading is read from across the pane. */
+.shelf-title {
+  margin: 0 0 14px;
+  color: rgb(255 255 255 / 0.93);
+  font-size: 19px;
+  font-weight: 600;
+}
+
+/* The small glyph keys beside a record's name: play, shuffle, and the menu. */
+.mini-key {
+  --wash: transparent;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  min-width: 25px;
+  height: 21px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: linear-gradient(var(--wash), var(--wash));
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .mini-key {
+    min-width: 36px;
+    height: 36px;
+  }
+}
+
+@media (hover: hover) {
+  .deck-pill:not(:disabled):hover,
+  .mini-key:not(:disabled):hover {
+    --wash: rgb(255 255 255 / 0.094);
+    color: #fff;
+  }
+}
+
+.deck-pill:not(:disabled):active,
+.mini-key:not(:disabled):active {
+  --wash: rgb(255 255 255 / 0.157);
+  color: #fff;
 }
 
 /* A field on a form: 24 high with 12 pt text, so a whole record fits on screen. */
@@ -305,16 +370,16 @@ input[type='radio']:checked::after {
   cursor: pointer;
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .glass-button {
-    backdrop-filter: none;
-  }
-}
-
 @font-face {
   font-family: Icons;
   font-display: block;
   src: url('/fonts/icons.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Icons Regular';
+  font-display: block;
+  src: url('/fonts/icons-regular.woff2') format('woff2');
 }
 
 .icon {
@@ -322,6 +387,11 @@ input[type='radio']:checked::after {
   font-weight: 900;
   font-style: normal;
   line-height: 1;
+}
+
+.icon.outline {
+  font-family: 'Icons Regular';
+  font-weight: 400;
 }
 
 /* A key with a flat glyph and no chrome, as on the deck. */
@@ -346,7 +416,7 @@ input[type='radio']:checked::after {
 /* The frosted card of a pane or the deck. */
 .pane {
   border: 1px solid rgb(255 255 255 / 0.13);
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgb(0 0 0 / 0.2);
   backdrop-filter: blur(30px);
 }
@@ -358,10 +428,28 @@ input[type='radio']:checked::after {
   }
 }
 
+/* The head of every pane: 12 of margin, the 36 of the title, and a line pulled up under it with room below. So all
+   panes start their content on one line, 71 down, whatever they say. */
+.pane-head {
+  flex: none;
+  padding: 12px 16px 0;
+}
+
+.pane-line {
+  height: 15px;
+  margin: -4px 0 12px;
+  overflow: hidden;
+  color: rgb(255 255 255 / 0.55);
+  font-size: 11px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
 .heading {
   margin: 0;
-  color: rgb(255 255 255 / 0.5);
-  font: 400 78px / 36px Thiamine, Cabin, sans-serif;
+  color: rgb(255 255 255 / 0.55);
+  font: 400 72px / 36px Thiamine, Cabin, sans-serif;
   text-transform: lowercase;
   white-space: nowrap;
 }
@@ -390,37 +478,37 @@ input[type='radio']:checked::after {
 }
 
 .slider::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-  background: linear-gradient(to right, #fff var(--fill, 0%), rgb(255 255 255 / 0.25) var(--fill, 0%));
+  height: 3px;
+  border-radius: 1.5px;
+  background: linear-gradient(to right, rgb(255 255 255 / 0.72) var(--fill, 0%), rgb(255 255 255 / 0.18) var(--fill, 0%));
 }
 
 .slider::-moz-range-track {
-  height: 4px;
-  border-radius: 2px;
-  background: rgb(255 255 255 / 0.25);
+  height: 3px;
+  border-radius: 1.5px;
+  background: rgb(255 255 255 / 0.18);
 }
 
 .slider::-moz-range-progress {
-  height: 4px;
-  border-radius: 2px;
-  background: #fff;
+  height: 3px;
+  border-radius: 1.5px;
+  background: rgb(255 255 255 / 0.72);
 }
 
 .slider::-webkit-slider-thumb {
-  width: 14px;
-  height: 14px;
-  margin-top: -5px;
+  width: 11px;
+  height: 11px;
+  margin-top: -4px;
   border: 0;
   border-radius: 50%;
-  background: #fff;
+  background: rgb(255 255 255 / 0.72);
   appearance: none;
 }
 
 .slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 11px;
+  height: 11px;
   border: 0;
   border-radius: 50%;
-  background: #fff;
+  background: rgb(255 255 255 / 0.72);
 }

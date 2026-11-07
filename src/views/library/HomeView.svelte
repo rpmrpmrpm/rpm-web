@@ -8,11 +8,17 @@
   import { library } from '../../state.svelte';
   import { albumCount } from '../../strings/counts';
   import { text } from '../../strings/loc';
+  import { icons } from '../../design/icons';
   import HomeBanner from './HomeBanner.svelte';
   import QuickSelection, { type QuickEntry } from './QuickSelection.svelte';
   import Shelf from './Shelf.svelte';
 
   let { onOpen, onImport }: { onOpen: (album: CloudAlbum) => void; onImport: () => void } = $props();
+
+  // Under this the screen cannot answer its own headings, so it says what it is waiting for. HomeGate on the desktop.
+  const LEAST_ALBUMS = 25;
+  const RING_RADIUS = 89.5;
+  const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
   const TITLES: Record<HomeRowKind, string> = {
     listened: 'Home_Listened',
@@ -75,22 +81,38 @@
 <div class="home">
   <header>
     <h2 class="heading">{text('Home_Heading')}</h2>
-    <p>{albumCount(library.albums.length)}</p>
+    {#if library.albums.length >= LEAST_ALBUMS}<p>{albumCount(library.albums.length)}</p>{/if}
   </header>
 
-  <HomeBanner {cards} {albumOf} {onOpen} />
-  <QuickSelection {entries} />
-
-  {#each rows as row (row.kind)}
-    <Shelf title={text(TITLES[row.kind])} albums={row.albums} {onOpen} />
-  {:else}
-    {#if library.state === 'ready'}
-      <div class="message">
-        <p>{text('Web_LibraryEmpty')}</p>
-        <button class="glass-button primary" onclick={onImport}>{text('Queue_Title')}</button>
+  {#if library.state === 'ready' && library.albums.length < LEAST_ALBUMS}
+    {@const toGo = LEAST_ALBUMS - library.albums.length}
+    <div class="gate">
+      <svg class="ring" viewBox="0 0 188 188" role="presentation">
+        <defs>
+          <linearGradient id="ring-ink" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#0371d0" />
+            <stop offset="1" stop-color="#04c8ff" />
+          </linearGradient>
+        </defs>
+        <circle class="track" cx="94" cy="94" r={RING_RADIUS} />
+        <circle class="arc" cx="94" cy="94" r={RING_RADIUS} stroke-dasharray="{(library.albums.length / LEAST_ALBUMS) * RING_LENGTH} {RING_LENGTH}" />
+      </svg>
+      <div class="words">
+        <span class="kicker">{text('HomeLock_Kicker')}</span>
+        <h3>{toGo === 1 ? text('HomeLock_ToGoOne') : text('HomeLock_ToGo', toGo)}</h3>
+        <p class="body">{text('HomeLock_Body')}</p>
+        <p class="progress">{text('HomeLock_Progress', library.albums.length, LEAST_ALBUMS)}</p>
+        <button class="glass-button primary add" onclick={onImport}><i class="icon">{icons.plus}</i>{text('HomeLock_AddMusic')}</button>
       </div>
-    {/if}
-  {/each}
+    </div>
+  {:else}
+    <HomeBanner {cards} {albumOf} {onOpen} />
+    <QuickSelection {entries} />
+
+    {#each rows as row (row.kind)}
+      <Shelf title={text(TITLES[row.kind])} albums={row.albums} {onOpen} />
+    {/each}
+  {/if}
 </div>
 
 <style>
@@ -109,12 +131,103 @@
   }
 
   header p {
-    margin: 8px 0 0;
-    color: rgb(255 255 255 / 0.6);
-    font-size: 11.5px;
+    margin: 0;
+    color: rgb(255 255 255 / 0.55);
+    font-size: 11px;
+    line-height: 15px;
   }
 
-  .message {
-    color: var(--text-soft);
+  .gate {
+    display: flex;
+    flex: 1;
+    gap: 44px;
+    align-items: center;
+    justify-content: center;
+    margin: 24px;
+  }
+
+  .ring {
+    flex: none;
+    width: 188px;
+    height: 188px;
+    transform: rotate(-90deg);
+  }
+
+  circle {
+    fill: none;
+    stroke-width: 9;
+  }
+
+  .track {
+    stroke: rgb(255 255 255 / 0.11);
+  }
+
+  .arc {
+    stroke: url(#ring-ink);
+    stroke-linecap: round;
+  }
+
+  .words {
+    display: flex;
+    flex-direction: column;
+    gap: 17px;
+    align-items: flex-start;
+    max-width: 470px;
+  }
+
+  .kicker {
+    color: rgb(255 255 255 / 0.42);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+  }
+
+  h3 {
+    margin: 0;
+    color: #fff;
+    font-size: 31px;
+    font-weight: 700;
+    line-height: 1.15;
+  }
+
+  .body {
+    margin: 0;
+    color: rgb(255 255 255 / 0.64);
+    font-size: 13.5px;
+    line-height: 21px;
+  }
+
+  .progress {
+    margin: 0;
+    color: rgb(255 255 255 / 0.42);
+    font-size: 12px;
+  }
+
+  .add {
+    gap: 9px;
+    margin-top: 3px;
+    padding: 0 22px;
+    font-weight: 700;
+  }
+
+  .add .icon {
+    font-size: 12px;
+  }
+
+  @media (max-width: 699px) {
+    .gate {
+      flex-direction: column;
+      gap: 28px;
+      margin: 12px 8px;
+    }
+
+    .ring {
+      width: 140px;
+      height: 140px;
+    }
+
+    .words {
+      align-items: center;
+      text-align: center;
+    }
   }
 </style>

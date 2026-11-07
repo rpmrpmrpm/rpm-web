@@ -31,7 +31,7 @@
 
 {#if platform}
   <div class="download">
-    <button class="glass-button primary" disabled={busy} onclick={pressed}>{text('Web_DesktopDownload', name)}</button>
+    <button class="deck-pill" disabled={busy} onclick={pressed}>{text('Web_DesktopDownload', name)}</button>
     {#if choosing}
       <div class="menu">
         <button onclick={() => download('mac-arm64')}>{text('Web_DesktopAppleSilicon')}</button>
@@ -47,9 +47,10 @@
     position: relative;
   }
 
-  .glass-button {
-    padding: 7px 14px;
-    font-size: 13px;
+  .deck-pill {
+    height: 28px;
+    padding: 0 12px;
+    font-size: 12px;
   }
 
   .menu {

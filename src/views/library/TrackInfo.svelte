@@ -8,7 +8,7 @@
   import type { Article } from '../../library/articles';
   import { library, now } from '../../state.svelte';
   import { text } from '../../strings/loc';
-  import AlbumOpen from './AlbumOpen.svelte';
+  import { asked } from './record-menu.svelte';
   import Heart from './Heart.svelte';
   import LyricWell from './LyricWell.svelte';
   import MemberFace from './MemberFace.svelte';
@@ -32,7 +32,6 @@
   let dossier = $state.raw<Dossier | null>(null);
   let artistOpen = $state(false);
   let albumOpen = $state(false);
-  let opened = $state(false);
   let scrolled = $state(0);
 
   $effect(() => {
@@ -127,7 +126,7 @@
             <div class="keys">
               <span class="glass-button primary heart"><Heart {track} /></span>
               {#if album}
-                <button class="glass-button primary open" title={text('AlbumMenu_AlbumPage')} onclick={() => (opened = true)}>
+                <button class="glass-button primary open" title={text('AlbumMenu_AlbumPage')} onclick={() => (asked.opening = album ?? null)}>
                   <i class="icon">{icons.album}</i>{text('TrackInfo_OpenAlbum')}<i class="icon small">{icons.forward}</i>
                 </button>
               {/if}
@@ -216,9 +215,6 @@
   {/if}
 </div>
 
-{#if opened && album}
-  <AlbumOpen {album} {compact} onClose={() => (opened = false)} />
-{/if}
 
 <style>
   .sheet {

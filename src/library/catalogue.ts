@@ -20,6 +20,8 @@ export class Catalogue {
   albums: CloudAlbum[] = [];
   state: CatalogueState = 'opening';
   ordering: AlbumOrdering = 'Artist';
+  // Set by the app: how often a record has been played, for the wall's order by plays.
+  playsOf: (album: CloudAlbum) => number = () => 0;
   // A refresh failed while a copy is on screen. The copy stays, with a way to try again.
   stale = false;
   read = 0;
@@ -48,7 +50,7 @@ export class Catalogue {
 
   private show(tracks: CloudTrack[]) {
     this.tracks = tracks;
-    this.albums = sortAlbums(groupAlbums(tracks), this.ordering);
+    this.albums = sortAlbums(groupAlbums(tracks), this.ordering, this.playsOf);
   }
 
   async open(userId: string): Promise<void> {
@@ -117,7 +119,7 @@ export class Catalogue {
 
   setOrdering(ordering: AlbumOrdering) {
     this.ordering = ordering;
-    this.albums = sortAlbums(this.albums, ordering);
+    this.albums = sortAlbums(this.albums, ordering, this.playsOf);
     this.changed();
   }
 

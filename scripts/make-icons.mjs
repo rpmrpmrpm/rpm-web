@@ -11,11 +11,15 @@ const root = new URL('..', import.meta.url).pathname;
 const source = readFileSync(`${root}src/design/icons.ts`, 'utf8');
 const glyphs = [...source.matchAll(/\\u([0-9a-f]{4})/g)].map((match) => String.fromCodePoint(parseInt(match[1], 16))).join('');
 
-const pro = `${root}../rpm-fonts-pro/fa-solid-900.ttf`;
-const free = `${root}node_modules/@fortawesome/fontawesome-free/webfonts/fa-solid-900.ttf`;
-const from = existsSync(pro) ? pro : free;
-
-const font = await subsetFont(readFileSync(from), glyphs, { targetFormat: 'woff2' });
 mkdirSync(`${root}public/fonts`, { recursive: true });
-writeFileSync(`${root}public/fonts/icons.woff2`, font);
-console.log(`icons: ${[...glyphs].length} glyphs from ${from === pro ? 'Font Awesome Pro' : 'Font Awesome Free'}, ${font.length} bytes`);
+
+// The regular face holds the one outline in the app, a heart that is not marked.
+for (const [face, wanted, output] of [['fa-solid-900', glyphs, 'icons'], ['fa-regular-400', '\uf004', 'icons-regular']]) {
+  const pro = `${root}../rpm-fonts-pro/${face}.ttf`;
+  const free = `${root}node_modules/@fortawesome/fontawesome-free/webfonts/${face}.ttf`;
+  const from = existsSync(pro) ? pro : free;
+
+  const font = await subsetFont(readFileSync(from), wanted, { targetFormat: 'woff2' });
+  writeFileSync(`${root}public/fonts/${output}.woff2`, font);
+  console.log(`${output}: ${[...wanted].length} glyphs from ${from === pro ? 'Font Awesome Pro' : 'Font Awesome Free'}, ${font.length} bytes`);
+}

@@ -28,7 +28,7 @@
   <aside>
     <p class:trouble={note}>{note || text(here ? 'Web_DesktopHere' : 'Web_DesktopPitch')}</p>
     {#if openable}
-      <a class={here ? 'glass-button primary' : 'link'} href={OPEN_ADDRESS} target={openTarget} onclick={opened}>{text('Web_DesktopOpen')}</a>
+      <a class={here ? 'deck-pill' : 'link'} href={OPEN_ADDRESS} target={openTarget} onclick={opened}>{text('Web_DesktopOpen')}</a>
     {/if}
     {#if !here}
       <DesktopGet onTrouble={(trouble) => (note = trouble)} />
@@ -63,16 +63,9 @@
     }
   }
 
-  a.glass-button {
-    display: inline-flex;
-    align-items: center;
-    color: inherit;
-    text-decoration: none;
+  a.deck-pill {
+    height: 28px;
+    padding: 0 12px;
+    font-size: 12px;
   }
-
-  .glass-button {
-    padding: 7px 14px;
-    font-size: 13px;
-  }
-
 </style>

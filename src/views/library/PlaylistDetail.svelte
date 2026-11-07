@@ -7,8 +7,10 @@
   import type { CloudAlbum } from '../../library/albums';
   import { library, now } from '../../state.svelte';
   import { text } from '../../strings/loc';
+  import { menuOn, type MenuEntry } from '../menu/menu.svelte';
   import Heart from './Heart.svelte';
   import PlaylistCover from './PlaylistCover.svelte';
+  import { trackMenu } from './record-menu.svelte';
 
   let { id = null, name, subtitle, tracks, glyph, version = 0, onBack, onRemove, onMove, keys }: {
     id?: string | null;
@@ -36,6 +38,11 @@
     for (const album of library.albums) for (const track of album.tracks) byTrack.set(track.rpmId, album);
     return byTrack;
   });
+
+  function menuOf(track: CloudTrack, index: number): MenuEntry[] {
+    const entries = trackMenu(track, tracks, index, { inAlbumOrder: false, album: albumOf.get(track.rpmId) });
+    return onRemove ? [...entries, 'rule', { label: text('Playlists_Remove'), glyph: icons.minus, run: () => onRemove(track, index) }] : entries;
+  }
 
   const time = (track: CloudTrack) => {
     const total = Math.round(durationSeconds(track));
@@ -143,7 +150,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <ol bind:this={list} class:moving={dragging !== null} onpointermove={dragged} onpointerup={released} onpointercancel={released}>
       {#each tracks as track, index (`${track.rpmId}-${index}`)}
-        <li class:on={now.track?.rpmId === track.rpmId} class:lifted={dragging === index} class:above={dropAt === index} class:below={dropAt === tracks.length && index === tracks.length - 1}>
+        <li class:on={now.track?.rpmId === track.rpmId} class:lifted={dragging === index} class:above={dropAt === index} class:below={dropAt === tracks.length && index === tracks.length - 1} use:menuOn={() => menuOf(track, index)}>
           <button class="song" onpointerdown={(event) => pressed(event, index)} onclick={() => played(index)} onkeydown={(event) => nudged(event, index)}>
             <span class="place">{index + 1}</span>
             <span class="sleeve">

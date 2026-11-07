@@ -36,6 +36,12 @@ tuner.onChange(() => {
   onAir.wantsToPlay = tuner.wantsToPlay;
 });
 
+// What the room behind the panes takes its colour from while a page is open, ahead of the record playing.
+export const room = $state({
+  album: null as CloudAlbum | null,
+  colour: null as string | null,
+});
+
 export const library = $state({
   albums: [] as CloudAlbum[],
   state: 'opening' as CatalogueState,

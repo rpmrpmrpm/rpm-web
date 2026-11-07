@@ -234,6 +234,38 @@ export class Player {
     this.heads.warm(tracks.slice(index).map((track) => track.rpmId));
   }
 
+  // These tracks straight after the one playing. The next track is usually in the worker's queue already, and it
+  // waits its turn behind them: it is taken back, unless it has started.
+  async playNext(tracks: readonly CloudTrack[]) {
+    if (!tracks.length) return;
+    if (!this.current || this.stopped) {
+      this.play(tracks, 0, { inAlbumOrder: false });
+      return;
+    }
+    const moves = this.moves;
+    const taken = this.tail > this.index ? await this.stream.withdraw() : 0;
+    if (moves !== this.moves) return;
+    if (taken) this.tail = this.index;
+    this.waitingLive = null;
+    this.insert(tracks, this.tail + 1);
+  }
+
+  // These tracks at the end of the queue. With nothing playing they start.
+  addToQueue(tracks: readonly CloudTrack[]) {
+    if (!tracks.length) return;
+    if (!this.current || this.stopped) this.play(tracks, 0, { inAlbumOrder: false });
+    else this.insert(tracks, this.queue.length);
+  }
+
+  private insert(tracks: readonly CloudTrack[], at: number) {
+    const rows = tracks.map((track) => ({ track }));
+    this.queue = [...this.queue.slice(0, at), ...rows, ...this.queue.slice(at)];
+    this.beforeShuffle?.push(...rows);
+    this.inAlbumOrder = false;
+    this.requeue();
+    void this.handAfterTail();
+  }
+
   // Starts the row at this position, whatever was playing.
   private moveTo(index: number, startAt?: number) {
     const row = this.queue[index];

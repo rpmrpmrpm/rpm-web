@@ -3,16 +3,18 @@
   import type { CloudAlbum } from '../../library/albums';
   import AlbumCard from './AlbumCard.svelte';
 
-  let { title, albums, onOpen }: { title: string; albums: CloudAlbum[]; onOpen: (album: CloudAlbum) => void } = $props();
+  let { title, albums, onOpen, big = false }: { title: string; albums: CloudAlbum[]; onOpen: (album: CloudAlbum) => void; big?: boolean } = $props();
 
   const SIZE = 150;
+  const BIG_SIZE = 186;
+  const size = $derived(big ? BIG_SIZE : SIZE);
 </script>
 
 <section>
-  <h3>{title}</h3>
+  <h3 class:shelf-title={big}>{title}</h3>
   <div class="strip">
     {#each albums as album (album.key)}
-      <div class="slot"><AlbumCard {album} size={SIZE} open={false} onOpen={() => onOpen(album)} /></div>
+      <div class="slot" style:width="{size}px"><AlbumCard {album} {size} open={false} shelf={big} onOpen={() => onOpen(album)} /></div>
     {/each}
   </div>
 </section>
@@ -22,11 +24,11 @@
     margin-bottom: 26px;
   }
 
-  h3 {
+  h3:not(.shelf-title) {
     margin: 0 0 8px;
-    color: rgb(255 255 255 / 0.8);
-    font-size: 12.5px;
-    font-weight: 400;
+    color: rgb(255 255 255 / 0.67);
+    font-size: 12px;
+    font-weight: 600;
   }
 
   .strip {
@@ -39,6 +41,5 @@
 
   .slot {
     flex: none;
-    width: 150px;
   }
 </style>

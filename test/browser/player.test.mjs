@@ -70,6 +70,25 @@ for (const [name, engine, options] of [
     await browser.close();
   });
 
+  test(`${name}: Play next goes straight after the track playing, ahead of what was cued`, { timeout: 90_000 }, async () => {
+    const { browser, page, problems } = await open(engine, options);
+    await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac'), 0);");
+    await playing(page, 'flac 1');
+
+    // By now the second track is in the worker's queue.
+    await page.waitForFunction(() => window.signs.includes('flac-2'));
+    await page.evaluate(() => window.player.playNext(window.album('aac128').slice(2, 3)));
+    await page.waitForFunction(() => window.player.queue[1]?.track.title === 'aac128 3');
+    await page.evaluate(() => window.player.seek(23));
+    await playing(page, 'aac128 3', 40_000);
+    assert.equal((await read(page)).index, 1);
+
+    await page.evaluate(() => window.player.addToQueue(window.album('aac128').slice(4, 5)));
+    assert.equal(await page.evaluate(() => window.player.queue.at(-1).track.title), 'aac128 5');
+    assert.deepEqual(problems, []);
+    await browser.close();
+  });
+
   test(`${name}: Next pressed twice lands on the second press, with nothing of the others`, { timeout: 90_000 }, async () => {
     const { browser, page, problems } = await open(engine, options);
     await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac'), 0);");

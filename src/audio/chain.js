@@ -278,6 +278,13 @@ export class Chain {
     this.current = null;
   }
 
+  // Takes back what has not started, so that another track can go first. Says how many there were.
+  withdraw() {
+    const taken = this.queue.length;
+    this.queue = [];
+    return taken;
+  }
+
   // Adds a track ahead of the rest of the queue: one that is opened again after a failure.
   addFirst(track) {
     this.queue.unshift(track);

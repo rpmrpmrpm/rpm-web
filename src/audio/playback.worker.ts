@@ -21,6 +21,7 @@ export type ToWorker =
   | { type: 'join'; id: string; url: string }
   | { type: 'render'; epoch: number; seconds: number }
   | { type: 'stop'; epoch: number }
+  | { type: 'withdraw' }
   | { type: 'finish'; epoch: number }
   | { type: 'equalizer'; preamp: number; bands: number[] };
 
@@ -28,6 +29,7 @@ export type FromWorker =
   | { type: 'ready' }
   | { type: 'bytes'; epoch: number; bytes: Uint8Array; drained: boolean; waiting: boolean; failed: boolean; boundaries: Boundary[]; failures: Failure[] }
   | { type: 'stopped'; epoch: number; at: number }
+  | { type: 'withdrawn'; count: number }
   | { type: 'finished'; epoch: number; bytes: Uint8Array }
   | { type: 'error'; said: string };
 
@@ -107,6 +109,10 @@ const handlers = {
   render({ seconds, epoch: asked }: { seconds: number; epoch: number }) {
     // A render asked for before a stop has nothing to do with what is playing now.
     if (asked === epoch) sendBytes(chain.render(seconds));
+  },
+
+  withdraw() {
+    post({ type: 'withdrawn', count: chain.withdraw() });
   },
 
   stop(message: { epoch: number }) {

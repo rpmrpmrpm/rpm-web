@@ -44,12 +44,12 @@
     padding: 4px 2px;
     border: 0;
     background: none;
-    color: var(--text-faint);
-    font-size: 13px;
+    color: rgb(255 255 255 / 0.27);
+    font-size: 15px;
     cursor: pointer;
   }
 
   button.on {
-    color: var(--warning);
+    color: #f2c14e;
   }
 </style>

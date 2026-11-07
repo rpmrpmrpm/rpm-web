@@ -2,8 +2,12 @@
   import { covers } from '../../app';
   import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
+  import { trackCount } from '../../strings/counts';
+  import { menuOn } from '../menu/menu.svelte';
+  import { albumMenu } from './record-menu.svelte';
 
-  let { album, size, open, onOpen }: { album: CloudAlbum; size: number; open: boolean; onOpen: () => void } = $props();
+  // A shelf on a page of its own: the words stand left, and say when and how much in place of who.
+  let { album, size, open, onOpen, shelf = false }: { album: CloudAlbum; size: number; open: boolean; onOpen: () => void; shelf?: boolean } = $props();
 
   let sleeve = $state<string | null>(null);
 
@@ -23,12 +27,12 @@
   });
 </script>
 
-<button class="card" onclick={onOpen}>
+<button class="card" class:shelf onclick={onOpen} use:menuOn={() => albumMenu(album, 'collection')}>
   <span class="art" class:open style:height="{size}px">
     {#if sleeve}<img src={sleeve} alt="" loading="lazy" />{:else}<i class="icon">{icons.album}</i>{/if}
   </span>
   <span class="title">{album.album}</span>
-  <span class="artist">{album.artist}</span>
+  <span class="artist">{shelf ? [album.year, trackCount(album.tracks.length)].filter(Boolean).join('  •  ') : album.artist}</span>
 </button>
 
 <style>
@@ -41,6 +45,21 @@
     background: none;
     text-align: center;
     cursor: pointer;
+    -webkit-touch-callout: none;
+  }
+
+  .card.shelf {
+    text-align: left;
+  }
+
+  .card.shelf .title {
+    font-weight: 500;
+  }
+
+  .card.shelf .artist {
+    color: rgb(255 255 255 / 0.6);
+    font-size: 11px;
+    white-space: pre;
   }
 
   .art {

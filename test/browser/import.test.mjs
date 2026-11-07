@@ -125,7 +125,7 @@ test('a real import through the workbench', { skip: !email, timeout: 300_000 }, 
   await page.waitForFunction(() => [...document.querySelectorAll('.row .title')].map((row) => row.textContent).join() === 'Tone 1,Tone 2,Tone 3', null, { timeout: 30_000 });
   await page.screenshot({ path: join(work, 'workbench.png') });
 
-  await page.click('footer button:text-is("Import")');
+  await page.click('footer button.primary');
   await page.waitForFunction(() => document.querySelectorAll('.state.done').length === 3, null, { timeout: 120_000 });
 
   // A row says Imported once the track is in the cloud. The 128 copy and the measuring come after that.
@@ -173,7 +173,7 @@ test('a real import through the workbench', { skip: !email, timeout: 300_000 }, 
     await page.click('button:has-text("Clear finished")');
     await page.setInputFiles('input[type=file][multiple]', files.slice(0, 1));
     await page.waitForFunction(() => document.querySelectorAll('.row').length === 1, null, { timeout: 20_000 });
-    await page.click('footer button:text-is("Import")');
+    await page.click('footer button.primary');
     await page.waitForFunction(() => document.querySelectorAll('.state.known').length === 1, null, { timeout: 60_000 });
     assert.equal((await ours(page)).length, 3);
 

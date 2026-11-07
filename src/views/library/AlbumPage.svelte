@@ -25,7 +25,7 @@
 <section class="page">
   <button class="key" title={text('Common_Cancel')} onclick={onClose}><i class="icon">{icons.back}</i></button>
   {#if sleeve}<img src={sleeve} alt="" />{/if}
-  <AlbumDetail {album} columns={1} />
+  <AlbumDetail {album} columns={1} rating />
 </section>
 
 <style>
@@ -35,7 +35,7 @@
     z-index: 3;
     padding: max(8px, env(safe-area-inset-top)) 16px 90px;
     overflow-y: auto;
-    background: rgb(8 10 16 / 0.96);
+    background: #080a10;
   }
 
   img {

@@ -1,21 +1,18 @@
 <script lang="ts">
-  // A record: its name, its keys, and its tracklist by disc. The drawer on the wall and the page on a
+  // A record: its name with a few small keys, and its tracklist by disc, as the desktop's album band. Everything else
+  // a record can do is on its menu, behind the last key or a right click. The drawer on the wall and the page on a
   // phone both show this.
-  import { catalogue, cloud, covers, favorites, headClips, player } from '../../app';
-  import { durationSeconds, isExplicit, type CloudTrack } from '../../api/wire';
+  import { covers, favorites, headClips, player } from '../../app';
   import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
-  import { discOf, trackOf } from '../../library/grouping';
-  import { byDisc } from '../../library/tracklist';
-  import { library, now } from '../../state.svelte';
-  import { trackCount } from '../../strings/counts';
+  import { library } from '../../state.svelte';
   import { text } from '../../strings/loc';
-  import AddToPlaylist from './AddToPlaylist.svelte';
-  import EditTags from './EditTags.svelte';
-  import Heart from './Heart.svelte';
+  import { menuOn } from '../menu/menu.svelte';
+  import AlbumTracks from './AlbumTracks.svelte';
+  import { albumMenu, menuAt } from './record-menu.svelte';
   import Stars from './Stars.svelte';
 
-  let { album, columns = 2, onSleeve }: { album: CloudAlbum; columns?: number; onSleeve?: (url: string) => void } = $props();
+  let { album, columns = 2, rating = false, place = 'page', onSleeve }: { album: CloudAlbum; columns?: number; rating?: boolean; place?: 'collection' | 'page'; onSleeve?: (url: string) => void } = $props();
 
   let sleeve = $state<string | null>(null);
 
@@ -49,118 +46,51 @@
     };
   });
 
-  const discs = $derived(byDisc(album.tracks, discOf, trackOf));
-  const seconds = $derived(album.tracks.reduce((sum, track) => sum + durationSeconds(track), 0));
+  // Who, when, and what the files are, as the band's line.
+  const line = $derived.by(() => {
+    const first = album.tracks[0];
+    const extension = first?.relativePath?.split('.').pop()?.toUpperCase();
+    const bits = first?.tags?.bitsPerSample;
+    const rate = first?.tags?.sampleRate;
+    const depth = bits && rate ? `${bits}/${(rate / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}` : '';
+    return [album.artist, album.year, extension, depth].filter(Boolean).join(' · ');
+  });
 
-  const time = (value: number) => {
-    const total = Math.round(value);
-    return total ? `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}` : '';
-  };
-
-  const play = (track: CloudTrack) => player.play(album.tracks, album.tracks.indexOf(track));
-
-  let adding = $state<readonly CloudTrack[] | null>(null);
-  let editing = $state<readonly CloudTrack[] | null>(null);
-
-  // Deleting is asked about first, on the page, because it cannot be undone.
-  let asking = $state<readonly CloudTrack[] | null>(null);
-  let deleting = $state(false);
-  let refusal = $state('');
-
-  const asked = $derived(text('Web_DeleteAsk', asking?.length === 1 ? (asking[0]!.title ?? '') : album.album));
-
-  async function confirmDelete() {
-    const tracks = asking ?? [];
-    deleting = true;
-    refusal = '';
-    if (tracks.some((track) => track.rpmId === now.track?.rpmId)) player.stop();
-    // One at a time: each delete changes the account's usage total in a transaction, so two at once conflict.
-    let failed = 0;
-    for (const track of tracks) {
-      try {
-        await cloud.remove(track.rpmId);
-      } catch {
-        failed++;
-      }
-    }
-    deleting = false;
-    asking = null;
-    if (failed) refusal = text('Cloud_TracksNotRemoved', failed, tracks.length, '').trim();
-    await catalogue.refresh();
+  function shuffle() {
+    player.play(album.tracks, 0, { inAlbumOrder: false });
+    player.toggleShuffle();
   }
 </script>
 
-<div class="detail">
+<div class="detail" use:menuOn={() => albumMenu(album, place)}>
   <div class="main">
     <header>
-      <h3>{album.album}</h3>
-      <p>
-        {album.artist}{album.year ? ` • ${album.year}` : ''} • {trackCount(album.tracks.length)}
-        {seconds ? ` • ${Math.round(seconds / 60)} min` : ''}
-      </p>
-      <div class="keys">
-        <button class="glass-button primary" onclick={() => player.play(album.tracks, 0)}><i class="icon">{icons.play}</i> {text('AlbumMenu_Play')}</button>
-        <button
-          class="glass-button"
-          onclick={() => {
-            player.play(album.tracks, 0, { inAlbumOrder: false });
-            player.toggleShuffle();
-          }}><i class="icon">{icons.shuffle}</i> {text('AlbumMenu_Shuffle')}</button
-        >
-        <button class="glass-button" class:loved aria-pressed={loved} onclick={() => favorites.markAlbum(album, !loved)}><i class="icon">{icons.heart}</i> {text(loved ? 'Album_UnsetFavorite' : 'Album_SetFavorite')}</button>
-        <button class="glass-button" onclick={() => (adding = album.tracks)}><i class="icon">{icons.plus}</i> {text('Playlists_AddToPlaylist')}</button>
-        <button class="glass-button" onclick={() => (editing = album.tracks)}><i class="icon">{icons.pen}</i> {text('AlbumEdit_Title')}</button>
-        <button class="glass-button" onclick={() => (asking = album.tracks)}><i class="icon">{icons.trash}</i> {text('Delete_Cloud')}</button>
+      <div class="name">
+        <h3>{album.album}</h3>
+        <span class="keys">
+          <button class="mini-key" title={text('AlbumGrid_PlayAll')} aria-label={text('AlbumGrid_PlayAll')} onclick={() => player.play(album.tracks, 0)}><i class="icon">{icons.play}</i></button>
+          <button class="mini-key" title={text('AlbumGrid_Shuffle')} aria-label={text('AlbumGrid_Shuffle')} onclick={shuffle}><i class="icon">{icons.shuffle}</i></button>
+          <button class="mini-key" title={text('Common_MoreOptions')} aria-label={text('Common_MoreOptions')} onclick={(event) => menuAt(event, albumMenu(album, place))}><i class="icon">{icons.more}</i></button>
+        </span>
       </div>
-      <Stars {album} />
-      {#if asking}
-        <div class="ask" role="alert">
-          <span>{asked}</span>
-          <button class="glass-button primary" disabled={deleting} onclick={confirmDelete}>{text('Delete_Menu')}</button>
-          <button class="glass-button" disabled={deleting} onclick={() => (asking = null)}>{text('Common_Cancel')}</button>
-        </div>
-      {/if}
-      {#if refusal}<p class="refusal" role="alert">{refusal}</p>{/if}
+      <p>{line}</p>
+      {#if rating}<Stars {album} />{/if}
     </header>
 
-    <div class="tracks" style:column-count={columns}>
-      {#each discs as disc}
-        {#if discs.length > 1}
-          <div class="disc">{text('Album_DiscHeader', disc.discNumber)}</div>
-        {/if}
-        {#each disc.tracks as track (track.rpmId)}
-          <div class="track" class:playing={now.track?.rpmId === track.rpmId}>
-            <button class="play" onclick={() => play(track)}>
-              <span class="number">{trackOf(track) || ''}</span>
-              <span class="name">{track.title}{#if isExplicit(track)}<span class="badge">E</span>{/if}</span>
-              <span class="length">{time(durationSeconds(track))}</span>
-            </button>
-            <Heart {track} />
-            <button class="bin" title={text('Details_Title')} aria-label={text('Details_Title')} onclick={() => (editing = [track])}><i class="icon">{icons.pen}</i></button>
-            <button class="bin" title={text('Delete_Cloud')} aria-label={text('Delete_Cloud')} onclick={() => (asking = [track])}><i class="icon">{icons.trash}</i></button>
-          </div>
-        {/each}
-      {/each}
-    </div>
+    <AlbumTracks {album} {columns} />
   </div>
 
-  {#if columns > 1 && sleeve}
-    <img src={sleeve} alt="" />
+  {#if columns > 1}
+    <div class="art">
+      {#if sleeve}<img src={sleeve} alt="" />{:else}<span class="blank"><i class="icon">{icons.album}</i></span>{/if}
+      <div class="under">
+        <button class="album-heart" class:on={loved} aria-pressed={loved} title={text('AlbumMenu_Favorite')} aria-label={text('AlbumMenu_Favorite')} onclick={() => favorites.markAlbum(album, !loved)}><i class="icon" class:outline={!loved}>{icons.heart}</i></button>
+      </div>
+    </div>
   {/if}
 </div>
 
-{#if adding}
-  <AddToPlaylist tracks={adding} onClose={() => (adding = null)} />
-{/if}
-{#if editing}
-  <EditTags tracks={editing} album={editing.length === album.tracks.length ? album : null} onClose={() => (editing = null)} />
-{/if}
-
 <style>
-  .loved .icon {
-    color: var(--favorite);
-  }
-
   .detail {
     display: flex;
     gap: 20px;
@@ -175,156 +105,83 @@
     margin-bottom: 14px;
   }
 
+  .name {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    min-width: 0;
+  }
+
   h3 {
+    overflow: hidden;
     margin: 0;
+    color: #fff;
     font-size: 17px;
     font-weight: 700;
-  }
-
-  p {
-    margin: 3px 0 0;
-    color: var(--text-soft);
-    font-size: 12.5px;
-  }
-
-  .keys {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-  }
-
-  .keys .icon {
-    margin-right: 6px;
-    font-size: 12px;
-  }
-
-  .tracks {
-    column-gap: 18px;
-  }
-
-  .disc {
-    margin: 10px 0 4px;
-    padding-bottom: 5px;
-    border-bottom: 1px solid var(--hairline);
-    color: var(--text-soft);
-    font-size: 11px;
-    font-weight: 700;
-    break-after: avoid;
-  }
-
-  .ask {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 10px;
-    align-items: center;
-    margin-top: 10px;
-    font-size: 12.5px;
-  }
-
-  .ask span {
-    flex: 1 1 220px;
-  }
-
-  .refusal {
-    color: var(--error);
-  }
-
-  .track {
-    display: flex;
-    align-items: center;
-    border-radius: 4px;
-    break-inside: avoid;
-  }
-
-  .play {
-    display: grid;
-    flex: 1;
-    grid-template-columns: 22px minmax(0, 1fr) auto;
-    gap: 8px;
-    min-width: 0;
-    min-height: 26px;
-    padding: 3px 6px;
-    border: 0;
-    background: none;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .bin {
-    flex: none;
-    width: 26px;
-    height: 26px;
-    border: 0;
-    background: none;
-    color: var(--text-faint);
-    font-size: 11px;
-    cursor: pointer;
-  }
-
-  @media (hover: hover) {
-    .bin {
-      visibility: hidden;
-    }
-
-    .track:hover .bin,
-    .bin:focus-visible {
-      visibility: visible;
-    }
-  }
-
-  @media (hover: hover) {
-    .track:hover {
-      background: rgb(255 255 255 / 0.1);
-    }
-  }
-
-  @media (pointer: coarse) {
-    .track {
-      align-items: center;
-      min-height: 44px;
-    }
-  }
-
-  .track.playing .name {
-    color: #5fe08a;
-  }
-
-  .number,
-  .length {
-    color: rgb(255 255 255 / 0.53);
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .name {
-    overflow: hidden;
-    font-size: 13px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .badge {
-    display: inline-grid;
-    place-items: center;
-    width: 13px;
-    height: 13px;
-    margin-left: 5px;
-    border-radius: 2px;
-    background: rgb(255 255 255 / 0.25);
-    color: #000;
-    font-size: 9px;
-    font-weight: 700;
-    vertical-align: 1px;
+  .keys {
+    display: flex;
+    flex: none;
+    gap: 12px;
   }
 
-  img {
+  p {
+    margin: 4px 0 0;
+    overflow: hidden;
+    color: rgb(255 255 255 / 0.72);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .art {
+    display: flex;
     flex: none;
-    align-self: flex-start;
-    width: 210px;
-    height: 210px;
-    border-radius: 6px;
+    flex-direction: column;
+    gap: 8px;
+    width: 196px;
+  }
+
+  img,
+  .blank {
+    display: grid;
+    place-items: center;
+    width: 196px;
+    height: 196px;
+    border-radius: 8px;
     object-fit: cover;
+    background: rgb(0 0 0 / 0.2);
+    color: rgb(255 255 255 / 0.3);
+    font-size: 40px;
+  }
+
+  .under {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .album-heart {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: var(--favorite-idle);
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .album-heart.on {
+    color: var(--favorite);
+  }
+
+  @media (max-width: 859px) {
+    .art {
+      display: none;
+    }
   }
 </style>
