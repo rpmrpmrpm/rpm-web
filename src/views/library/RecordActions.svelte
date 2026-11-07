@@ -11,6 +11,7 @@
   import MassEditor from '../edit/MassEditor.svelte';
   import ReleaseFill from '../edit/ReleaseFill.svelte';
   import TrackEditor from '../edit/TrackEditor.svelte';
+  import ReviewWindow from './ReviewWindow.svelte';
   import { asked } from './record-menu.svelte';
 
   let { compact }: { compact: boolean } = $props();
@@ -60,6 +61,10 @@
   {/if}
 {:else if asked.editing?.kind === 'release'}
   <ReleaseFill tracks={asked.editing.tracks} onClose={() => (asked.editing = null)} />
+{/if}
+
+{#if asked.reviewing}
+  <ReviewWindow album={asked.reviewing} onClose={() => (asked.reviewing = null)} />
 {/if}
 
 {#if asked.opening && compact}

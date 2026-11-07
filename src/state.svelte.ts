@@ -75,6 +75,8 @@ export const library = $state({
   playsVersion: 0,
   // Raised when a favourite changes. The marks themselves stay in Favorites.
   marksVersion: 0,
+  // Raised when a review window saves stars, so the stars on the record's page are read again.
+  ratingsVersion: 0,
 });
 
 playLog.onChange(() => library.playsVersion++);

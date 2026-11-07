@@ -1,5 +1,6 @@
-// The stars given to records, 1 to 5. Kept in this browser, by account and the record's first cover key, as
-// the phone apps keep them: the cloud has no route for a rating.
+// The stars given to records, 1 to 5, and the review written about them. Kept in this browser, by account and
+// the record's first cover key, as the phone apps keep the stars and the desktop keeps both: the cloud has no
+// route for a rating or a review.
 
 import type { CloudAlbum } from './albums';
 import { coverSpellings } from './art-key';
@@ -22,6 +23,31 @@ export class AlbumRatings {
       return Number(this.shelf().getItem(key)) || 0;
     } catch {
       return 0;
+    }
+  }
+
+  private async reviewKey(album: CloudAlbum, account: string): Promise<string> {
+    const [cover] = await coverSpellings(album.tracks);
+    return `rpm.albumReview.${account}|${cover ?? album.key}`;
+  }
+
+  async review(album: CloudAlbum, account: string): Promise<string> {
+    const key = await this.reviewKey(album, account);
+    try {
+      return this.shelf().getItem(key) ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  // An empty review takes it off.
+  async write(album: CloudAlbum, review: string, account: string) {
+    const key = await this.reviewKey(album, account);
+    try {
+      if (review.trim()) this.shelf().setItem(key, review);
+      else this.shelf().removeItem(key);
+    } catch {
+      // Storage that is blocked keeps no review.
     }
   }
 

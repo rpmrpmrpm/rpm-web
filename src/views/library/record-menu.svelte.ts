@@ -1,7 +1,7 @@
 // What a record and a song offer, on a right click and behind the small key beside them. The same menu on the same
 // thing in every view, as AlbumMenuFactory and TrackMenuFactory on the desktop. What needs a file on this computer
-// (the folder, the disc, the local copy) and what is not built here (the DJ, reviews, sharing) is left out, rather
-// than shown greyed for good.
+// (the folder, the disc, the local copy) and what is not built here (the DJ, sharing) is left out, rather than
+// shown greyed for good.
 
 import { favorites, player, playlists } from '../../app';
 import type { CloudTrack } from '../../api/wire';
@@ -25,6 +25,7 @@ class Asked {
   editing = $state.raw<Editing | null>(null);
   deleting = $state.raw<{ tracks: readonly CloudTrack[]; name: string; wholeAlbum: boolean } | null>(null);
   opening = $state.raw<CloudAlbum | null>(null);
+  reviewing = $state.raw<CloudAlbum | null>(null);
 }
 
 export const asked = new Asked();
@@ -88,6 +89,7 @@ export async function albumMenu(album: CloudAlbum, place: 'collection' | 'page')
     ...(place === 'collection' ? [{ label: text('AlbumMenu_AlbumPage'), glyph: icons.album, run: () => (asked.opening = album) }] : []),
     { label: text('AlbumMenu_EditAlbum'), glyph: icons.pen, run: () => (asked.editing = { kind: 'album', album }) },
     { label: text('AlbumMenu_Favorite'), glyph: icons.heart, outline: !loved, run: () => void favorites.markAlbum(album, !loved) },
+    { label: text('AlbumMenu_WriteReview'), glyph: icons.edit, run: () => (asked.reviewing = album) },
     'rule',
     { label: text('Delete_Cloud'), glyph: icons.trash, run: () => (asked.deleting = { tracks, name: album.album, wholeAlbum: true }) },
   ];

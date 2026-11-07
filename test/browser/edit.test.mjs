@@ -149,3 +149,22 @@ test('the mass edit writes only the ticked fields, to every selected track', asy
   assert.deepEqual(problems, []);
   await close();
 });
+
+test('a record gets a review with its stars, kept in this browser, and the preview shows the Markdown', async () => {
+  const { page, problems, close } = await open();
+  await page.click('.rail button:has-text("Albums")');
+  await page.locator('article, .card, .album', { hasText: 'Kid A' }).first().click({ button: 'right' });
+  await page.click('text=Write a review');
+  await page.click('[aria-label="4 stars"]');
+  await page.fill('textarea', 'A **great** record\n- side one');
+  assert.equal(await page.textContent('.preview strong'), 'great');
+  await page.click('button:has-text("Save review")');
+  await page.waitForSelector('[role=dialog]', { state: 'detached' });
+
+  await page.locator('article, .card, .album', { hasText: 'Kid A' }).first().click({ button: 'right' });
+  await page.click('text=Write a review');
+  await page.waitForFunction(() => document.querySelector('textarea')?.value === 'A **great** record\n- side one');
+  assert.equal(await page.locator('.stars button.on').count(), 4);
+  assert.deepEqual(problems, []);
+  await close();
+});

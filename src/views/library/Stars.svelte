@@ -4,6 +4,7 @@
   import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
   import { MOST_STARS } from '../../library/ratings';
+  import { library } from '../../state.svelte';
   import { text } from '../../strings/loc';
 
   let { album }: { album: CloudAlbum } = $props();
@@ -13,6 +14,7 @@
 
   $effect(() => {
     const wanted = album;
+    void library.ratingsVersion;
     let current = true;
     void albumRatings.stars(wanted, account).then((given) => {
       if (current) stars = given;
