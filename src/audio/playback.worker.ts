@@ -11,11 +11,14 @@ export interface WorkerTrack {
   file?: File;
   gain: number;
   startAt?: number;
+  // The head clip, which plays while the address is on its way. The address then comes through join.
+  head?: Uint8Array;
 }
 
 export type ToWorker =
   | { type: 'start'; epoch: number }
   | { type: 'add'; track: WorkerTrack; first: boolean }
+  | { type: 'join'; id: string; url: string }
   | { type: 'render'; epoch: number; seconds: number }
   | { type: 'stop'; epoch: number }
   | { type: 'finish'; epoch: number }
@@ -23,7 +26,7 @@ export type ToWorker =
 
 export type FromWorker =
   | { type: 'ready' }
-  | { type: 'bytes'; epoch: number; bytes: Uint8Array; drained: boolean; failed: boolean; boundaries: Boundary[]; failures: Failure[] }
+  | { type: 'bytes'; epoch: number; bytes: Uint8Array; drained: boolean; waiting: boolean; failed: boolean; boundaries: Boundary[]; failures: Failure[] }
   | { type: 'stopped'; epoch: number; at: number }
   | { type: 'finished'; epoch: number; bytes: Uint8Array }
   | { type: 'error'; said: string };
@@ -59,13 +62,14 @@ function post(message: FromWorker, transfer: Transferable[] = []) {
   postMessage(message, { transfer });
 }
 
-function sendBytes(result: { bytes: Uint8Array; drained: boolean; failed: boolean }) {
+function sendBytes(result: { bytes: Uint8Array; drained: boolean; waiting: boolean; failed: boolean }) {
   post(
     {
       type: 'bytes',
       epoch,
       bytes: result.bytes,
       drained: result.drained,
+      waiting: result.waiting,
       failed: result.failed,
       boundaries: chain.boundaries.slice(boundariesSent),
       failures: chain.failures.slice(failuresSent),
@@ -87,13 +91,17 @@ const handlers = {
     failuresSent = 0;
     boundariesSent = 0;
     // The init segment, on its own, so the page can make its buffer before any audio arrives.
-    sendBytes({ bytes: chain.take(), drained: false, failed: false });
+    sendBytes({ bytes: chain.take(), drained: false, waiting: false, failed: false });
   },
 
   add({ track, first }: { track: WorkerTrack; first: boolean }) {
-    const entry = { ...track, makeSource: () => (track.file ? new FileSource(track.file) : new UrlSource(track.url)) };
+    const entry = { ...track, makeSource: track.file || track.url ? () => (track.file ? new FileSource(track.file) : new UrlSource(track.url)) : undefined };
     if (first) chain.addFirst(entry);
     else chain.add(entry);
+  },
+
+  join({ id, url }: { id: string; url: string }) {
+    chain.join(id, () => new UrlSource(url));
   },
 
   render({ seconds, epoch: asked }: { seconds: number; epoch: number }) {

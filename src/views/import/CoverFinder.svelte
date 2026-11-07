@@ -4,6 +4,7 @@
   import { untrack } from 'svelte';
 
   import { coverSearch } from '../../app';
+  import { icons } from '../../design/icons';
   import type { CoverCandidate, CoverKind, PickedPicture } from '../../import/cover-search';
   import { text } from '../../strings/loc';
   import Window from './Window.svelte';
@@ -75,11 +76,11 @@
     .finally(() => void search());
 </script>
 
-<Window title={text(kind === 'disc' ? 'CoverSearch_HeadingDisc' : 'CoverSearch_Heading')} wide {onClose}>
+<Window title={text(kind === 'disc' ? 'CoverSearch_HeadingDisc' : 'CoverSearch_Heading')} glyph={icons.image} minWidth={820} maxWidth={1400} openWidth={1020} minHeight={480} openHeight={660} {onClose}>
   <form onsubmit={search}>
     <input class="field" aria-label={text('Lookup_Artist')} placeholder={text('Lookup_Artist')} bind:value={artistWords} />
     <input class="field" aria-label={text('Lookup_Album')} placeholder={text('Lookup_Album')} bind:value={albumWords} />
-    <button class="glass-button primary" type="submit" disabled={searching}>{text('CoverSearch_Search')}</button>
+    <button class="glass-button" type="submit" disabled={searching}><i class="icon">{icons.search}</i>{text('CoverSearch_Search')}</button>
   </form>
 
   {#if available.length}
@@ -102,6 +103,10 @@
       </button>
     {/each}
   </div>
+
+  {#snippet footer()}
+    <button class="glass-button" onclick={onClose}><i class="icon">{icons.close}</i>{text('Settings_Close')}</button>
+  {/snippet}
 </Window>
 
 <style>

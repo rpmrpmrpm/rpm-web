@@ -11,7 +11,7 @@
 {#if compact}
   <AlbumPage {album} {onClose} />
 {:else}
-  <Window title={album.album} wide {onClose}>
+  <Window title={album.album} minWidth={700} maxWidth={980} minHeight={460} openHeight={640} {onClose}>
     <AlbumDetail {album} />
   </Window>
 {/if}

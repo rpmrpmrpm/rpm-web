@@ -168,6 +168,70 @@ for (const [name, engine, options] of [
     assert.equal(state.index, 2);
     await browser.close();
   });
+
+  const withHeads = (page, delay) =>
+    page.evaluate(async (ms) => {
+      window.signDelay = ms;
+      window.heads = new Map();
+      for (const n of [1, 2, 3]) {
+        const answer = await fetch(`/proof/tracks/head-${n}.m4a`);
+        window.heads.set(`flac-${n}`, new Uint8Array(await answer.arrayBuffer()));
+      }
+    }, delay);
+
+  test(`${name}: a head clip plays before the track is signed, and the track joins behind it`, { timeout: 90_000 }, async () => {
+    const { browser, page, problems } = await open(engine, options);
+    await withHeads(page, 1500);
+    await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac'), 0);");
+
+    await playing(page, 'flac 1');
+    assert.deepEqual((await read(page)).signs, [], 'it is playing, and nothing has been signed yet');
+
+    await page.waitForFunction(() => window.player.seconds > 4, undefined, { timeout: 30_000 });
+    const state = await read(page);
+    assert.equal(state.title, 'flac 1');
+    assert.ok(state.signs.includes('flac-1'));
+    assert.equal(state.trouble, null);
+    assert.deepEqual(problems, []);
+    await browser.close();
+  });
+
+  test(`${name}: an address later than the clip is a wait, and the track carries on`, { timeout: 90_000 }, async () => {
+    const { browser, page, problems } = await open(engine, options);
+    await withHeads(page, 4500);
+    await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac'), 0);");
+
+    await playing(page, 'flac 1');
+    await page.waitForFunction(() => window.player.seconds > 3.6, undefined, { timeout: 30_000 });
+    assert.equal((await read(page)).title, 'flac 1');
+    assert.deepEqual(problems, []);
+    await browser.close();
+  });
+
+  test(`${name}: Next pressed during a clip leaves nothing of it`, { timeout: 90_000 }, async () => {
+    const { browser, page, problems } = await open(engine, options);
+    await withHeads(page, 2500);
+    await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac'), 0);");
+
+    await playing(page, 'flac 1');
+    await page.evaluate(() => window.player.next());
+    await playing(page, 'flac 2');
+    await page.waitForFunction(() => window.player.seconds > 3.6, undefined, { timeout: 30_000 });
+    assert.equal((await read(page)).title, 'flac 2');
+    assert.deepEqual(problems, []);
+    await browser.close();
+  });
+
+  test(`${name}: a press into the middle of a track does not start it on its clip`, { timeout: 90_000 }, async () => {
+    const { browser, page, problems } = await open(engine, options);
+    await withHeads(page, 0);
+    await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac'), 0);");
+    await playing(page, 'flac 1');
+    await page.evaluate(() => window.player.seek(18));
+    await page.waitForFunction(() => window.player.seconds > 18.3, undefined, { timeout: 30_000 });
+    assert.deepEqual(problems, []);
+    await browser.close();
+  });
 }
 
 test.after(() => {

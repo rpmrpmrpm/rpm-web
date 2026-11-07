@@ -8,6 +8,9 @@ import { Equalizer } from './equalizer.js';
 
 export const STREAM_RATE = 44100;
 
+// A head clip is AAC in MP4, whatever the track it opens.
+const HEAD_NAME = 'head.m4a';
+
 // The two spellings of the same codec. Safari accepts only the first, Chrome and Firefox the second.
 export const STREAM_TYPES = ['audio/mp4; codecs="fLaC"', 'audio/mp4; codecs="flac"'];
 
@@ -150,8 +153,10 @@ class SourceTable {
 }
 
 export class Chain {
-  // track: { id, name, source or makeSource, gain, startAt }. gain is the levelling, as a factor.
-  // startAt is where to begin, in seconds, for a track that is opened again after a failure.
+  // track: { id, name, source or makeSource, gain, startAt, head }. gain is the levelling, as a factor.
+  // startAt is where to begin, in seconds, for a track that is opened again after a failure. head is the
+  // bytes of the track's head clip, which plays while the real source is on its way: source or makeSource
+  // may then come later, through join.
   queue = [];
   current = null;
   framesWritten = 0;
@@ -188,26 +193,82 @@ export class Chain {
     return bytes;
   }
 
-  open(track) {
+  // A source and a decoder for it. Null when it cannot be read, with the failure written down.
+  openDecoder(track, name, makeSource, at) {
     const { media } = this;
     let sourceId;
     try {
       // A remote track is only touched when it is reached, not when it joins the queue.
-      sourceId = this.table.add(track.source ?? track.makeSource());
+      sourceId = this.table.add(makeSource());
     } catch (error) {
-      this.failures.push({ id: track.id, name: track.name, said: String(error), at: track.startAt ?? 0 });
+      this.failures.push({ id: track.id, name: track.name, said: String(error), at });
       return null;
     }
-    const name = media.stringToNewUTF8(track.name);
-    const decoder = media._rm_open(sourceId, name, STREAM_RATE);
-    media._free(name);
+    const text = media.stringToNewUTF8(name);
+    const decoder = media._rm_open(sourceId, text, STREAM_RATE);
+    media._free(text);
     if (!decoder) {
-      this.failures.push({ id: track.id, name: track.name, said: this.lastError(), at: track.startAt ?? 0 });
+      this.failures.push({ id: track.id, name: track.name, said: this.lastError(), at });
       this.table.remove(sourceId);
       return null;
     }
-    if (track.startAt) media._rm_seek(decoder, track.startAt);
-    return { ...track, sourceId, decoder, offset: track.startAt ?? 0, framesRead: 0 };
+    return { sourceId, decoder };
+  }
+
+  open(track) {
+    const onHead = !!track.head && !track.startAt;
+    const opened = onHead
+      ? this.openDecoder(track, HEAD_NAME, () => new MemorySource(track.head), 0)
+      : this.openDecoder(track, track.name, () => track.source ?? track.makeSource(), track.startAt ?? 0);
+    if (!opened) return null;
+    if (track.startAt) this.media._rm_seek(opened.decoder, track.startAt);
+    return { ...track, ...opened, onHead, offset: track.startAt ?? 0, framesRead: 0 };
+  }
+
+  // Says where the rest of a track comes from, once it has been signed. Stale for a track already gone.
+  join(id, makeSource) {
+    const entry = this.current?.id === id ? this.current : this.queue.find((track) => track.id === id);
+    if (entry) entry.makeSource = makeSource;
+  }
+
+  // The head clip ran dry. The real source takes over, and what the clip actually played is discarded from it,
+  // so the join falls on the same sample of the same recording. Decoded and dropped, not sought: a seek lands on
+  // a packet, and these two sources do not share any.
+  joinBehind(pointer, chunk) {
+    const { media, current } = this;
+    if (!current.source && !current.makeSource) return 'waiting';
+
+    media._rm_close(current.decoder);
+    this.table.remove(current.sourceId);
+    const played = current.framesRead / STREAM_RATE;
+    const opened = this.openDecoder(current, current.name, () => current.source ?? current.makeSource(), played);
+    if (!opened) {
+      this.current = null;
+      return 'failed';
+    }
+    Object.assign(current, opened, { onHead: false });
+
+    let left = current.framesRead;
+    while (left > 0) {
+      const got = media._rm_read_pcm(current.decoder, pointer, Math.min(chunk, left));
+      if (got < 0) {
+        this.failures.push({ id: current.id, name: current.name, said: this.lastError(), at: played });
+        this.closeCurrent();
+        return 'failed';
+      }
+      if (got === 0) break;
+      left -= got;
+    }
+
+    // The clip's own length said nothing about the track's.
+    this.boundaries.push({
+      id: current.id,
+      name: current.name,
+      at: this.framesWritten / STREAM_RATE,
+      offset: current.offset + played,
+      duration: media._rm_duration(current.decoder),
+    });
+    return 'joined';
   }
 
   closeCurrent() {
@@ -278,6 +339,7 @@ export class Chain {
     const failuresBefore = this.failures.length;
     let made = 0;
     let drained = false;
+    let waiting = false;
 
     try {
       while (made < wanted) {
@@ -288,8 +350,14 @@ export class Chain {
 
         const got = media._rm_read_pcm(this.current.decoder, pointer, Math.min(chunk, wanted - made));
         if (got === 0) {
-          this.closeCurrent();
-          continue;
+          if (!this.current.onHead) {
+            this.closeCurrent();
+            continue;
+          }
+          const joined = this.joinBehind(pointer, chunk);
+          if (joined === 'joined') continue;
+          waiting = joined === 'waiting';
+          break;
         }
         if (got < 0) {
           const at = this.current.offset + this.current.framesRead / STREAM_RATE;
@@ -316,7 +384,7 @@ export class Chain {
 
     const ret = media._rm_output_cut(output, 0);
     if (ret < 0) throw new Error(this.lastError());
-    return { bytes: this.take(), drained, failed: this.failures.length > failuresBefore };
+    return { bytes: this.take(), drained, waiting, failed: this.failures.length > failuresBefore };
   }
 
   // The queue has ended. Writes the last short block.

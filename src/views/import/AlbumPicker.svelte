@@ -3,6 +3,7 @@
   import { untrack } from 'svelte';
 
   import { catalogue } from '../../app';
+  import { icons } from '../../design/icons';
   import { findAlbums } from '../../import/from-collection';
   import type { CloudAlbum } from '../../library/albums';
   import { text } from '../../strings/loc';
@@ -15,7 +16,7 @@
   const found = $derived(findAlbums(catalogue.albums, words));
 </script>
 
-<Window title={text('Lookup_FromLibrary')} {onClose}>
+<Window title={text('Lookup_FromLibrary')} glyph={icons.album} minWidth={560} maxWidth={900} minHeight={420} openHeight={560} {onClose}>
   <input class="field" aria-label={text('Lookup_SearchButton')} placeholder={text('Lookup_SearchButton')} bind:value={words} />
   {#if found.length}
     <ul>

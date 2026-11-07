@@ -5,6 +5,7 @@
   import { coverSearch, importQueue, releaseLookup, session } from '../../app';
   import type { FillLine, ImportRow } from '../../import/queue';
   import { canSearch, fitOf, GOOD_MATCH, orderResults, type ReleaseDetail, type ReleaseMedia, type ReleaseQuery, type ReleaseResult, type SourceAnswer } from '../../import/release';
+  import { icons } from '../../design/icons';
   import { text } from '../../strings/loc';
   import Window from './Window.svelte';
 
@@ -39,6 +40,9 @@
   let thumbs = $state<Record<string, string>>({});
   let refusal = $state('');
 
+  // The row chosen in the list. Nothing happens to the files until the footer's key is pressed.
+  let chosen = $state<ReleaseResult | null>(null);
+  let setTracks = $state(true);
   let picked = $state<ReleaseResult | null>(null);
   let detail = $state<ReleaseDetail | null>(null);
   // The rows stay plain objects, so the fill writes to the real queue. Only what can be edited here is state.
@@ -95,6 +99,16 @@
     );
   }
 
+  function clear() {
+    query = { album: '', artist: '', media: 'any', catalogNumber: '', barcode: '', country: '', year: 0 };
+    run++;
+    searching = false;
+    searched = false;
+    results = [];
+    sources = [];
+    chosen = null;
+  }
+
   async function search(event?: SubmitEvent) {
     event?.preventDefault();
     if (!canSearch(query)) return;
@@ -104,6 +118,7 @@
     refusal = '';
     results = [];
     fits = {};
+    chosen = null;
     sources = [
       { name: text('Lookup_SourceRpm'), state: 'searching', found: 0 },
       { name: 'Discogs', state: 'searching', found: 0 },
@@ -129,7 +144,8 @@
       detail = listing;
       lines = importQueue.fillFrom(rows, listing);
       edits = lines.map(({ title, artist, selected }) => ({ title, artist, selected }));
-      step = 'tracks';
+      if (setTracks) step = 'tracks';
+      else await apply();
     } catch {
       refusal = text('Lookup_SourceFailed', result.provider === 'rpm' ? text('Lookup_SourceRpm') : 'Discogs');
     } finally {
@@ -140,7 +156,11 @@
   async function apply() {
     if (!detail || !picked) return;
     working = true;
-    const named = importQueue.applyFill(lines.map((line, index) => ({ ...line, ...edits[index]! })), detail, albumFields);
+    const named = importQueue.applyFill(
+      lines.map((line, index) => ({ ...line, ...edits[index]!, selected: setTracks && edits[index]!.selected })),
+      detail,
+      albumFields,
+    );
     if (overwriteArt) {
       const address = detail.coverUrl ?? (await releaseLookup.coverOf({ ...picked, coverUrl: null }, 1200).catch(() => null));
       const picture = address ? await coverSearch.download([address, picked.coverUrl]) : null;
@@ -151,6 +171,9 @@
     onClose();
   }
 
+  const asked = $derived(
+    [query.album && `${text('Lookup_Album')}: ${query.album}`, query.artist && `${text('Lookup_Artist')}: ${query.artist}`, query.catalogNumber, query.barcode].filter(Boolean).join('   ·   '),
+  );
   const matched = $derived(lines.filter((line) => line.track).length);
   const albumSummary = $derived(detail ? [detail.title, detail.artist, detail.year || null, detail.label].filter(Boolean).join('   ·   ') : '');
   const connectDiscogs = $derived(sources.some((source) => source.name === 'Discogs' && source.state === 'unavailable'));
@@ -162,55 +185,67 @@
     else tab?.close();
   }
 
-  if (canSearch(query)) void search();
+  if (untrack(() => canSearch(query))) void search();
 </script>
 
-<Window title={text('Lookup_Heading')} wide {onClose}>
+<Window title={text('Lookup_Heading')} glyph={icons.search} minWidth={820} maxWidth={1180} minHeight={460} openHeight={620} {onClose}>
   {#if step === 'release'}
-    <form onsubmit={search}>
-      <label><span>{text('Lookup_Album')}</span><input class="field" bind:value={query.album} /></label>
-      <label><span>{text('Lookup_Artist')}</span><input class="field" bind:value={query.artist} /></label>
-      <label><span>{text('Lookup_CatalogNumber')}</span><input class="field" placeholder={text('Lookup_CatalogHint')} bind:value={query.catalogNumber} /></label>
-      <label><span>{text('Lookup_Barcode')}</span><input class="field" inputmode="numeric" placeholder={text('Lookup_BarcodeHint')} bind:value={query.barcode} /></label>
-      <label><span>{text('Lookup_Country')}</span><input class="field" placeholder={text('Lookup_CountryHint')} bind:value={query.country} /></label>
-      <label>
-        <span>{text('Lookup_Media')}</span>
-        <select class="field" bind:value={query.media}>
-          {#each MEDIA as [media, key]}<option value={media}>{text(key)}</option>{/each}
-        </select>
-      </label>
-      <button class="glass-button primary" type="submit" disabled={searching || !canSearch(query)}>{searching ? text('Lookup_Searching') : text('Lookup_SearchButton')}</button>
-    </form>
+    <div class="sides">
+      <form onsubmit={search}>
+        <h3 class="kicker">{text('Lookup_SearchKicker')}</h3>
+        <label><span>{text('Lookup_Album')}</span><input class="field" bind:value={query.album} /></label>
+        <label><span>{text('Lookup_Artist')}</span><input class="field" bind:value={query.artist} /></label>
+        <div class="pair">
+          <label><span>{text('Review_ColYear')}</span><input class="field" inputmode="numeric" value={query.year || ''} oninput={(event) => (query.year = Number(event.currentTarget.value) || 0)} /></label>
+          <label class="near"><span>{text('Lookup_Country')}</span><input class="field" placeholder={text('Lookup_CountryHint')} bind:value={query.country} /></label>
+        </div>
+        <label>
+          <span>{text('Lookup_Media')}</span>
+          <select class="field media" bind:value={query.media}>
+            {#each MEDIA as [media, key]}<option value={media}>{text(key)}</option>{/each}
+          </select>
+        </label>
+        <label><span>{text('Lookup_CatalogNumber')}</span><input class="field" placeholder={text('Lookup_CatalogHint')} bind:value={query.catalogNumber} /></label>
+        <label><span>{text('Lookup_Barcode')}</span><input class="field" inputmode="numeric" placeholder={text('Lookup_BarcodeHint')} bind:value={query.barcode} /></label>
+        <div class="search-keys">
+          <button class="glass-button" type="button" title={text('Lookup_ClearTooltip')} onclick={clear}><i class="icon">{icons.eraser}</i>{text('Lookup_Clear')}</button>
+          <button class="glass-button" type="submit" disabled={searching || !canSearch(query)}><i class="icon">{icons.search}</i>{searching ? text('Lookup_Searching') : text('Lookup_SearchButton')}</button>
+        </div>
+      </form>
 
-    {#if sources.length}
-      <p class="sources" role="status">
-        {sources.map(sourceLine).join('   ·   ')}
-        {#if connectDiscogs}<button class="link" onclick={connect}>{text('Catalog_DiscogsConnect')}</button>{/if}
-      </p>
-    {/if}
-    {#if refusal}<p class="refusal" role="alert">{refusal}</p>{/if}
+      <section class="found">
+        <h3 class="kicker">{text('Lookup_ResultsKicker')}</h3>
+        {#if asked && searched}<p class="asked"><i class="icon">{icons.search}</i>{asked}</p>{/if}
+        {#if refusal}<p class="refusal" role="alert">{refusal}</p>{/if}
 
-    {#if results.length}
-      <ul class="results">
-        {#each results as result (idOf(result))}
-          <li>
-            <span class="thumb">{#if thumbs[idOf(result)]}<img src={thumbs[idOf(result)]} alt="" loading="lazy" />{/if}</span>
-            <span class="words">
-              <strong>{result.title}</strong>
-              <span>{result.artist ?? ''}</span>
-              <small>{[result.year || null, result.country, result.format, result.trackCount ? text('Home_Songs', result.trackCount) : null, result.label, result.catalogNumber].filter(Boolean).join('  •  ')}</small>
-            </span>
-            {#if (fits[idOf(result)] ?? 0) >= GOOD_MATCH}<span class="fit" title={text('Lookup_TracksHeading')}></span>{/if}
-            <button class="glass-button" disabled={working} onclick={() => use(result)}>{text('Lookup_Use')}</button>
-          </li>
-        {/each}
-      </ul>
-    {:else if searched && !searching}
-      <p class="soft">{text('Lookup_NoResults')}</p>
-    {:else if !searched}
-      <p class="soft">{text('Lookup_EmptyHint')}</p>
-    {/if}
+        {#if results.length}
+          <ul class="results">
+            {#each results as result (idOf(result))}
+              <li>
+                <button class:on={chosen === result} aria-pressed={chosen === result} onclick={() => (chosen = result)} ondblclick={() => use(result)}>
+                  <span class="thumb">{#if thumbs[idOf(result)]}<img src={thumbs[idOf(result)]} alt="" loading="lazy" />{/if}</span>
+                  <span class="words">
+                    <strong>{result.title}</strong>
+                    <small>{[result.artist, result.year || null, result.country, result.format, result.catalogNumber, result.label].filter(Boolean).join(' · ')}</small>
+                  </span>
+                  {#if (fits[idOf(result)] ?? 0) >= GOOD_MATCH}<span class="fit" title={text('Lookup_TracksHeading')}></span>{/if}
+                  {#if thumbs[idOf(result)]}<i class="icon art" title={text('Lookup_ArtTooltip')}>{icons.image}</i>{/if}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {:else if searched && !searching}
+          <p class="soft">{text('Lookup_NoResults')}</p>
+        {:else if !searched}
+          <p class="soft">{text('Lookup_EmptyHint')}</p>
+        {/if}
+      </section>
+    </div>
   {:else if detail}
+    <ol class="steps">
+      <li>{text('Lookup_StepRelease')}</li>
+      <li class="on">{text('Lookup_StepTracks')}</li>
+    </ol>
     <p class="soft">{text('Lookup_TracksFrom', detail.title, detail.tracks.length)}  •  {text('Lookup_TracksMatched', matched, lines.length)}</p>
 
     <div class="scroller">
@@ -244,39 +279,109 @@
 
     <label class="tick"><input type="checkbox" bind:checked={albumFields} /> {text('Lookup_AlbumFields')}</label>
     {#if albumFields}<p class="soft">{albumSummary}</p>{/if}
-    <label class="tick"><input type="checkbox" bind:checked={overwriteArt} /> {text('Lookup_OverwriteArt')}</label>
-
-    <div class="keys">
-      <button class="glass-button" onclick={() => (step = 'release')}>{text('Lookup_Back')}</button>
-      <button class="glass-button primary" disabled={working} onclick={apply}>{text('Lookup_ApplyTracks')}</button>
-    </div>
   {/if}
+
+  {#snippet leading()}
+    {#if step === 'release' && sources.length}
+      <p class="sources" role="status">
+        <span>{text('Search_Found', results.length)}</span>
+        {#each sources as source}
+          <span class="source"><i class="icon" class:found={source.state === 'found'}>{source.state === 'found' || source.state === 'none' ? icons.check : icons.minus}</i>{sourceLine(source)}</span>
+        {/each}
+        {#if connectDiscogs}<button class="link" onclick={connect}>{text('Catalog_DiscogsConnect')}</button>{/if}
+      </p>
+    {/if}
+  {/snippet}
+
+  {#snippet footer()}
+    {#if step === 'release'}
+      <label class="tick"><input type="checkbox" bind:checked={setTracks} /> {text('Lookup_SetTrackMetadata')}</label>
+      <label class="tick"><input type="checkbox" bind:checked={overwriteArt} /> {text('Lookup_OverwriteArt')}</label>
+      <button class="glass-button" onclick={onClose}><i class="icon">{icons.close}</i>{text('Common_Cancel')}</button>
+      <button class="glass-button primary" disabled={!chosen || working} onclick={() => chosen && use(chosen)}><i class="icon">{icons.check}</i>{text(setTracks ? 'Lookup_Next' : 'Lookup_Use')}</button>
+    {:else}
+      <label class="tick"><input type="checkbox" bind:checked={overwriteArt} /> {text('Lookup_OverwriteArt')}</label>
+      <button class="glass-button" onclick={() => (step = 'release')}><i class="icon">{icons.back}</i>{text('Lookup_Back')}</button>
+      <button class="glass-button primary" disabled={working} onclick={apply}><i class="icon">{icons.check}</i>{text('Lookup_ApplyTracks')}</button>
+    {/if}
+  {/snippet}
 </Window>
 
 <style>
-  form {
+  .sides {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px 12px;
-    align-items: end;
+    flex: 1;
+    grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+    gap: 30px;
+    min-height: 0;
   }
 
-  label span {
-    display: block;
-    margin-bottom: 3px;
-    color: var(--text-soft);
-    font-size: 11.5px;
+  form,
+  .found {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+  }
+
+  h3 {
+    margin: 0 0 4px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgb(255 255 255 / 0.1);
+    text-transform: uppercase;
+  }
+
+  label:not(.tick) {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+    font-size: 12px;
+  }
+
+  label:not(.tick) span {
+    color: rgb(255 255 255 / 0.75);
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+    gap: 10px;
+  }
+
+  label.near {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .media {
+    max-width: 150px;
+  }
+
+  .search-keys {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 6px;
   }
 
   p {
     margin: 0;
-    font-size: 13px;
+    font-size: 12px;
   }
 
-  .soft,
-  .sources {
-    color: var(--text-soft);
-    font-size: 12.5px;
+  .soft {
+    color: rgb(255 255 255 / 0.55);
+  }
+
+  .asked {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    color: rgb(255 255 255 / 0.7);
+  }
+
+  .asked .icon {
+    font-size: 11px;
   }
 
   .refusal {
@@ -284,30 +389,41 @@
   }
 
   .results {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex: 1;
+    min-height: 0;
     margin: 0;
     padding: 0;
+    overflow-y: auto;
     list-style: none;
   }
 
-  li {
+  .results button {
     display: flex;
     gap: 12px;
     align-items: center;
-    padding: 6px;
+    width: 100%;
+    padding: 5px 8px;
+    border: 0;
     border-radius: 6px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
   }
 
-  li:nth-child(odd) {
-    background: rgb(255 255 255 / 0.04);
+  .results button:hover {
+    background: rgb(255 255 255 / 0.06);
+  }
+
+  .results button.on {
+    background: rgb(3 113 208 / 0.3);
   }
 
   .thumb {
     flex: none;
-    width: 52px;
-    height: 52px;
+    width: 62px;
+    height: 62px;
     overflow: hidden;
     border-radius: 4px;
     background: rgb(255 255 255 / 0.08);
@@ -324,13 +440,28 @@
     display: flex;
     flex: 1;
     flex-direction: column;
+    gap: 3px;
     min-width: 0;
-    font-size: 13px;
+  }
+
+  .words strong {
+    overflow: hidden;
+    font-size: 13.5px;
+    font-weight: 400;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .words small {
-    color: var(--text-soft);
-    font-size: 11.5px;
+    color: rgb(255 255 255 / 0.55);
+    font-size: 12px;
+  }
+
+  .art {
+    flex: none;
+    margin-right: 10px;
+    color: rgb(255 255 255 / 0.55);
+    font-size: 12px;
   }
 
   .fit {
@@ -338,65 +469,106 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #5fe08a;
+    background: var(--found);
+  }
+
+  .sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    align-items: center;
+    color: rgb(255 255 255 / 0.7);
+  }
+
+  .source {
+    display: inline-flex;
+    gap: 7px;
+    align-items: center;
+  }
+
+  .source .icon {
+    color: rgb(255 255 255 / 0.4);
+    font-size: 10px;
+  }
+
+  .source .icon.found {
+    color: var(--found);
+  }
+
+  .tick {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .steps {
+    display: flex;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .steps li {
+    padding: 4px 12px;
+    border-radius: 4px;
+    background: rgb(255 255 255 / 0.06);
+    color: rgb(255 255 255 / 0.55);
+    font-size: 11.5px;
+  }
+
+  .steps li.on {
+    background: rgb(3 113 208 / 0.35);
+    color: #fff;
   }
 
   .scroller {
-    overflow-x: auto;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
   }
 
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12.5px;
+    font-size: 12px;
   }
 
   th {
-    padding: 4px 6px;
-    color: var(--text-soft);
+    padding: 3px 6px;
+    color: rgb(255 255 255 / 0.55);
     font-size: 11px;
     font-weight: 400;
     text-align: left;
   }
 
   td {
-    padding: 3px 6px;
+    padding: 2px 6px;
   }
 
   .now {
     max-width: 220px;
     overflow: hidden;
-    color: var(--text-soft);
+    color: rgb(255 255 255 / 0.55);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  tr.unmatched .now {
-    color: var(--text-faint);
+  .unmatched {
+    opacity: 0.6;
   }
 
-  td .field {
-    width: 100%;
-    min-width: 130px;
-  }
-
-  .tick {
-    font-size: 13px;
-  }
-
-  .keys {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-  }
-
-  @media (max-width: 699px) {
-    form {
+  @media (max-width: 859px) {
+    .sides {
       grid-template-columns: minmax(0, 1fr);
+      overflow-y: auto;
     }
 
-    li {
-      flex-wrap: wrap;
+    .results {
+      overflow: visible;
     }
   }
 </style>

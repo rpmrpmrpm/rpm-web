@@ -98,12 +98,14 @@ test('a release is found, laid against the files, and written to them', async ()
   await page.waitForSelector('text=Search releases');
   await page.fill('[role=dialog] form input >> nth=0', 'Found Album');
   await page.click('[role=dialog] form button[type=submit]');
-  await page.waitForSelector('text=Found Album');
+  await page.waitForSelector('.results >> text=Found Album');
   await page.waitForSelector('text=Discogs: not connected');
   assert.ok(asked.some((path) => path.startsWith('metadata/search?')), 'the rpm database was asked');
   assert.ok(asked.some((path) => path.startsWith('discogs/search?')), 'Discogs was asked');
 
-  await page.click('button:has-text("Use this release")');
+  assert.ok(await page.isDisabled('[role=dialog] .primary'), 'nothing is chosen yet');
+  await page.click('.results li button >> nth=0');
+  await page.click('button:text-is("Next")');
   await page.waitForSelector('text=2 of 2 tracks matched');
   await page.click('button:text-is("Apply")');
   await page.waitForFunction(() => document.querySelector('.album')?.textContent === 'Found Album');

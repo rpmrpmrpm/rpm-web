@@ -88,18 +88,21 @@ export class Covers {
     return null;
   }
 
-  // The picture itself, as it is stored, to put on other tracks. Null when the store holds none.
+  // A picture as it is stored, by its key, or null when the store holds none there.
+  async pictureAt(key: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+    if (!(await this.stored()).has(key)) return null;
+    const signed = await this.api.json(`cloud/art/${key}`, (raw) => raw as { url: string });
+    const answer = await fetch(signed.url);
+    if (!answer.ok) return null;
+    const blob = await answer.blob();
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: blob.type || 'image/jpeg' };
+  }
+
+  // The album's cover as it is stored, to put on other tracks.
   async picture(album: CloudAlbum): Promise<{ bytes: Uint8Array; mime: string } | null> {
     const index = await this.stored();
-    for (const key of await coverSpellings(album.tracks)) {
-      if (!index.has(key)) continue;
-      const signed = await this.api.json(`cloud/art/${key}`, (raw) => raw as { url: string });
-      const answer = await fetch(signed.url);
-      if (!answer.ok) return null;
-      const blob = await answer.blob();
-      return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: blob.type || 'image/jpeg' };
-    }
-    return null;
+    const key = (await coverSpellings(album.tracks)).find((spelling) => index.has(spelling));
+    return key ? this.pictureAt(key) : null;
   }
 
   // A blob address for the album's cover, or null when the store holds none.

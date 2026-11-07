@@ -2,7 +2,7 @@ import { mount } from 'svelte';
 
 import App from './App.svelte';
 import { keepCodeFromAddress } from './api/beta-code';
-import { api, catalogue, covers, importQueue, playLog, queueKeeper, session, syncPlays } from './app';
+import { api, catalogue, covers, favorites, importQueue, playLog, queueKeeper, session, syncPlays } from './app';
 import './design/base.css';
 import { captureCrashes, sendHeldCrashes } from './report/report';
 import { chooseLanguage, loadStrings, pickedLanguage } from './strings/loc';
@@ -31,10 +31,12 @@ function accountChanged() {
     void catalogue.open(userId);
     void playLog.open(userId).then(syncPlays);
     void queueKeeper.open(userId);
+    void favorites.readAlbums();
   } else {
     catalogue.close();
     playLog.close();
     covers.forget();
+    favorites.forget();
     queueKeeper.close();
     importQueue.remove([...importQueue.rows]);
   }

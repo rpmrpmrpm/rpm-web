@@ -1,9 +1,13 @@
 <script lang="ts">
   // The player on a phone, over everything else.
-  import { catalogue, covers, player } from '../../app';
+  import { catalogue, covers, lyrics, player } from '../../app';
   import { icons } from '../../design/icons';
   import { now } from '../../state.svelte';
   import { text } from '../../strings/loc';
+  import Heart from '../library/Heart.svelte';
+  import LyricView from '../library/LyricView.svelte';
+  import TrackInfo from '../library/TrackInfo.svelte';
+  import { EMPTY_SHEET, isSynced, type LyricSheet } from '../../lyrics/sheet';
   import Equalizer from './Equalizer.svelte';
   import SeekBar from './SeekBar.svelte';
 
@@ -24,17 +28,41 @@
       current = false;
     };
   });
+
   let equalizerOpen = $state(false);
+  let sheet = $state.raw<LyricSheet>(EMPTY_SHEET);
+  let wordsOpen = $state(false);
+  let infoOpen = $state(false);
+  const hasWords = $derived(isSynced(sheet));
+
+  // The key needs to know whether there are words before it is pressed, so the screen asks as it appears.
+  $effect(() => {
+    const track = now.track;
+    sheet = EMPTY_SHEET;
+    if (!track) return;
+    let current = true;
+    void lyrics.of(track).then((found) => {
+      if (current) sheet = found;
+    });
+    return () => {
+      current = false;
+    };
+  });
 </script>
 
 <section class="player">
   <button class="key close" title={text('Common_Cancel')} onclick={onClose}><i class="icon">{icons.chevronDown}</i></button>
 
-  {#if sleeve}<img src={sleeve} alt="" />{:else}<div class="sleeve"></div>{/if}
+  {#if infoOpen}
+    <div class="info"><TrackInfo compact /></div>
+  {:else if wordsOpen && hasWords && now.track}
+    <LyricView track={now.track} {sheet} />
+  {:else if sleeve}<img src={sleeve} alt="" />{:else}<div class="sleeve"></div>{/if}
 
   <div class="words">
     <h2>{now.track?.title}</h2>
     <p>{now.track?.artist}</p>
+    {#if now.track}<Heart track={now.track} />{/if}
   </div>
 
   <SeekBar seconds={now.seconds} duration={now.duration} onSeek={(s) => player.seek(s)} />
@@ -50,7 +78,11 @@
     <button class="key" title={text('Transport_Next')} onclick={() => player.next()}><i class="icon wide">{icons.next}</i></button>
     <button class="key" title={text('Transport_Repeat')} class:on={now.repeat !== 'off'} onclick={() => player.cycleRepeat()}><i class="icon">{icons.repeat}</i></button>
   </div>
-  <button class="tool sound" class:on={equalizerOpen} onclick={() => (equalizerOpen = !equalizerOpen)}>{text('Amp_Eq')}</button>
+  <div class="extras">
+    <button class="key" title={text('Details_Lyrics')} aria-label={text('Details_Lyrics')} aria-pressed={wordsOpen} class:on={wordsOpen} disabled={!hasWords} onclick={() => { wordsOpen = !wordsOpen; infoOpen = false; }}><i class="icon">{icons.microphone}</i></button>
+    <button class="tool sound" class:on={equalizerOpen} onclick={() => (equalizerOpen = !equalizerOpen)}>{text('Amp_Eq')}</button>
+    <button class="key" title={text('LeftNav_TrackInfo')} aria-label={text('LeftNav_TrackInfo')} aria-pressed={infoOpen} class:on={infoOpen} onclick={() => (infoOpen = !infoOpen)}><i class="icon">{icons.info}</i></button>
+  </div>
 </section>
 
 <style>
@@ -109,5 +141,21 @@
 
   .on {
     color: #04c8ff;
+  }
+
+  .extras {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .extras .key:disabled {
+    opacity: 0.4;
+  }
+
+  .info {
+    flex: 1;
+    min-height: 0;
+    margin: 0 -24px;
   }
 </style>

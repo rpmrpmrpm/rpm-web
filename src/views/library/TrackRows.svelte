@@ -5,6 +5,7 @@
   import { icons } from '../../design/icons';
   import { now } from '../../state.svelte';
   import { text } from '../../strings/loc';
+  import Heart from './Heart.svelte';
 
   let { tracks, onRemove }: { tracks: CloudTrack[]; onRemove?: (track: CloudTrack, index: number) => void } = $props();
 
@@ -22,6 +23,7 @@
         <span class="by">{track.artist ?? ''}{track.album ? `  •  ${track.album}` : ''}</span>
         <span class="length">{time(track)}</span>
       </button>
+      <Heart {track} />
       {#if onRemove}
         <button class="bin" title={text('Playlists_Remove')} aria-label={text('Playlists_Remove')} onclick={() => onRemove(track, index)}><i class="icon">{icons.trash}</i></button>
       {/if}

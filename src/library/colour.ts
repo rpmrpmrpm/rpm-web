@@ -40,6 +40,8 @@ export function pickColour(pixels: Uint8ClampedArray): Colour {
 export async function colourOf(url: string): Promise<Colour | null> {
   try {
     const image = new Image();
+    // A picture in the store is on another address, and a canvas cannot read it without this.
+    if (url.startsWith('http')) image.crossOrigin = 'anonymous';
     image.src = url;
     await image.decode();
     const context = new OffscreenCanvas(SIZE, SIZE).getContext('2d')!;

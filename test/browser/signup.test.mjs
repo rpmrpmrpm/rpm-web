@@ -129,16 +129,21 @@ test('on a computer the deck menu leads to the account and to feedback, and feed
 
   await page.waitForSelector('.rail');
   await page.click('button[title="Open menu"], .deck .side.end button:last-child');
-  await page.click('.menu button:has-text("Account")');
-  await page.waitForSelector('h3:has-text("Cloud storage")');
+  await page.click('.menu button:has-text("Settings")');
+  await page.waitForSelector('[role=dialog] h3:has-text("Profile")');
+  await page.click('[role=tab]:has-text("Cloud")');
+  await page.waitForSelector('h4:has-text("Cloud storage")');
+  await page.keyboard.press('Escape');
 
-  await page.click('.profile button:has-text("Send feedback")');
-  await page.click('form button[type=submit]');
+  await page.click('.deck .side.end button:last-child');
+  await page.click('.menu button:has-text("Send feedback")');
+  await page.waitForSelector('[role=dialog] select');
+  await page.click('[role=dialog] button[type=submit]');
   await page.waitForSelector('[role=alert]');
   assert.deepEqual(sent, [], 'an empty report went out');
 
   await page.fill('textarea', 'The queue forgets its place.');
-  await page.click('form button[type=submit]');
+  await page.click('[role=dialog] button[type=submit]');
   await page.waitForSelector('text=Your feedback was sent');
   assert.equal(sent[0].message, 'The queue forgets its place.');
   assert.equal(sent[0].head, 'web');
@@ -150,8 +155,9 @@ test('on a phone the account has a tab, with a way to sign out', async () => {
   const { page } = await open('/', { signedIn: true, tester: true, viewport: { width: 390, height: 844 } });
 
   await page.click('nav.tabs button:has-text("Account")');
-  await page.waitForSelector('h3:has-text("Cloud storage")');
-  await page.click('.profile button:has-text("Sign out")');
+  await page.waitForSelector('h3:has-text("Profile")');
+  await page.waitForSelector('.account a:has-text("Terms of Use")');
+  await page.click('.account button:has-text("Sign out") >> nth=0');
   await page.waitForSelector('button:has-text("Create account")');
   await page.close();
 });

@@ -29,6 +29,14 @@ const name = (track: CloudTrack) => track.relativePath?.split('/').pop() ?? `${t
 
 export type Signer = Pick<CloudClient, 'stream' | 'requestRendition'>;
 
+// The opening seconds of tracks, held so a key press has something to play at once.
+export interface Heads {
+  held(rpmId: string): Uint8Array | null;
+  warm(rpmIds: readonly string[]): void;
+}
+
+const noHeads: Heads = { held: () => null, warm: () => {} };
+
 export interface EqualizerSettings {
   on: boolean;
   preamp: number;
@@ -49,6 +57,10 @@ export class Player {
   repeat: Repeat = 'off';
   isShuffled = false;
   normalize: NormalizeMode = 'album';
+  // Called when a track starts, for what else was playing to stop.
+  onStarting: () => void = () => {};
+  // What the keys on the lock screen drive when it is not this.
+  remote: { toggle(): void; next(): void; previous(): void } | null = null;
 
   private readonly audio: HTMLAudioElement;
   private readonly stream: Stream;
@@ -86,6 +98,7 @@ export class Player {
     private readonly cloud: Signer,
     private readonly findArtwork: (track: CloudTrack) => Promise<string | null> = async () => null,
     private readonly listened: (rpmId: string) => void = () => {},
+    private readonly heads: Heads = noHeads,
   ) {
     this.audio = new Audio();
     this.audio.preload = 'auto';
@@ -149,6 +162,9 @@ export class Player {
     return this.queue[this.index]?.track ?? null;
   }
 
+  // Stopped, and not paused: the queue stays where it was, and the art band closes.
+  stopped = false;
+
   // What the play key shows: what the listener asked for.
   get wantsToPlay(): boolean {
     return this.transport.wantsToPlay(this.starting, this.loaded);
@@ -200,10 +216,10 @@ export class Player {
     return this.cloud.stream(row.track.rpmId, SMALL ? PHONE_RATE : COMPUTER_RATE, signal);
   }
 
-  private entryOf(row: QueueRow, url: string, startAt?: number): WorkerTrack {
+  private entryOf(row: QueueRow, url?: string, startAt?: number, head?: Uint8Array): WorkerTrack {
     const id = `entry-${this.nextEntry++}`;
     this.entries.set(id, row);
-    return { id, name: name(row.track), url, gain: this.gainOf(row.track), startAt };
+    return { id, name: name(row.track), url, gain: this.gainOf(row.track), startAt, head };
   }
 
   // Plays these tracks from this position. Runs inside the key press up to the first await, because a
@@ -215,6 +231,7 @@ export class Player {
     this.inAlbumOrder = options.inAlbumOrder;
     this.recordLevel = options.inAlbumOrder ? levelOfRecord(tracks) : { lufs: null, truePeak: null };
     this.moveTo(index);
+    this.heads.warm(tracks.slice(index).map((track) => track.rpmId));
   }
 
   // Starts the row at this position, whatever was playing.
@@ -222,6 +239,8 @@ export class Player {
     const row = this.queue[index];
     if (!row) return;
 
+    this.onStarting();
+    this.stopped = false;
     this.moves++;
     this.listenSession++;
     this.listenStart = startAt ?? 0;
@@ -266,7 +285,16 @@ export class Player {
     void this.handOver(row, attempt, opening, startAt);
   }
 
+  // A track with a head clip starts on it at once, and the stream is joined behind it when it has been signed. The
+  // clip is three seconds to do that in. A key press into the middle of a track has no use for one.
   private async handOver(row: QueueRow, attempt: ReturnType<StartGate['begin']>, opening: boolean, startAt?: number) {
+    const head = startAt ? null : this.heads.held(row.track.rpmId);
+    const started = head ? this.entryOf(row, undefined, undefined, head) : null;
+    if (started) {
+      if (opening) this.stream.add(started);
+      else this.stream.replace([started]);
+    }
+
     let signed: CloudStream;
     try {
       signed = await this.sign(row, attempt.signal);
@@ -276,9 +304,13 @@ export class Player {
     }
     if (!attempt.isLive) return;
 
-    const entry = this.entryOf(row, signed.url, startAt);
-    if (opening) this.stream.add(entry);
-    else this.stream.replace([entry]);
+    if (started) {
+      this.stream.join(started.id, signed.url);
+    } else {
+      const entry = this.entryOf(row, signed.url, startAt);
+      if (opening) this.stream.add(entry);
+      else this.stream.replace([entry]);
+    }
 
     void this.handAfterTail();
   }
@@ -434,6 +466,7 @@ export class Player {
     this.reportListen(this.tally.settle());
     this.loaded = 'nothing';
     this.starting = false;
+    this.stopped = true;
     this.changed();
   }
 
@@ -492,6 +525,7 @@ export class Player {
     if (this.index < 0) return;
     this.moveTo(this.index);
     this.transport.pause(true, 'nothing');
+    this.stopped = true;
     this.changed();
   }
 
@@ -569,10 +603,10 @@ export class Player {
   private controls() {
     if (!('mediaSession' in navigator)) return;
     const session = navigator.mediaSession;
-    session.setActionHandler('play', () => this.toggle());
-    session.setActionHandler('pause', () => this.toggle());
-    session.setActionHandler('nexttrack', () => this.next());
-    session.setActionHandler('previoustrack', () => this.previous());
+    session.setActionHandler('play', () => (this.remote ?? this).toggle());
+    session.setActionHandler('pause', () => (this.remote ?? this).toggle());
+    session.setActionHandler('nexttrack', () => (this.remote ?? this).next());
+    session.setActionHandler('previoustrack', () => (this.remote ?? this).previous());
     session.setActionHandler('seekto', (details) => {
       if (details.seekTime !== undefined) this.seek(details.seekTime);
     });

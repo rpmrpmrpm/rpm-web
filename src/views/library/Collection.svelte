@@ -1,6 +1,6 @@
 <script lang="ts">
   // The library pane: its heading, its keys, and the wall.
-  import { catalogue } from '../../app';
+  import { catalogue, favorites } from '../../app';
   import { icons } from '../../design/icons';
   import type { AlbumOrdering, CloudAlbum } from '../../library/albums';
   import { library } from '../../state.svelte';
@@ -65,10 +65,27 @@
     return [albumCount(library.albums.length), trackCount(library.songs), time].join('  •  ');
   });
 
+  let lovedOnly = $state(false);
+  let loved = $state.raw<ReadonlySet<string>>(new Set());
+
+  $effect(() => {
+    void library.marksVersion;
+    const albums = library.albums;
+    if (!lovedOnly) return;
+    let current = true;
+    void favorites.albumsMarked(albums).then((marked) => {
+      if (current) loved = marked;
+    });
+    return () => {
+      current = false;
+    };
+  });
+
   const shown = $derived.by(() => {
     const words = search.trim().toLowerCase();
-    if (!words) return library.albums;
-    return library.albums.filter(
+    const albums = lovedOnly ? library.albums.filter((album) => loved.has(album.key)) : library.albums;
+    if (!words) return albums;
+    return albums.filter(
       (album) =>
         album.album.toLowerCase().includes(words) ||
         album.artist.toLowerCase().includes(words) ||
@@ -94,13 +111,14 @@
           <option value={ordering}>{text(key)}</option>
         {/each}
       </select>
+      <button class="tool" class:on={lovedOnly} aria-pressed={lovedOnly} title={text('Library_FavoritesOnly')} aria-label={text('Library_FavoritesOnly')} onclick={() => (lovedOnly = !lovedOnly)}><i class="icon">{icons.heart}</i></button>
       <div class="views" role="group" aria-label={text('Library_ViewGrid')}>
         {#each VIEWS as [id, icon, label]}
           <button class="tool" class:on={view === id} title={text(label)} aria-label={text(label)} onclick={() => pickView(id)}><i class="icon">{icon}</i></button>
         {/each}
       </div>
       {#if !compact && view === 'grid'}
-        <input class="size" type="range" min="120" max="280" step="2" aria-label={text('Library_ViewGrid')} bind:value={target} />
+        <input class="size slider" style:--fill="{((target - 120) / 160) * 100}%" type="range" min="120" max="280" step="2" aria-label={text('Library_ViewGrid')} bind:value={target} />
       {/if}
     </div>
   </header>
@@ -208,7 +226,6 @@
 
   .size {
     width: 110px;
-    accent-color: #fff;
   }
 
   .compact .tools {

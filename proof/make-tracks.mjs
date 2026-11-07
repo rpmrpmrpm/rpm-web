@@ -39,5 +39,8 @@ for (let n = 0; n < TRACKS; n++) {
     execFileSync(nativeFfmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 's16le', '-ar', String(RATE),
       '-ac', '2', '-i', raw, ...args, join(folder, `${set}-${n + 1}.${extension}`)]);
   }
+  // What the store holds for a track as its head clip: the first three seconds, at 96.
+  execFileSync(nativeFfmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-t', '3', '-i', join(folder, `flac-${n + 1}.flac`),
+    '-c:a', 'aac', '-b:a', '96k', '-ac', '2', '-ar', '44100', '-movflags', '+faststart', join(folder, `head-${n + 1}.m4a`)]);
 }
 execFileSync('rm', [join(folder, 'part.raw')]);

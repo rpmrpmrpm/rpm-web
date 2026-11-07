@@ -18,10 +18,15 @@
 </section>
 
 <style>
+  section {
+    margin-bottom: 26px;
+  }
+
   h3 {
     margin: 0 0 8px;
-    font-size: 14px;
-    font-weight: 700;
+    color: rgb(255 255 255 / 0.8);
+    font-size: 12.5px;
+    font-weight: 400;
   }
 
   .strip {

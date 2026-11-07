@@ -71,7 +71,7 @@
   }
 </script>
 
-<Window title={text('Recognize_Title')} wide onClose={close}>
+<Window title={text('Recognize_Title')} glyph={icons.fingerprint} minWidth={620} maxWidth={900} minHeight={460} openHeight={640} onClose={close}>
   {#if phase === 'choose'}
     <p>{text('Recognize_Intro', rows.length)}</p>
     <div class="list">
@@ -122,31 +122,36 @@
     </ul>
   {/if}
 
-  {#if report && report.sentToAudD > 0}
-    <p>{text('Recognize_AdvancedNote', report.sentToAudD, report.identifiedByAudD)}</p>
-  {/if}
+  {#snippet footnote()}
+    {#if report && report.sentToAudD > 0}
+      <p>{text('Recognize_AdvancedNote', report.sentToAudD, report.identifiedByAudD)}</p>
+    {/if}
+    {#if !advanced}
+      <div class="pitch">
+        <i class="icon">{icons.heart}</i>
+        <span>{text('Recognize_SupportPitch')}</span>
+        <a class="tool" href={BECOME_SUPPORTER} target="_blank" rel="noopener">{text('Cloud_BecomeSupporter')}</a>
+      </div>
+    {/if}
+  {/snippet}
 
-  {#if !advanced}
-    <div class="pitch">
-      <span>{text('Recognize_SupportPitch')}</span>
-      <a class="glass-button" href={BECOME_SUPPORTER} target="_blank" rel="noopener">{text('Cloud_BecomeSupporter')}</a>
-    </div>
-  {/if}
-
-  <div class="keys">
+  {#snippet leading()}
     <span class="reach"><i class="icon">{advanced ? icons.fingerprint : icons.lock}</i> {reach}</span>
+  {/snippet}
+
+  {#snippet footer()}
     {#if phase === 'report' && outcomes.length > 1}
-      <button class="glass-button" onclick={() => onEdit(outcomes.map((line) => line.row))}>{text('Recognize_EditAll', outcomes.length)}</button>
+      <button class="glass-button" onclick={() => onEdit(outcomes.map((line) => line.row))}><i class="icon">{icons.pen}</i>{text('Recognize_EditAll', outcomes.length)}</button>
     {/if}
-    <button class="glass-button" onclick={close}>{text('RecogResult_Close')}</button>
+    <button class="glass-button" onclick={close}><i class="icon">{icons.close}</i>{text('RecogResult_Close')}</button>
     {#if phase === 'working'}
-      <button class="glass-button primary" onclick={() => stop?.abort()}>{text('Common_Cancel')}</button>
+      <button class="glass-button primary" onclick={() => stop?.abort()}><i class="icon">{icons.close}</i>{text('Common_Cancel')}</button>
     {:else if phase === 'report'}
-      <button class="glass-button primary" onclick={() => (phase = 'choose')}>{text('Recognize_Again')}</button>
+      <button class="glass-button primary" onclick={() => (phase = 'choose')}><i class="icon">{icons.fingerprint}</i>{text('Recognize_Again')}</button>
     {:else}
-      <button class="glass-button primary" onclick={start}>{text('Recognize_Start')}</button>
+      <button class="glass-button primary" onclick={start}><i class="icon">{icons.fingerprint}</i>{text('Recognize_Start')}</button>
     {/if}
-  </div>
+  {/snippet}
 </Window>
 
 <style>
@@ -296,27 +301,21 @@
     flex-wrap: wrap;
     gap: 10px;
     align-items: center;
-    justify-content: space-between;
     padding: 8px 12px;
-    border: 1px solid var(--hairline);
+    border: 1px solid rgb(255 255 255 / 0.13);
     border-radius: 6px;
-    font-size: 12px;
+    background: rgb(255 255 255 / 0.08);
+    font-size: 11.5px;
+  }
+
+  .pitch .icon {
+    color: var(--accent);
+    font-size: 11px;
   }
 
   .pitch span {
     flex: 1 1 240px;
-  }
-
-  .pitch a {
-    text-decoration: none;
-  }
-
-  .keys {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: center;
-    justify-content: flex-end;
+    color: rgb(255 255 255 / 0.8);
   }
 
   .reach {

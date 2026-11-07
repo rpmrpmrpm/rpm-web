@@ -30,6 +30,13 @@
 
   let openKey = $state<CloudAlbum | null>(null);
   const onOpen = (album: CloudAlbum) => (openKey = album);
+
+  // Pressing an act on a genre page opens their page on the artist wall.
+  let openArtist = $state<string | null>(null);
+  function onArtist(name: string) {
+    openArtist = name;
+    onPick('artists');
+  }
 </script>
 
 <div class="library">
@@ -44,9 +51,9 @@
     {#if mode === 'home'}
       <HomeView {onOpen} {onImport} />
     {:else if mode === 'artists'}
-      <ArtistsView {onOpen} />
+      <ArtistsView {onOpen} bind:openName={openArtist} />
     {:else if mode === 'genres'}
-      <GenresView {onOpen} />
+      <GenresView {onOpen} {onArtist} />
     {:else if mode === 'playlists'}
       <PlaylistsView />
     {:else}

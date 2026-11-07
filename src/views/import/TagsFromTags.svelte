@@ -1,6 +1,7 @@
 <script lang="ts">
   // Tags from tags: write one tag from a pattern over the others, with the result shown first.
   import { importQueue } from '../../app';
+  import { icons } from '../../design/icons';
   import { tokenValue, type ImportRow, type TrackTags } from '../../import/queue';
   import { renderTemplate, TAG_PRESETS } from '../../import/tag-template';
   import { text } from '../../strings/loc';
@@ -38,7 +39,7 @@
   }
 </script>
 
-<Window title={text('TagsFromTags_Title')} {onClose}>
+<Window title={text('TagsFromTags_Title')} minWidth={620} maxWidth={900} minHeight={460} openHeight={560} {onClose}>
   <div class="row">
     <label>
       <span>{text('TagsFromTags_Target')}</span>
@@ -74,10 +75,10 @@
 
   <p>{text('TagsFromTags_Summary', written, rows.length, targetName)}</p>
 
-  <div class="keys">
-    <button class="glass-button" onclick={onClose}>{text('Common_Cancel')}</button>
-    <button class="glass-button primary" disabled={!written} onclick={apply}>{text('Lookup_ApplyTracks')}</button>
-  </div>
+  {#snippet footer()}
+    <button class="glass-button" onclick={onClose}><i class="icon">{icons.close}</i>{text('Common_Cancel')}</button>
+    <button class="glass-button primary" disabled={!written} onclick={apply}><i class="icon">{icons.check}</i>{text('Lookup_ApplyTracks')}</button>
+  {/snippet}
 </Window>
 
 <style>
@@ -136,9 +137,4 @@
     font-size: 12.5px;
   }
 
-  .keys {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-  }
 </style>

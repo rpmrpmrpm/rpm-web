@@ -29,10 +29,17 @@
 <div class="room" style:--wash={colour ? css(colour, 0.55) : '#0a2a54'}></div>
 
 <style>
+  /* A registered colour, because a gradient itself cannot be animated. */
+  @property --wash {
+    syntax: '<color>';
+    inherits: false;
+    initial-value: #0a2a54;
+  }
+
   .room {
     position: fixed;
     inset: 0;
-    transition: background 1.2s;
+    transition: --wash 420ms var(--move);
     background:
       radial-gradient(90% 70% at 85% 0%, color-mix(in srgb, var(--wash) 80%, transparent), transparent 70%),
       radial-gradient(80% 80% at 0% 100%, color-mix(in srgb, var(--wash) 45%, transparent), transparent 70%),

@@ -2,10 +2,12 @@
 // know nothing about Svelte.
 
 import type { CloudTrack } from './api/wire';
-import { catalogue, player, playLog } from './app';
+import { catalogue, favorites, player, playLog, tuner } from './app';
 import type { Repeat } from './audio/player';
 import type { CloudAlbum } from './library/albums';
 import type { CatalogueState } from './library/catalogue';
+import type { RadioStation } from './radio/station';
+import type { Air } from './radio/tuner';
 
 export const now = $state({
   track: null as CloudTrack | null,
@@ -14,11 +16,24 @@ export const now = $state({
   seconds: 0,
   duration: 0,
   wantsToPlay: false,
+  stopped: false,
   loading: false,
   trouble: null as string | null,
   repeat: 'off' as Repeat,
   shuffled: false,
   volume: 1,
+});
+
+export const onAir = $state({
+  station: null as RadioStation | null,
+  air: 'off' as Air,
+  wantsToPlay: false,
+});
+
+tuner.onChange(() => {
+  onAir.station = tuner.station;
+  onAir.air = tuner.air;
+  onAir.wantsToPlay = tuner.wantsToPlay;
 });
 
 export const library = $state({
@@ -30,9 +45,12 @@ export const library = $state({
   seconds: 0,
   // Raised when a play is counted. The counts themselves stay in the log.
   playsVersion: 0,
+  // Raised when a favourite changes. The marks themselves stay in Favorites.
+  marksVersion: 0,
 });
 
 playLog.onChange(() => library.playsVersion++);
+favorites.onChange(() => library.marksVersion++);
 
 player.onChange(() => {
   if (now.track !== player.current) now.track = player.current;
@@ -41,6 +59,7 @@ player.onChange(() => {
   now.seconds = player.seconds;
   now.duration = player.duration;
   now.wantsToPlay = player.wantsToPlay;
+  now.stopped = player.stopped;
   now.loading = player.starting;
   now.trouble = player.trouble;
   now.repeat = player.repeat;
@@ -49,6 +68,7 @@ player.onChange(() => {
 });
 
 catalogue.onChange(() => {
+  favorites.readTracks(catalogue.tracks);
   library.albums = catalogue.albums;
   library.state = catalogue.state;
   library.stale = catalogue.stale;

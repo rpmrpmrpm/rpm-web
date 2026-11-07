@@ -43,6 +43,7 @@ const signer: Signer = {
   async stream(rpmId) {
     const extension = rpmId.startsWith('flac') ? 'flac' : rpmId.startsWith('mp3') ? 'mp3' : 'm4a';
     const signs = (window as unknown as { signs: string[] }).signs;
+    await new Promise((done) => setTimeout(done, window.signDelay ?? 0));
     signs.push(rpmId);
     return { url: new URL(`/proof/tracks/${rpmId}.${extension}`, location.href).href, kilobits: 0, live: false };
   },
@@ -50,7 +51,17 @@ const signer: Signer = {
 };
 (window as unknown as { signs: string[] }).signs = [];
 
-const player = new Player(signer, async (track) => `/art/${track.rpmId}.png`);
+declare global {
+  interface Window {
+    signDelay?: number;
+    heads?: Map<string, Uint8Array>;
+  }
+}
+
+const player = new Player(signer, async (track) => `/art/${track.rpmId}.png`, undefined, {
+  held: (rpmId) => window.heads?.get(rpmId) ?? null,
+  warm: () => {},
+});
 let shown: CloudTrack | null = null;
 player.onChange(() => {
   if (player.current !== shown) {
