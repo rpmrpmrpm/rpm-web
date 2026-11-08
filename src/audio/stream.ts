@@ -57,6 +57,9 @@ export class Stream {
   private finished = false;
   private started = false;
   private outbox: ToWorker[] = [];
+  // A track was added while a render was out. That render's "drained" was said of a queue that has grown since,
+  // so it is not passed on.
+  private addedWhileRendering = false;
   private answerWithdrawn: ((count: number) => void) | null = null;
   // The stream time the playhead is moving to after a key press. Until it gets there, the boundary
   // table says nothing true about what is playing.
@@ -105,6 +108,7 @@ export class Stream {
     this.boundaries = [];
     this.epoch++;
     this.rendering = false;
+    this.addedWhileRendering = false;
     this.drained = false;
     this.finished = false;
     this.jumpTo = null;
@@ -151,6 +155,7 @@ export class Stream {
 
   add(track: WorkerTrack, first = false) {
     this.send({ type: 'add', track, first });
+    if (this.rendering) this.addedWhileRendering = true;
     this.drained = false;
     this.pull();
   }
@@ -168,6 +173,7 @@ export class Stream {
   replace(tracks: WorkerTrack[]) {
     this.epoch++;
     this.rendering = false;
+    this.addedWhileRendering = false;
     this.drained = false;
     this.operations = [];
     this.send({ type: 'stop', epoch: this.epoch });
@@ -200,10 +206,11 @@ export class Stream {
         this.boundaries.push(...data.boundaries);
         if (data.bytes.length > 0) this.operate({ kind: 'append', bytes: data.bytes });
         for (const failure of data.failures) this.events.failed(failure);
-        if (data.drained) {
+        if (data.drained && !this.addedWhileRendering) {
           this.drained = true;
           this.events.drained();
         }
+        this.addedWhileRendering = false;
         this.pull();
         break;
 

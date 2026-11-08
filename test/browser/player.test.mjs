@@ -57,6 +57,19 @@ for (const [name, engine, options] of [
   ['Firefox', firefox, { firefoxUserPrefs: { 'media.autoplay.default': 0 } }],
   ['WebKit', webkit, {}],
 ]) {
+  test(`${name}: a single track whose signature is slow plays, and is not taken for the end of the queue`, { timeout: 90_000 }, async () => {
+    // The stream asks for audio before the track is signed, and the worker has nothing to make yet. With no track
+    // after this one, a player that took that for the queue running out finished the stream at once.
+    const { browser, page, problems } = await open(engine, options);
+    await page.evaluate(() => (window.signDelay = 1500));
+    await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac').slice(0, 1), 0);");
+    await playing(page, 'flac 1');
+    await page.waitForFunction(() => window.player.seconds > 1, undefined, { timeout: 30_000 });
+    assert.equal((await read(page)).trouble, null);
+    assert.deepEqual(problems, []);
+    await browser.close();
+  });
+
   test(`${name}: the queue crosses into the next track by itself`, { timeout: 90_000 }, async () => {
     const { browser, page, problems } = await open(engine, options);
     await start(page, "window.player.setVolume(0.01); window.player.play(window.album('aac128'), 0);");

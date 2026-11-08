@@ -79,6 +79,9 @@ export class Player {
   // The entry the playhead is on, so a track repeated with itself still counts as a crossing.
   private currentEntry: string | null = null;
   private signing = false;
+  // The key press whose track is being signed, until that track is in the stream. The stream has nothing to make
+  // meanwhile and says it ran dry, which is not the end of the queue: see onDrained.
+  private handingOver: object | null = null;
   // Counts key presses that moved the queue.
   private moves = 0;
   // Set from a key press until the audio of that press is under the playhead.
@@ -298,18 +301,24 @@ export class Player {
 
   // The track is signed, and its address handed to the stream.
   private async handOver(row: QueueRow, attempt: ReturnType<StartGate['begin']>, opening: boolean, startAt?: number) {
-    let signed: CloudStream;
+    this.handingOver = attempt;
     try {
-      signed = await this.sign(row, attempt.signal);
-    } catch (error) {
-      if (attempt.isLive) this.cannotPlay(error);
-      return;
-    }
-    if (!attempt.isLive) return;
+      let signed: CloudStream;
+      try {
+        signed = await this.sign(row, attempt.signal);
+      } catch (error) {
+        if (attempt.isLive) this.cannotPlay(error);
+        return;
+      }
+      if (!attempt.isLive) return;
 
-    const entry = this.entryOf(row, signed.url, startAt);
-    if (opening) this.stream.add(entry);
-    else this.stream.replace([entry]);
+      const entry = this.entryOf(row, signed.url, startAt);
+      if (opening) this.stream.add(entry);
+      else this.stream.replace([entry]);
+    } finally {
+      // A later press has a hand-over of its own, which this one must not end.
+      if (this.handingOver === attempt) this.handingOver = null;
+    }
 
     void this.handAfterTail();
   }
@@ -385,7 +394,9 @@ export class Player {
       this.stream.add(this.entryOf(waiting.row, waiting.url));
       return;
     }
-    if (this.signing) return;
+    // Ran dry while the pressed track or the next one is being signed: it is on its way, and the stream goes on
+    // when it is added.
+    if (this.signing || this.handingOver) return;
     if (this.after(this.tail) === null) this.stream.finish();
     else await this.handAfterTail();
   }
