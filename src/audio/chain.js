@@ -299,12 +299,14 @@ export class Chain {
     this.current = this.open(track);
     if (!this.current) return null;
 
+    // A head clip is the first seconds of the track, so its own length is not the track's. Zero says it is not
+    // known until the real source joins (see joinBehind).
     this.boundaries.push({
       id: track.id,
       name: track.name,
       at: this.framesWritten / STREAM_RATE,
       offset: this.current.offset,
-      duration: this.media._rm_duration(this.current.decoder),
+      duration: this.current.onHead ? 0 : this.media._rm_duration(this.current.decoder),
     });
     return this.current;
   }

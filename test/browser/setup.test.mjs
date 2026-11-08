@@ -77,6 +77,8 @@ test('an empty library opens on the setup, which ends at the Import pane with wh
   await page.click('.setup footer button:has-text("Open my collection")');
   await page.waitForSelector('.setup', { state: 'detached' });
   await page.waitForSelector('.pane.left .pane-head:has-text("3 tracks ticked for import")');
+  // The two Ogg files give their length only at their end, and it is read there: 4:07, 3:04 and 5:36.
+  await page.waitForSelector('.pane.left :text("12:46")');
 
   // Once per account in this browser.
   await page.reload();

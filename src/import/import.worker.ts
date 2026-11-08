@@ -54,8 +54,12 @@ function rpmIdOf(native: Record<string, { id: string; value: unknown }[]>): stri
 
 const first = (values: (string | undefined)[] | undefined) => values?.[0] ?? null;
 
+// The length is read from the headers when they say it. Some files do not: Ogg Vorbis and Opus give it only in
+// the last page, and an MP3 without a frame count only in its frames. Those are read again, to the end, because a
+// track stored with no length looks a few seconds long to every player.
 async function readTags(file: File): Promise<{ tags: TrackTags; hasArt: boolean }> {
-  const { common, format, native } = await parseBlob(file, { skipPostHeaders: false });
+  let { common, format, native } = await parseBlob(file, { skipPostHeaders: false });
+  if (!format.duration) ({ common, format, native } = await parseBlob(file, { skipPostHeaders: false, duration: true }));
   return {
     hasArt: (common.picture?.length ?? 0) > 0,
     tags: {

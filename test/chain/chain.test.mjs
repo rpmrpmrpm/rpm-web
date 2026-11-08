@@ -290,8 +290,10 @@ test('a head clip hands over to the track on the same sample', () => {
   assert.equal(decoded.length, frames * 2, 'a clip joined to its own recording is the length of the recording');
   assert.equal(largestDifference(decoded, original, 0, frames), 0);
 
-  // The clip's own length said nothing about the track's, and the clock runs straight through the join.
+  // The clip's own length says nothing about the track's: it is not known until the join, and the clock runs
+  // straight through the join.
   assert.equal(boundaries.length, 2);
+  assert.equal(boundaries[0].duration, 0);
   assert.equal(boundaries[1].at, 1);
   assert.equal(boundaries[1].offset, 1);
   assert.ok(Math.abs(boundaries[1].duration - frames / STREAM_RATE) < 0.01);
