@@ -29,14 +29,6 @@ const name = (track: CloudTrack) => track.relativePath?.split('/').pop() ?? `${t
 
 export type Signer = Pick<CloudClient, 'stream' | 'requestRendition'>;
 
-// The opening seconds of tracks, held so a key press has something to play at once.
-export interface Heads {
-  held(rpmId: string): Uint8Array | null;
-  warm(rpmIds: readonly string[]): void;
-}
-
-const noHeads: Heads = { held: () => null, warm: () => {} };
-
 export interface EqualizerSettings {
   on: boolean;
   preamp: number;
@@ -99,7 +91,6 @@ export class Player {
     private readonly sound: Volume,
     private readonly findArtwork: (track: CloudTrack) => Promise<string | null> = async () => null,
     private readonly listened: (rpmId: string) => void = () => {},
-    private readonly heads: Heads = noHeads,
   ) {
     this.audio = new Audio();
     this.audio.preload = 'auto';
@@ -203,10 +194,10 @@ export class Player {
     return this.cloud.stream(row.track.rpmId, SMALL ? PHONE_RATE : COMPUTER_RATE, signal);
   }
 
-  private entryOf(row: QueueRow, url?: string, startAt?: number, head?: Uint8Array): WorkerTrack {
+  private entryOf(row: QueueRow, url?: string, startAt?: number): WorkerTrack {
     const id = `entry-${this.nextEntry++}`;
     this.entries.set(id, row);
-    return { id, name: name(row.track), url, gain: this.gainOf(row.track), startAt, head };
+    return { id, name: name(row.track), url, gain: this.gainOf(row.track), startAt };
   }
 
   // Plays these tracks from this position. Runs inside the key press up to the first await, because a
@@ -218,7 +209,6 @@ export class Player {
     this.inAlbumOrder = options.inAlbumOrder;
     this.recordLevel = options.inAlbumOrder ? levelOfRecord(tracks) : { lufs: null, truePeak: null };
     this.moveTo(index);
-    this.heads.warm(tracks.slice(index).map((track) => track.rpmId));
   }
 
   // These tracks straight after the one playing. The next track is usually in the worker's queue already, and it
@@ -304,16 +294,8 @@ export class Player {
     void this.handOver(row, attempt, opening, startAt);
   }
 
-  // A track with a head clip starts on it at once, and the stream is joined behind it when it has been signed. The
-  // clip is three seconds to do that in. A key press into the middle of a track has no use for one.
+  // The track is signed, and its address handed to the stream.
   private async handOver(row: QueueRow, attempt: ReturnType<StartGate['begin']>, opening: boolean, startAt?: number) {
-    const head = startAt ? null : this.heads.held(row.track.rpmId);
-    const started = head ? this.entryOf(row, undefined, undefined, head) : null;
-    if (started) {
-      if (opening) this.stream.add(started);
-      else this.stream.replace([started]);
-    }
-
     let signed: CloudStream;
     try {
       signed = await this.sign(row, attempt.signal);
@@ -323,13 +305,9 @@ export class Player {
     }
     if (!attempt.isLive) return;
 
-    if (started) {
-      this.stream.join(started.id, signed.url);
-    } else {
-      const entry = this.entryOf(row, signed.url, startAt);
-      if (opening) this.stream.add(entry);
-      else this.stream.replace([entry]);
-    }
+    const entry = this.entryOf(row, signed.url, startAt);
+    if (opening) this.stream.add(entry);
+    else this.stream.replace([entry]);
 
     void this.handAfterTail();
   }

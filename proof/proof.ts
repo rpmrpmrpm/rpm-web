@@ -55,14 +55,10 @@ const signer: Signer = {
 declare global {
   interface Window {
     signDelay?: number;
-    heads?: Map<string, Uint8Array>;
   }
 }
 
-const player = new Player(signer, new Volume(null), async (track) => `/art/${track.rpmId}.png`, undefined, {
-  held: (rpmId) => window.heads?.get(rpmId) ?? null,
-  warm: () => {},
-});
+const player = new Player(signer, new Volume(null), async (track) => `/art/${track.rpmId}.png`);
 let shown: CloudTrack | null = null;
 player.onChange(() => {
   if (player.current !== shown) {

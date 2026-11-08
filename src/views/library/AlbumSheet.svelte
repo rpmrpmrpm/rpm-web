@@ -2,7 +2,7 @@
   // A record's own page, in the pane where the collection was: the sleeve with its disc, the keys, the songs, and what
   // is known about it. The room takes the sleeve's colour while it is open. The desktop's reviews are community pages,
   // which the web app does not have.
-  import { covers, dossiers, favorites, headClips, player } from '../../app';
+  import { covers, dossiers, favorites, player } from '../../app';
   import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
   import { askAbout, type Dossier } from '../../library/dossier';
@@ -22,8 +22,6 @@
   let known = $state.raw<Dossier | null>(null);
   // A record turns where the cards will stand while the papers are asked for.
   let asking = $state(false);
-
-  $effect(() => headClips.warm(album.tracks.map((track) => track.rpmId)));
 
   $effect(() => {
     room.album = album;

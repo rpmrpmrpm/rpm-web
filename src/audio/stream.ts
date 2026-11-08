@@ -57,10 +57,6 @@ export class Stream {
   private finished = false;
   private started = false;
   private outbox: ToWorker[] = [];
-  // The head clip has run dry and its address has not come. Nothing can be made until it does.
-  private atJoin = false;
-  // The address went to the worker, so a report of waiting that crossed it on the way means nothing.
-  private joinSent = false;
   private answerWithdrawn: ((count: number) => void) | null = null;
   // The stream time the playhead is moving to after a key press. Until it gets there, the boundary
   // table says nothing true about what is playing.
@@ -111,8 +107,6 @@ export class Stream {
     this.rendering = false;
     this.drained = false;
     this.finished = false;
-    this.atJoin = false;
-    this.joinSent = false;
     this.jumpTo = null;
     this.buffer = null;
     this.started = false;
@@ -169,22 +163,12 @@ export class Stream {
     });
   }
 
-  // The address of a track that started on its head clip.
-  join(id: string, url: string) {
-    this.joinSent = true;
-    this.atJoin = false;
-    this.send({ type: 'join', id, url });
-    this.pull();
-  }
-
   // A key press: everything ahead of the playhead goes, and these tracks follow. The stream's clock
   // runs on, so the playhead jumps to the time the new audio starts at.
   replace(tracks: WorkerTrack[]) {
     this.epoch++;
     this.rendering = false;
     this.drained = false;
-    this.atJoin = false;
-    this.joinSent = false;
     this.operations = [];
     this.send({ type: 'stop', epoch: this.epoch });
     for (const track of tracks) this.send({ type: 'add', track, first: false });
@@ -216,7 +200,6 @@ export class Stream {
         this.boundaries.push(...data.boundaries);
         if (data.bytes.length > 0) this.operate({ kind: 'append', bytes: data.bytes });
         for (const failure of data.failures) this.events.failed(failure);
-        if (data.waiting && !this.joinSent) this.atJoin = true;
         if (data.drained) {
           this.drained = true;
           this.events.drained();
@@ -294,7 +277,7 @@ export class Stream {
 
   // The worker makes only what the buffer has room for, so the stream sets the pace.
   private pull() {
-    if (!this.started || !this.buffer || this.rendering || this.drained || this.finished || this.atJoin) return;
+    if (!this.started || !this.buffer || this.rendering || this.drained || this.finished) return;
     if (this.operations.length > 0 || this.buffer.updating) return;
 
     const start = this.jumpTo ?? this.audio.currentTime;

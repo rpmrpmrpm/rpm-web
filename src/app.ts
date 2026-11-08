@@ -4,7 +4,6 @@ import { CloudClient } from './api/cloud';
 import { Api } from './api/http';
 import { Profiles } from './api/profile';
 import { Session } from './api/session';
-import { HeadClips } from './audio/heads';
 import { LOCK_SCREEN_ART, Player } from './audio/player';
 import { Volume } from './audio/volume';
 import { browserTransfers, Importer } from './import/importer';
@@ -50,8 +49,6 @@ catalogue.playsOf = (album) => {
   return album.tracks.reduce((sum, track) => sum + (plays.get(track.rpmId)?.plays ?? 0), 0);
 };
 
-export const headClips = new HeadClips(cloud);
-
 const THROTTLE_SYNC_MS = 60_000;
 let syncedAt = 0;
 
@@ -84,7 +81,6 @@ export const player = new Player(
     playLog.note(rpmId, Math.floor(Date.now() / 1000));
     syncPlays();
   },
-  headClips,
 );
 
 export const playlists = new Playlists(api, browserTransfers);

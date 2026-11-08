@@ -49,12 +49,6 @@ export class CloudClient {
     return this.api.json(`cloud/stream/${encodeURIComponent(rpmId)}?rate=${rate}`, readStream, { signal });
   }
 
-  // The opening seconds of these tracks. A track with no clip yet comes back without one, and the store makes it.
-  async headClips(rpmIds: readonly string[]): Promise<{ rpmId: string; audio?: string | null }[]> {
-    const answer = await this.api.json('cloud/heads', (raw) => raw as { clips?: { rpmId: string; audio?: string | null }[] }, { method: 'POST', body: { rpmIds } });
-    return answer.clips ?? [];
-  }
-
   // Asks the store to make a rendition, without waiting for it. The look-ahead goes
   // through this and never through a live address.
   async requestRendition(rpmIds: string[], kilobits: number): Promise<void> {

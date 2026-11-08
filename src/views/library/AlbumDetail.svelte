@@ -2,7 +2,7 @@
   // A record: its name with a few small keys, and its tracklist by disc, as the desktop's album band. Everything else
   // a record can do is on its menu, behind the last key or a right click. The drawer on the wall and the page on a
   // phone both show this.
-  import { covers, favorites, headClips, player } from '../../app';
+  import { covers, favorites, player } from '../../app';
   import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
   import { library } from '../../state.svelte';
@@ -17,7 +17,6 @@
   let sleeve = $state<string | null>(null);
 
   // A record that is opened is a record about to be played.
-  $effect(() => headClips.warm(album.tracks.map((track) => track.rpmId)));
 
   $effect(() => {
     const wanted = album;
