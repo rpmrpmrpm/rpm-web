@@ -17,6 +17,7 @@ import { RadioDirectory } from './radio/directory';
 import { RadioFavorites } from './radio/favorites';
 import { RadioListens } from './radio/listens';
 import { RadioRules } from './radio/rules';
+import { StationLogos } from './radio/station-logos';
 import { Tuner } from './radio/tuner';
 import { CatalogEdits } from './library/edit';
 import { Readings } from './library/analysis';
@@ -155,6 +156,7 @@ export const PRIVACY = 'https://rpmrpmrpm.com/privacy';
 
 export const radioDirectory = new RadioDirectory(api);
 export const radioRules = new RadioRules(api);
+export const stationLogos = new StationLogos(api, () => radioRules.logoStamp);
 export const radioFavorites = new RadioFavorites(api);
 const radioListens = new RadioListens(api, () => `web-${installId()}`);
 

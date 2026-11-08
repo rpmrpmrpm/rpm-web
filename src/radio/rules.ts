@@ -51,6 +51,4 @@ export class RadioRules {
   retagged(genre: string): string[] {
     return [...this.rules.edits.entries()].filter(([, edit]) => edit.tags && isGenre(genresOf(edit.tags), genre)).map(([uuid]) => uuid).sort();
   }
-
-  logoAddress = (uuid: string) => `/api/radio/logo/${encodeURIComponent(uuid)}${this.logoStamp ? `?v=${encodeURIComponent(this.logoStamp)}` : ''}`;
 }

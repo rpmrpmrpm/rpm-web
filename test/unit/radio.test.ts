@@ -212,7 +212,7 @@ describe('the admin\'s rules', () => {
     expect(rules.rules.hidden.has('ab')).toBe(true);
     expect(rules.rules.edits.get('cd')).toEqual({ name: 'Mine', tags: ['rock'], description: null });
     expect(rules.rules.edits.has('ef')).toBe(false);
-    expect(rules.logoAddress('x')).toBe('/api/radio/logo/x?v=7');
+    expect(rules.logoStamp).toBe('7');
     expect(rules.retagged('Rock')).toEqual(['cd']);
 
     at = 3_700_000;
