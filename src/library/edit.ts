@@ -4,6 +4,8 @@
 // - the catalogue row, which every list draws from. It holds the names and the fields the library is browsed
 //   by. A blank there means "not known", so a field the user emptied is named in the push's clear list.
 // - the sidecar, which holds every tag, the lyrics and the cover, and is what a restore writes into the file.
+//   A computer that holds the file reads it again when the row says it was rewritten (the push's sidecar
+//   flag), and takes every field it states, an empty one included.
 //
 // An album's pictures and its mark are stored under keys made from its names, so they are carried across
 // when a rename gives the record a new key.
@@ -51,6 +53,14 @@ const ROW_TAGS: readonly [string, string][] = [
 // Every sidecar field an edit window can change. The two credit lists are one tag, the soloists.
 export const EDITABLE_KEYS: readonly string[] = [...TAG_FIELDS.map((tag) => tag.key).filter((key) => key !== 'Performers' && key !== 'Vocalists'), 'Soloists', 'Lyrics'];
 
+// The sidecar fields that hold a number. The advisory flag is one too: the sidecar keeps it as a number.
+const NUMBERS = new Set([...TAG_FIELDS.filter((tag) => tag.numeric).map((tag) => tag.key), 'Advisory']);
+
+// How the sidecar says a field is empty. A computer reads a field the sidecar leaves out as "not known
+// here" and keeps its own value, so an emptied field is written as empty: zero for a number (the desktop
+// cannot read a null number), null for the rest.
+const emptied = (key: string): unknown => (NUMBERS.has(key) ? 0 : null);
+
 const blank = (value: unknown) => value === null || value === undefined || value === 0 || (typeof value === 'string' && value.trim() === '');
 const same = (a: unknown, b: unknown) => (blank(a) && blank(b)) || (!blank(a) && !blank(b) && String(a).trim() === String(b).trim());
 
@@ -78,6 +88,8 @@ export interface PushItem {
   album?: string;
   tags?: Record<string, unknown>;
   clear?: string[];
+  // The sidecar was rewritten: the row records when, so a computer that holds the file reads it again.
+  sidecar?: boolean;
 }
 
 // What changes on the row, or null when nothing does. A row's tags always carry the favourite mark (the store
@@ -112,20 +124,20 @@ export interface Picture {
 // What happens to one of a record's pictures: a new one, taken off, or left alone (undefined).
 export type PictureChange = Picture | 'remove' | undefined;
 
-// The sidecar as it is now, with what the window changed written over it, emptied fields included. A field the
-// window did not change keeps what the sidecar holds now, so a window that showed an older reading, or never
-// read the field at all, cannot undo a change made somewhere else since. What is not a tag stays: the path,
-// the id, what the audio is, the favourite mark.
+// The sidecar as it is now, with what the window changed written over it. An emptied field is written as empty
+// (see emptied), not left out. A field the window did not change keeps what the sidecar holds now, so a window
+// that showed an older reading, or never read the field at all, cannot undo a change made somewhere else
+// since. What is not a tag stays: the path, the id, what the audio is, the favourite mark.
 export function mergeSidecar(sidecar: TagSet, before: TagSet, after: TagSet, cover: PictureChange): TagSet {
   const merged: TagSet = { ...sidecar };
   for (const key of EDITABLE_KEYS) {
     if (same(before[key], after[key])) continue;
-    if (blank(after[key])) delete merged[key];
+    if (blank(after[key])) merged[key] = emptied(key);
     else merged[key] = typeof after[key] === 'string' ? (after[key] as string).trim() : after[key];
   }
   if (cover === 'remove') {
-    delete merged.Art;
-    delete merged.ArtMime;
+    merged.Art = null;
+    merged.ArtMime = null;
   } else if (cover) {
     merged.Art = base64(cover.bytes);
     merged.ArtMime = normalizeMime(cover.mime);
@@ -234,17 +246,28 @@ export class CatalogEdits {
 
   // Writes the edits. Returns how many tracks changed. A refusal throws, and what was already saved stays
   // saved, so saving again finishes the job.
+  //
+  // The sidecars are written before the rows are pushed. The push names each rewritten sidecar, and a computer
+  // that holds the file reads the sidecar again when it sees that. A push that went first could be read with
+  // the old sidecar still in place, and that computer would then never read the new one.
   async save(edits: readonly TrackEdit[], album: CloudAlbum | null = null, pictures: RecordPictures = {}): Promise<number> {
-    const items = edits.flatMap(({ track, after }) => pushFor(track, after, this.favorites.marks.markOf(track.rpmId)) ?? []);
+    const written = edits.filter(({ before, after }) => changesSidecar(before, after) || pictures.cover !== undefined);
+    const rewritten = new Set<string>();
+    await inTurn(written, async ({ track, before, after }) => {
+      const sidecar = await this.sidecars.read(track.rpmId);
+      if (!sidecar) return;
+      await this.sidecars.write(track.rpmId, mergeSidecar(sidecar, before, after, pictures.cover));
+      rewritten.add(track.rpmId);
+    });
+
+    const items = edits.flatMap(({ track, after }): PushItem[] => {
+      const item = pushFor(track, after, this.favorites.marks.markOf(track.rpmId));
+      if (!rewritten.has(track.rpmId)) return item ? [item] : [];
+      return [{ ...(item ?? { rpmId: track.rpmId }), sidecar: true }];
+    });
     for (let at = 0; at < items.length; at += MOST_IN_ONE_PUSH) {
       await this.api.call('cloud/catalog/tags', { method: 'POST', body: { items: items.slice(at, at + MOST_IN_ONE_PUSH) } });
     }
-
-    const written = edits.filter(({ before, after }) => changesSidecar(before, after) || pictures.cover !== undefined);
-    await inTurn(written, async ({ track, before, after }) => {
-      const sidecar = await this.sidecars.read(track.rpmId);
-      if (sidecar) await this.sidecars.write(track.rpmId, mergeSidecar(sidecar, before, after, pictures.cover));
-    });
 
     const [first] = edits;
     if (first) {

@@ -6,8 +6,9 @@
   import { untrack } from 'svelte';
 
   import type { CloudTrack } from '../../api/wire';
-  import { catalogEdits, catalogue, covers } from '../../app';
+  import { catalogEdits, catalogue, covers, readings } from '../../app';
   import { icons } from '../../design/icons';
+  import { KEY_TOO_CLOSE, type Reading } from '../../library/analysis';
   import { rowTags, type PictureChange, type TrackEdit } from '../../library/edit';
   import { genreSuggestions, readField, styleSuggestions, tagField, writeField, type TagSet } from '../../library/tag-fields';
   import type { CloudAlbum } from '../../library/albums';
@@ -30,6 +31,16 @@
   import TabStrip from './TabStrip.svelte';
 
   let { track, onClose }: { track: CloudTrack; onClose: () => void } = $props();
+
+  // What the shared analysis knows about the track: undefined while it is asked, null when nothing is known,
+  // 'failed' when it could not be asked.
+  let analysis = $state.raw<Reading | null | 'failed' | undefined>(undefined);
+  void readings.of(untrack(() => track)).then(
+    (found) => (analysis = found),
+    () => (analysis = 'failed'),
+  );
+
+  const confidence = (value: number | null) => (value === null ? '' : `   ${text('Details_Confidence', value.toFixed(2))}`);
 
   const KEYS = [...keysOf(TRACK_LAYOUT), 'Bpm', 'MusicalKey', 'Lyrics'];
 
@@ -228,6 +239,40 @@
           <p class="hint">{text('Details_SoundHint')}</p>
         </div>
         <div class="column">
+          <!-- What the shared analysis read from the audio, as the desktop shows its own. -->
+          {#if analysis === 'failed'}
+            <FormGroup heading="MassEdit_GroupReading">
+              <p class="note">{text('Web_AnalysisFailed')}</p>
+            </FormGroup>
+          {:else if analysis === null}
+            <FormGroup heading="MassEdit_GroupReading">
+              <FormRow label={text('Details_Analysis')}><span class="reading">{text('Details_NotAnalysed')}</span></FormRow>
+            </FormGroup>
+          {:else if analysis}
+            <FormGroup heading="MassEdit_GroupReading">
+              {#if analysis.camelot}
+                <FormRow label={text('Details_Camelot')}>
+                  <span class="reading">{analysis.camelot}  ·  {analysis.keyName}{analysis.keyConfidence !== null && analysis.keyConfidence < KEY_TOO_CLOSE ? `  ·  ${text('Details_TooCloseToCall')}` : ''}{confidence(analysis.keyConfidence)}</span>
+                </FormRow>
+              {/if}
+              {#if analysis.bpm}
+                <FormRow label={text('Details_MeasuredTempo')}>
+                  <span class="reading">{analysis.bpm.toFixed(0)} {text('Details_BpmUnit')}{confidence(analysis.bpmConfidence)}</span>
+                </FormRow>
+              {/if}
+              {#if analysis.beatsPerBar && analysis.firstDownbeat !== null}
+                <FormRow label={text('Details_BeatGrid')}>
+                  <span class="reading">{text('Details_BeatGridValue', analysis.beatsPerBar, analysis.firstDownbeat + 1)}{confidence(analysis.downbeatConfidence)}</span>
+                </FormRow>
+              {/if}
+              {#if analysis.energy !== null}
+                <FormRow label={text('Details_Energy')}><span class="reading">{analysis.energy.toFixed(2)}</span></FormRow>
+              {/if}
+              {#if analysis.modelled !== null}
+                <FormRow label={text('Details_ReadBy')}><span class="reading">{text(analysis.modelled ? 'Details_ReadByModel' : 'Details_ReadByDsp')}</span></FormRow>
+              {/if}
+            </FormGroup>
+          {/if}
           <!-- How loud the record is: the store's own measurement, which no tag carries. -->
           {#if track.tags?.loudnessLufs}
             <FormGroup heading="MassEdit_GroupLevel">
@@ -336,9 +381,11 @@
     font-size: 11.5px;
   }
 
+  /* Pre-wrapped, so the spaces between a reading and its confidence stay as wide as the desktop draws them. */
   .reading {
     color: rgb(255 255 255 / 0.85);
     font-size: 11.5px;
+    white-space: pre-wrap;
   }
 
   .lyrics {

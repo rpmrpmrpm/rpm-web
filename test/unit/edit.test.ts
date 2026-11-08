@@ -83,7 +83,14 @@ describe('the sidecar an edit writes', () => {
     const sidecar = { Version: 5, RelativePath: 'a/b.flac', RpmId: 'a', Title: 'Old', Conductor: 'Gone', Favorite: true, Art: 'AAAA', ArtMime: 'image/jpeg', Channels: 2 };
     const before = { Title: 'Old', Conductor: 'Gone' };
     const merged = mergeSidecar(sidecar, before, { Title: 'New', Lyrics: 'La la', Soloists: 'A (soprano)' }, undefined);
-    expect(merged).toEqual({ Version: 5, RelativePath: 'a/b.flac', RpmId: 'a', Title: 'New', Lyrics: 'La la', Soloists: 'A (soprano)', Favorite: true, Art: 'AAAA', ArtMime: 'image/jpeg', Channels: 2 });
+    expect(merged).toEqual({ Version: 5, RelativePath: 'a/b.flac', RpmId: 'a', Title: 'New', Conductor: null, Lyrics: 'La la', Soloists: 'A (soprano)', Favorite: true, Art: 'AAAA', ArtMime: 'image/jpeg', Channels: 2 });
+  });
+
+  it('says an emptied field is empty rather than leaving it out, with zero for a number', () => {
+    // A computer that holds the file reads a missing field as "not known" and keeps its own value.
+    const merged = mergeSidecar({ Year: 1997, Advisory: 1, Bpm: 120, Genre: 'Rock' }, { Year: 1997, Advisory: 1, Bpm: 120, Genre: 'Rock' }, {}, undefined);
+    expect(merged).toEqual({ Year: 0, Advisory: 0, Bpm: 0, Genre: null });
+    expect(JSON.parse(JSON.stringify(merged))).toEqual(merged);
   });
 
   it('leaves a field the window did not change as the sidecar has it now', () => {
@@ -96,8 +103,8 @@ describe('the sidecar an edit writes', () => {
     const sidecar = { Title: 'A', Art: 'AAAA', ArtMime: 'image/jpeg' };
     expect(mergeSidecar(sidecar, { Title: 'A' }, { Title: 'A' }, { bytes: new Uint8Array([1, 2, 3]), mime: 'image/png' })).toMatchObject({ Art: 'AQID', ArtMime: 'image/png' });
     const without = mergeSidecar(sidecar, { Title: 'A' }, { Title: 'A' }, 'remove');
-    expect(without.Art).toBeUndefined();
-    expect(without.ArtMime).toBeUndefined();
+    expect(without).toHaveProperty('Art', null);
+    expect(without).toHaveProperty('ArtMime', null);
   });
 
   it('is only written when the edit changes what it holds', () => {
@@ -137,9 +144,26 @@ describe('saving', () => {
     const { pushed, edits } = stage();
     expect(await edits.save([edited(song('a'), { Genre: 'Rock' }), edited(song('b'), { Genre: 'Rock' })])).toBe(2);
     expect(pushed[0]!.items).toEqual([
-      { rpmId: 'a', tags: { genre: 'Rock', favorite: true, favoritedAt: 7 } },
-      { rpmId: 'b', tags: { genre: 'Rock', favorite: true, favoritedAt: 7 } },
+      { rpmId: 'a', tags: { genre: 'Rock', favorite: true, favoritedAt: 7 }, sidecar: true },
+      { rpmId: 'b', tags: { genre: 'Rock', favorite: true, favoritedAt: 7 }, sidecar: true },
     ]);
+  });
+
+  it('writes the sidecars before it pushes the rows that name them', async () => {
+    const { pushed, store, edits } = stage();
+    const order: string[] = [];
+    store.write.mockImplementation(async () => {
+      order.push(`sidecar with ${pushed.length} pushes sent`);
+    });
+    await edits.save([edited(song('a'), { Genre: 'Rock' })]);
+    expect(order).toEqual(['sidecar with 0 pushes sent']);
+    expect(pushed).toHaveLength(1);
+  });
+
+  it('does not say a sidecar was rewritten for a track that has none', async () => {
+    const { pushed, edits } = stage({}, false, { a: null });
+    await edits.save([edited(song('a'), { Genre: 'Rock' })]);
+    expect(pushed[0]!.items).toEqual([{ rpmId: 'a', tags: { genre: 'Rock', favorite: true, favoritedAt: 7 } }]);
   });
 
   it('sends nothing when nothing changed', async () => {
@@ -149,10 +173,10 @@ describe('saving', () => {
     expect(store.write).not.toHaveBeenCalled();
   });
 
-  it('writes a field the row does not hold into the sidecar alone', async () => {
+  it('writes a field the row does not hold into the sidecar, and tells the row it was rewritten', async () => {
     const { pushed, store, edits } = stage();
     expect(await edits.save([edited(song('a'), { Conductor: 'Karajan' })])).toBe(1);
-    expect(pushed).toEqual([]);
+    expect(pushed).toEqual([{ items: [{ rpmId: 'a', sidecar: true }] }]);
     expect(store.write).toHaveBeenCalledWith('a', expect.objectContaining({ RpmId: 'a', Conductor: 'Karajan' }));
   });
 

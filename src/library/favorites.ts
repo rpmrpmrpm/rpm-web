@@ -62,10 +62,38 @@ export class FavoriteMarks {
   }
 }
 
+// How a record is levelled and which series it is one volume of, as the album editor sets them. Each null is
+// an answer: levelling left to the listener's setting, and a record that stands alone.
+export interface RecordSettings {
+  normalize: boolean | null;
+  series: string | null;
+  seriesVolume: string | null;
+}
+
+export const NO_SETTINGS: RecordSettings = { normalize: null, series: null, seriesVolume: null };
+
+interface StoredMark {
+  albumKey: string;
+  favorite?: boolean;
+  classical?: boolean | null;
+  normalize?: boolean | null;
+  series?: string | null;
+  seriesVolume?: string | null;
+  settingsAt?: number;
+}
+
+const settingsOfMark = (mark: StoredMark): RecordSettings => ({
+  normalize: mark.normalize ?? null,
+  series: mark.series?.trim() || null,
+  seriesVolume: (mark.series?.trim() && mark.seriesVolume?.trim()) || null,
+});
+
 export class Favorites {
   readonly marks = new FavoriteMarks();
   private albumKeys = new Set<string>();
   private classicalKeys = new Set<string>();
+  // Only the records some device has set the settings on. A record with no entry has said nothing.
+  private settings = new Map<string, RecordSettings>();
   private readonly listeners = new Set<() => void>();
 
   constructor(
@@ -89,9 +117,10 @@ export class Favorites {
   // A failed read keeps the marks already held.
   async readAlbums() {
     try {
-      const marks = await this.api.json('cloud/album-marks', (raw) => (raw as { albums?: { albumKey: string; favorite?: boolean; classical?: boolean | null }[] }).albums ?? []);
+      const marks = await this.api.json('cloud/album-marks', (raw) => (raw as { albums?: StoredMark[] }).albums ?? []);
       this.albumKeys = new Set(marks.filter((mark) => mark.favorite).map((mark) => mark.albumKey));
       this.classicalKeys = new Set(marks.filter((mark) => mark.classical === true).map((mark) => mark.albumKey));
+      this.settings = new Map(marks.filter((mark) => (mark.settingsAt ?? 0) > 0).map((mark) => [mark.albumKey, settingsOfMark(mark)]));
       this.changed();
     } catch {
       // Asked again on the next visit.
@@ -113,6 +142,38 @@ export class Favorites {
       await this.api.call(`cloud/album-mark/${key}/classical`, { method: 'PUT', body: { classical: on } });
       if (on) this.classicalKeys.add(key);
       else this.classicalKeys.delete(key);
+    }
+    this.changed();
+  }
+
+  // The record's levelling and series, as the first of its keys that has them says. Nothing set reads as the
+  // defaults: levelling left to the setting, and no series.
+  async settingsOf(album: CloudAlbum): Promise<RecordSettings> {
+    for (const key of await coverSpellings(album.tracks)) {
+      const said = this.settings.get(key);
+      if (said) return said;
+    }
+    return NO_SETTINGS;
+  }
+
+  // Every series name in the collection, once each in alphabetical order: what the album editor offers, so the
+  // forty-third volume is filed under the same name as the first.
+  seriesNames(): string[] {
+    const names = new Map<string, string>();
+    for (const said of this.settings.values()) if (said.series && !names.has(said.series.toLowerCase())) names.set(said.series.toLowerCase(), said.series);
+    return [...names.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }
+
+  // Said under the record's best key, and under every other key that already holds settings, so a device that
+  // reads the record under another spelling sees the same answer. A refusal throws, so the window can say so.
+  async saveSettings(album: CloudAlbum, settings: RecordSettings) {
+    const series = settings.series?.trim() || null;
+    const said: RecordSettings = { normalize: settings.normalize, series, seriesVolume: (series && settings.seriesVolume?.trim()) || null };
+    const spellings = await coverSpellings(album.tracks);
+    const keys = [...new Set([...spellings.slice(0, 1), ...spellings.filter((key) => this.settings.has(key))])];
+    for (const key of keys) {
+      await this.api.call(`cloud/album-mark/${key}/settings`, { method: 'PUT', body: said });
+      this.settings.set(key, said);
     }
     this.changed();
   }
@@ -169,6 +230,7 @@ export class Favorites {
     this.marks.forget();
     this.albumKeys = new Set();
     this.classicalKeys = new Set();
+    this.settings = new Map();
     this.changed();
   }
 }

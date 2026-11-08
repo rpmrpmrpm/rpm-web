@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../src/api/http';
 import type { CloudTrack } from '../../src/api/wire';
 import type { CloudAlbum } from '../../src/library/albums';
-import { FavoriteMarks, Favorites, utcTicks } from '../../src/library/favorites';
+import { FavoriteMarks, Favorites, NO_SETTINGS, utcTicks } from '../../src/library/favorites';
 import { AlbumRatings } from '../../src/library/ratings';
 
 const song = (rpmId: string, favorite = false, at = 0, title = rpmId): CloudTrack => ({
@@ -152,6 +152,34 @@ describe('marking', () => {
     const { favorites } = stage(true);
     await favorites.markAlbum(record([song('a')]), true);
     expect(await favorites.isAlbumMarked(record([song('a')]))).toBe(false);
+  });
+
+  it('reads a record\'s levelling and series, and only from a row some device set them on', async () => {
+    const { favorites } = stage(false, [
+      { albumKey: STORED_KEY, favorite: true, normalize: false, series: ' Now ', seriesVolume: '43', settingsAt: 9 },
+      { albumKey: 'other', series: 'Ignored', settingsAt: 0 },
+    ]);
+    await favorites.readAlbums();
+    expect(await favorites.settingsOf(record([song('a')]))).toEqual({ normalize: false, series: 'Now', seriesVolume: '43' });
+    expect(favorites.seriesNames()).toEqual(['Now']);
+  });
+
+  it('reads a record nobody set anything on as the defaults', async () => {
+    const { favorites } = stage(false, [{ albumKey: STORED_KEY, favorite: true }]);
+    await favorites.readAlbums();
+    expect(await favorites.settingsOf(record([song('a')]))).toEqual(NO_SETTINGS);
+  });
+
+  it('saves the three settings together under the best key, and drops a volume without a series', async () => {
+    const { call, favorites } = stage();
+    await favorites.saveSettings(record([song('a')]), { normalize: true, series: '  ', seriesVolume: '3' });
+    expect(call).toHaveBeenCalledWith(`cloud/album-mark/${STORED_KEY}/settings`, { method: 'PUT', body: { normalize: true, series: null, seriesVolume: null } });
+    expect(await favorites.settingsOf(record([song('a')]))).toEqual({ normalize: true, series: null, seriesVolume: null });
+  });
+
+  it('lets a refused save through, so the window can say so', async () => {
+    const { favorites } = stage(true);
+    await expect(favorites.saveSettings(record([song('a')]), NO_SETTINGS)).rejects.toThrow();
   });
 
   it('keeps the marks it holds when a read fails', async () => {

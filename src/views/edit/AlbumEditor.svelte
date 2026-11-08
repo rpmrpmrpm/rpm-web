@@ -9,6 +9,7 @@
   import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
   import { discKeyForTrack } from '../../library/art-key';
+  import { NO_SETTINGS, type RecordSettings } from '../../library/favorites';
   import type { Picture, PictureChange, TrackEdit } from '../../library/edit';
   import { ALBUM_TO_TRACK, genreSuggestions, readField, styleSuggestions, tagField, writeField, type TagSet } from '../../library/tag-fields';
   import { text } from '../../strings/loc';
@@ -53,6 +54,16 @@
 
   let classicalSeed = $state(false);
   let classical = $state('no');
+
+  // Levelling has three answers (the setting decides, always, never), and the series waits behind a yes, as
+  // in the desktop's album editor. Both are the app's own opinion about the record, kept with its marks and
+  // never written into the files.
+  let settingsSeed = $state.raw<RecordSettings>(NO_SETTINGS);
+  let levelling = $state('auto');
+  let inSeries = $state('no');
+  let seriesName = $state('');
+  let seriesVolume = $state('');
+  const seriesNames = favorites.seriesNames();
 
   // What most of the tracks hold, with a blank losing to anything named.
   function seedOf(values: readonly string[]): string {
@@ -104,6 +115,26 @@
   }
 
   void read();
+  void favorites.settingsOf(untrack(() => album)).then((said) => {
+    settingsSeed = said;
+    levelling = said.normalize === null ? 'auto' : said.normalize ? 'on' : 'off';
+    inSeries = said.series ? 'yes' : 'no';
+    seriesName = said.series ?? '';
+    seriesVolume = said.seriesVolume ?? '';
+  });
+
+  // The settings as the window now says them. A yes with no name is no series.
+  function settingsNow(): RecordSettings {
+    const name = inSeries === 'yes' ? seriesName.trim() : '';
+    return {
+      normalize: levelling === 'auto' ? null : levelling === 'on',
+      series: name || null,
+      seriesVolume: (name && seriesVolume.trim()) || null,
+    };
+  }
+
+  const sameSettings = (a: RecordSettings, b: RecordSettings) => a.normalize === b.normalize && a.series === b.series && a.seriesVolume === b.seriesVolume;
+
   void favorites.isClassical(untrack(() => album)).then((on) => {
     classicalSeed = on;
     classical = on ? 'yes' : 'no';
@@ -216,6 +247,8 @@
       const edits: TrackEdit[] = tracks.map((track, index) => ({ track, before: sets![index]!, after: afterOf(sets![index]!) }));
       await catalogEdits.save(edits, album, { cover: cover.change, disc: disc.change });
       if ((classical === 'yes') !== classicalSeed) await favorites.markClassical(album, classical === 'yes');
+      const settings = settingsNow();
+      if (!sameSettings(settings, settingsSeed)) await favorites.saveSettings(album, settings);
       await catalogue.refresh();
       onClose();
     } catch {
@@ -322,6 +355,32 @@
                 <option value="yes">{text('AlbumEdit_ClassicalYes')}</option>
                 <option value="no">{text('AlbumEdit_ClassicalNo')}</option>
               </select>
+            </FormRow>
+            <FormRow label={text('AlbumEdit_Normalize')}>
+              <select class="field" bind:value={levelling} aria-label={text('AlbumEdit_Normalize')}>
+                <option value="auto">{text('AlbumEdit_NormalizeAuto')}</option>
+                <option value="on">{text('AlbumEdit_NormalizeOn')}</option>
+                <option value="off">{text('AlbumEdit_NormalizeOff')}</option>
+              </select>
+            </FormRow>
+          </FormGroup>
+        </div>
+        <div class="column">
+          <FormGroup heading="AlbumEdit_GroupSeries">
+            <FormRow label={text('AlbumEdit_InSeries')}>
+              <select class="field" bind:value={inSeries} aria-label={text('AlbumEdit_InSeries')}>
+                <option value="no">{text('AlbumEdit_SeriesNo')}</option>
+                <option value="yes">{text('AlbumEdit_SeriesYes')}</option>
+              </select>
+            </FormRow>
+            <FormRow label={text('AlbumEdit_SeriesName')}>
+              <input class="field" list="series-names" bind:value={seriesName} disabled={inSeries !== 'yes'} placeholder={text('AlbumEdit_SeriesNameHint')} aria-label={text('AlbumEdit_SeriesName')} maxlength="200" />
+              <datalist id="series-names">
+                {#each seriesNames as name (name)}<option value={name}></option>{/each}
+              </datalist>
+            </FormRow>
+            <FormRow label={text('AlbumEdit_SeriesVolume')}>
+              <input class="field" bind:value={seriesVolume} disabled={inSeries !== 'yes'} placeholder={text('AlbumEdit_SeriesVolumeHint')} aria-label={text('AlbumEdit_SeriesVolume')} maxlength="40" />
             </FormRow>
           </FormGroup>
         </div>
