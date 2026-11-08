@@ -365,3 +365,20 @@ test('an address for a track that has gone changes nothing', () => {
   assert.equal(chain.render(0.5).drained, true);
   chain.close();
 });
+
+test('an Ogg Vorbis track comes through whole, with nothing cut out of its middle', () => {
+  // The Moonlight Sonata that ships in public/starter. The Ogg demuxer's estimate of some packets' durations is
+  // shorter than the samples they hold, and a decoder that trimmed frames by it lost half a second in three places,
+  // each heard as a click. Only an MP4 file states its end through a packet's duration.
+  const file = new URL('../../public/starter/starter-moonlight.ogg', import.meta.url).pathname;
+  const { stream } = renderTracks([readFileSync(file)], '.ogg');
+  const through = decodeStream(stream, 'vorbis.mp4');
+
+  const direct = spawnSync(nativeFfmpeg, ['-hide_banner', '-loglevel', 'error', '-i', file, '-f', 's16le', '-ar', String(STREAM_RATE), '-ac', '2', 'pipe:1'], { maxBuffer: 1 << 28 });
+  assert.equal(direct.status, 0, direct.stderr?.toString());
+  const copy = Uint8Array.from(direct.stdout);
+  const source = new Int16Array(copy.buffer, 0, Math.floor(copy.length / 2));
+
+  assert.equal(through.length, source.length, 'the same number of samples as the file holds');
+  assert.ok(largestDifference(through, source, 0, source.length / 2) <= 1, 'the same samples, to the rounding of the decoders');
+});

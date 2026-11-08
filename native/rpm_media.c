@@ -497,6 +497,8 @@ struct RmDecoder {
     int flushed;
     double seek_target;
     int64_t drop_frames;
+    // Whether the container states where the music ends in its packets' durations. See exact_samples.
+    int trims_by_duration;
 };
 
 static int read_source(void *opaque, uint8_t *buffer, int size)
@@ -555,6 +557,8 @@ RmDecoder *rm_open(int source, const char *name, int sample_rate)
 
     const AVCodec *codec = NULL;
     d->stream = av_find_best_stream(d->format, AVMEDIA_TYPE_AUDIO, -1, -1, &codec, 0);
+    // The MP4 family's demuxer is named "mov,mp4,m4a,3gp,3g2,mj2".
+    d->trims_by_duration = strstr(d->format->iformat->name, "mov") != NULL;
     if (d->stream < 0) goto fail;
 
     for (unsigned i = 0; i < d->format->nb_streams; i++)
@@ -617,9 +621,14 @@ static void plan_drop_after_seek(RmDecoder *d, const AVFrame *frame)
 // The samples of a frame that belong to the track. An AAC encoder fills its last block with padding.
 // The MP4 file says where the music ends, in the duration of the last packet, but the decoder still
 // returns the whole block. Without this, each join in an AAC album has up to 23 ms of silence in it.
+//
+// Only an MP4 file is read this way. In other containers a packet's duration is the demuxer's
+// estimate: Ogg works it out from the page positions, and for Vorbis it can come out short of the
+// samples the frame really holds. Trimming by it cuts music out of the middle of the track, and each
+// cut is heard as a click.
 static int exact_samples(const RmDecoder *d, const AVFrame *frame)
 {
-    if (frame->duration <= 0) return frame->nb_samples;
+    if (!d->trims_by_duration || frame->duration <= 0) return frame->nb_samples;
 
     const AVRational base = d->format->streams[d->stream]->time_base;
     int64_t samples = av_rescale_q(frame->duration, base, (AVRational){1, frame->sample_rate});
