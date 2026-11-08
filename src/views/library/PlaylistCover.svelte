@@ -1,17 +1,49 @@
 <script lang="ts">
-  // The picture a list wears: the one chosen for it, or four of its records, or the sleeve of the only one.
+  // The picture a list wears: the one chosen for it, or four of its records, or the sleeve of the only one. A
+  // generated list also wears its frame over the picture, lettered with its name. See list-frame.ts.
   import type { CloudTrack } from '../../api/wire';
   import { covers, playlists } from '../../app';
   import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
+  import { frameFor, knownFrame } from '../../library/list-frame';
+  import type { ListLook } from '../../library/list-look';
   import { library } from '../../state.svelte';
 
-  let { id = null, tracks, glyph = icons.playlist, version = 0 }: { id?: string | null; tracks: readonly CloudTrack[]; glyph?: string; version?: number } = $props();
+  let {
+    id = null,
+    tracks,
+    glyph = icons.playlist,
+    version = 0,
+    framed = null,
+  }: { id?: string | null; tracks: readonly CloudTrack[]; glyph?: string; version?: number; framed?: { name: string; look: ListLook } | null } = $props();
 
   const MOSAIC = 4;
 
   let chosen = $state<string | null>(null);
   let sleeves = $state.raw<string[]>([]);
+  let frame = $state<string | null>(null);
+
+  $effect(() => {
+    const wanted = framed;
+    let current = true;
+    frame = wanted ? knownFrame(wanted.name, wanted.look) : null;
+    if (wanted && !frame) {
+      void frameFor(wanted.name, wanted.look).then((address) => {
+        if (current) frame = address;
+      });
+    }
+    return () => {
+      current = false;
+    };
+  });
+
+  // The five lists with no picture of their own show their colours behind the window, where the desktop draws its
+  // room. Only once the frame is here: a room with no frame round it would be a plain square of colour.
+  const room = $derived.by(() => {
+    if (!framed?.look.roomed || !frame) return null;
+    const [hot, mid, deep] = [framed.look.trio.hot, framed.look.trio.mid, framed.look.trio.deep].map((colour) => `rgb(${colour.join(' ')})`);
+    return `radial-gradient(circle at 30% 25%, ${hot} 0%, ${mid} 45%, ${deep} 100%)`;
+  });
 
   $effect(() => {
     const wanted = id;
@@ -57,13 +89,16 @@
 </script>
 
 <span class="cover">
-  {#if chosen}
+  {#if room}
+    <span class="room" style:background={room}></span>
+  {:else if chosen}
     <img src={chosen} alt="" />
   {:else if mosaic.length}
     <span class="mosaic" class:four={mosaic.length === MOSAIC}>{#each mosaic as sleeve}<img src={sleeve} alt="" loading="lazy" />{/each}</span>
   {:else}
     <i class="icon">{glyph}</i>
   {/if}
+  {#if frame}<img class="frame" src={frame} alt="" />{/if}
 </span>
 
 <style>
@@ -104,5 +139,15 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  .room {
+    width: 100%;
+    height: 100%;
+  }
+
+  .frame {
+    position: absolute;
+    inset: 0;
   }
 </style>

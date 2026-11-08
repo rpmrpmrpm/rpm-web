@@ -7,6 +7,8 @@
   import { durationSeconds, type CloudTrack } from '../../api/wire';
   import { favorites, player, playlists } from '../../app';
   import { icons } from '../../design/icons';
+  import { hasAnother, Readings } from '../../library/generated-lists';
+  import { lookOf } from '../../library/list-look';
   import { foldersIn, listsIn, PlaylistGone, type CloudPlaylist, type GeneratedList } from '../../library/playlists';
   import { library, now } from '../../state.svelte';
   import { trackCount } from '../../strings/counts';
@@ -68,12 +70,24 @@
 
   const byId = $derived(new Map(library.albums.flatMap((album) => album.tracks).map((track) => [track.rpmId, track])));
   const tracksOf = (ids: readonly string[]): CloudTrack[] => ids.flatMap((id) => byId.get(id) ?? []);
+  // A generated list shows one slice of the run the desktop sent. "Generate new" moves it to the next slice.
+  const readings = new Readings();
+  let stepped = $state(0);
+  const showingOf = (list: GeneratedList): CloudTrack[] => {
+    void stepped;
+    return tracksOf(readings.showing(list));
+  };
+  const openedGenerated = $derived(pages.playlist?.kind === 'generated' ? pages.playlist.list : null);
+  function generateNew(list: GeneratedList) {
+    readings.step(list);
+    stepped++;
+  }
   const secondsOf = (tracks: readonly CloudTrack[]) => tracks.reduce((sum, track) => sum + durationSeconds(track), 0);
 
   const open = $derived(pages.playlist?.kind === 'list' ? (held?.find((playlist) => playlist.playlistId === (pages.playlist as { id: string }).id) ?? null) : null);
   const shownTracks = $derived.by(() => {
     if (pages.playlist?.kind === 'queue') return now.queue;
-    if (pages.playlist?.kind === 'generated') return tracksOf(pages.playlist.list.trackIds);
+    if (pages.playlist?.kind === 'generated') return showingOf(pages.playlist.list);
     return tracksOf(open?.trackIds ?? []);
   });
   const missing = $derived((open?.trackIds.length ?? 0) - (open ? shownTracks.length : 0));
@@ -161,6 +175,12 @@
   });
 
   const generatedName = (list: GeneratedList) => list.title ?? list.kind;
+  // The frame a list from the desktop wears, or null for a kind this build has no colours for. The marked songs
+  // are this page's own question, not one of the desktop's lists, and wear no frame, as on the phone.
+  const framedOf = (list: GeneratedList) => {
+    const look = list.kind === 'favorites' ? null : lookOf(list.kind, list.genre, list.decade ?? 0);
+    return look ? { name: generatedName(list), look } : null;
+  };
   const inHere = $derived(held ? listsIn(held, path) : []);
   const folders = $derived(held ? foldersIn(held, path, made) : []);
   const root = $derived(path.length === 0);
@@ -255,17 +275,22 @@
 
 {#if pages.playlist}
   <PlaylistDetail
-    id={open?.playlistId ?? null}
+    id={open?.playlistId ?? (pages.playlist.kind === 'generated' ? (pages.playlist.list.id ?? null) : null)}
     name={openedName}
     subtitle={openedLine}
     tracks={shownTracks}
     glyph={pages.playlist.kind === 'queue' ? icons.play : icons.playlist}
     version={coverVersion}
+    framed={openedGenerated ? framedOf(openedGenerated) : null}
     onBack={() => (pages.playlist = null)}
     onRemove={open ? (track, index) => { const id = open!.playlistId; void act(() => playlists.removeAt(id, track.rpmId, index)); } : undefined}
     onMove={open ? moved : undefined}
   >
     {#snippet keys()}
+      {#if openedGenerated && hasAnother(openedGenerated)}
+        {@const list = openedGenerated}
+        <button class="round" title={text('Playlists_GenerateNew')} aria-label={text('Playlists_GenerateNew')} onclick={() => generateNew(list)}><i class="icon">{icons.refresh}</i></button>
+      {/if}
       {#if open}
         <button class="round" title={text('Playlists_ChangeCover')} aria-label={text('Playlists_ChangeCover')} onclick={() => (naming = 'cover')}><i class="icon">{icons.image}</i></button>
         <button class="round" title={text('Playlists_Rename')} aria-label={text('Playlists_Rename')} onclick={() => ask('rename')}><i class="icon">{icons.pen}</i></button>
@@ -329,8 +354,8 @@
               {@render tileFace(playlist.name, listCover, () => (pages.playlist = { kind: 'list', id: playlist.playlistId }), () => listMenu(playlist))}
             {/each}
             {#each automaticLists as list, index (`${list.kind}-${index}`)}
-              {#snippet autoCover()}<PlaylistCover tracks={tracksOf(list.trackIds)} />{/snippet}
-              {@render tileFace(generatedName(list), autoCover, () => (pages.playlist = { kind: 'generated', list }), () => playingMenu(tracksOf(list.trackIds)))}
+              {#snippet autoCover()}<PlaylistCover id={list.id ?? null} tracks={showingOf(list)} framed={framedOf(list)} />{/snippet}
+              {@render tileFace(generatedName(list), autoCover, () => (pages.playlist = { kind: 'generated', list }), () => playingMenu(showingOf(list)))}
             {/each}
             {#each folders as name (name)}
               {#snippet folderCover()}<PlaylistCover tracks={[]} glyph={icons.folderClosed} />{/snippet}
@@ -341,7 +366,7 @@
       {:else}
         <ul class="tree">
           {#each favourite.trackIds.length ? [favourite, ...generated] : generated as list, index (`${list.kind}-${index}`)}
-            <li><button style:padding-left="22px" onclick={() => (pages.playlist = { kind: 'generated', list })} use:menuOn={() => playingMenu(tracksOf(list.trackIds))}><i class="icon">{icons.playlist}</i><span>{generatedName(list)}</span></button></li>
+            <li><button style:padding-left="22px" onclick={() => (pages.playlist = { kind: 'generated', list })} use:menuOn={() => playingMenu(showingOf(list))}><i class="icon">{icons.playlist}</i><span>{generatedName(list)}</span></button></li>
           {/each}
           {#each rows as row (`${row.folder?.join('/') ?? row.list?.playlistId}`)}
             <li>

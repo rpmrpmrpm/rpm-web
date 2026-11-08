@@ -17,6 +17,14 @@ export interface GeneratedList {
   kind: string;
   title: string | null;
   trackIds: string[];
+  // The id the desktop gave the list. Its cover is stored under this id, as a playlist's picture is. A cut from
+  // an older desktop has none, and the list then wears its records.
+  id?: string | null;
+  // The genre and the decade the list is narrowed to. With the kind, they decide the colours of its frame.
+  genre?: string | null;
+  decade?: number;
+  // How many of trackIds make one list. The rest are the lists after it. See generated-lists.ts.
+  shows?: number;
 }
 
 const TRIES = 3;

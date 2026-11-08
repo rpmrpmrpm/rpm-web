@@ -12,14 +12,16 @@
   import PlaylistCover from './PlaylistCover.svelte';
   import { trackMenu } from './record-menu.svelte';
   import PlayingBars from './PlayingBars.svelte';
+  import type { ListLook } from '../../library/list-look';
 
-  let { id = null, name, subtitle, tracks, glyph, version = 0, onBack, onRemove, onMove, keys }: {
+  let { id = null, name, subtitle, tracks, glyph, version = 0, framed = null, onBack, onRemove, onMove, keys }: {
     id?: string | null;
     name: string;
     subtitle: string;
     tracks: CloudTrack[];
     glyph?: string;
     version?: number;
+    framed?: { name: string; look: ListLook } | null;
     onBack: () => void;
     onRemove?: (track: CloudTrack, index: number) => void;
     onMove?: (from: number, to: number) => void;
@@ -135,7 +137,7 @@
 <div class="detail">
   <header>
     <button class="back" title={text('Album_Back')} aria-label={text('Album_Back')} onclick={onBack}><i class="icon">{icons.back}</i></button>
-    <div class="art"><PlaylistCover {id} {tracks} {glyph} {version} /></div>
+    <div class="art"><PlaylistCover {id} {tracks} {glyph} {version} {framed} /></div>
     <div class="words">
       <strong class="name">{name}</strong>
       <span>{subtitle}</span>
