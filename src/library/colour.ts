@@ -45,9 +45,18 @@ export function veilOver({ r, g, b }: Colour): number {
   return Math.min(VEIL_CEILING, Math.max(VEIL_FLOOR, VEIL_FLOOR + (lightness - VEIL_FROM) * 0.9));
 }
 
+// The colour of each picture already read, by address. A wall that is drawn again finds its colours here,
+// and does not read every picture again. A picture that could not be read is not kept, so it is read again.
+const measured = new Map<string, Colour>();
+
+// The colour of a picture that has been read already, or undefined when it has not.
+export const knownColour = (url: string): Colour | undefined => measured.get(url);
+
 // Read through an image, because the site's content policy allows a blob address for a picture and
 // not for a fetch.
 export async function colourOf(url: string): Promise<Colour | null> {
+  const known = measured.get(url);
+  if (known) return known;
   try {
     const image = new Image();
     // A picture in the store is on another address, and a canvas cannot read it without this.
@@ -56,7 +65,9 @@ export async function colourOf(url: string): Promise<Colour | null> {
     await image.decode();
     const context = new OffscreenCanvas(SIZE, SIZE).getContext('2d')!;
     context.drawImage(image, 0, 0, SIZE, SIZE);
-    return pickColour(context.getImageData(0, 0, SIZE, SIZE).data);
+    const colour = pickColour(context.getImageData(0, 0, SIZE, SIZE).data);
+    measured.set(url, colour);
+    return colour;
   } catch {
     return null;
   }

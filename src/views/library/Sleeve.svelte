@@ -10,7 +10,8 @@
 
   $effect(() => {
     const wanted = album;
-    picture = null;
+    // A cover that was shown before is drawn at once, so a list opened again is not blank while it asks.
+    picture = wanted ? covers.known(wanted, 256) : null;
     if (!wanted) return;
     let current = true;
     void covers.url(wanted, 256).then((url) => {
@@ -23,7 +24,7 @@
 </script>
 
 <span class="sleeve" style:width="{size}px" style:height="{size}px">
-  {#if picture}<img src={picture} alt="" loading="lazy" />{:else}<i class="icon">{icons.album}</i>{/if}
+  {#if picture}<img src={picture} alt="" />{:else}<i class="icon">{icons.album}</i>{/if}
 </span>
 
 <style>

@@ -1,8 +1,40 @@
-<script lang="ts">
+<script lang="ts" module>
   // One featured card: the act's photograph, the record's cover at the foot, and why it is here.
   import { artistArt, covers } from '../../app';
   import type { CloudAlbum } from '../../library/albums';
 
+  // The pictures each record's card has shown, by album key. The banner draws its cards again on every step,
+  // so without this a card that was on screen a moment ago starts blank and fades its photograph in again.
+  // A photograph is kept only after it has loaded, so a kept one is drawn at once, without the fade.
+  // The loads still run every time, and replace a kept picture when the answer is different.
+  const shown = new Map<string, { photo: string | null; sleeve: string | null }>();
+
+  function keep(key: string, pictures: Partial<{ photo: string | null; sleeve: string | null }>) {
+    shown.set(key, { photo: null, sleeve: null, ...shown.get(key), ...pictures });
+  }
+
+  // The photographs loaded ahead. They are held here so the browser keeps them decoded.
+  const warmed = new Map<string, HTMLImageElement>();
+
+  // Loads a card's pictures before it is drawn, so the banner can step to any card with nothing left to load.
+  export function warm(album: CloudAlbum) {
+    void covers.url(album, 256).then((address) => {
+      if (address) keep(album.key, { sleeve: address });
+    });
+    void artistArt.photo(album.artist).then((address) => {
+      if (!address || warmed.get(album.key)?.src === address) return;
+      const picture = new Image();
+      picture.src = address;
+      warmed.set(album.key, picture);
+      picture.decode().then(
+        () => keep(album.key, { photo: address }),
+        () => warmed.delete(album.key),
+      );
+    });
+  }
+</script>
+
+<script lang="ts">
   let { album, kicker }: { album: CloudAlbum; kicker: string } = $props();
 
   let photo = $state<string | null>(null);
@@ -11,15 +43,22 @@
 
   $effect(() => {
     const wanted = album;
+    const known = shown.get(wanted.key);
+    const knownPhoto = known?.photo ?? null;
+    const knownSleeve = known?.sleeve ?? null;
     let current = true;
-    photo = null;
-    arrived = false;
-    sleeve = null;
+    photo = knownPhoto;
+    arrived = knownPhoto !== null;
+    sleeve = knownSleeve;
     void artistArt.photo(wanted.artist).then((address) => {
-      if (current) photo = address;
+      if (!current || address === knownPhoto) return;
+      arrived = false;
+      photo = address;
     });
     void covers.url(wanted, 256).then((address) => {
-      if (current) sleeve = address;
+      if (!current) return;
+      keep(wanted.key, { sleeve: address });
+      if (address !== knownSleeve) sleeve = address;
     });
     return () => {
       current = false;
@@ -29,7 +68,16 @@
 
 <div class="face">
   {#if sleeve}<img class="photo soft" src={sleeve} alt="" />{/if}
-  {#if photo}<img class="photo" class:arrived src={photo} alt="" onload={() => (arrived = true)} />{/if}
+  {#if photo}<img
+      class="photo"
+      class:arrived
+      src={photo}
+      alt=""
+      onload={() => {
+        arrived = true;
+        keep(album.key, { photo });
+      }}
+    />{/if}
   <div class="scrim"></div>
   <div class="foot">
     {#if sleeve}<img class="sleeve" src={sleeve} alt="" />{:else}<div class="sleeve blank"></div>{/if}

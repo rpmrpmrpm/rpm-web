@@ -18,6 +18,9 @@
   $effect(() => {
     const wanted = album;
     let current = true;
+    // A cover that was shown before is drawn at once, so a wall opened again is not blank while it asks.
+    const known = covers.known(wanted, edge);
+    if (known) sleeve = known;
     void covers.url(wanted, edge).then((url) => {
       if (current) sleeve = url;
     });
@@ -29,7 +32,7 @@
 
 <button class="card" class:shelf onclick={onOpen} use:menuOn={() => albumMenu(album, 'collection')}>
   <span class="art" class:open style:height="{size}px">
-    {#if sleeve}<img src={sleeve} alt="" loading="lazy" />{:else}<i class="icon">{icons.album}</i>{/if}
+    {#if sleeve}<img src={sleeve} alt="" />{:else}<i class="icon">{icons.album}</i>{/if}
   </span>
   <span class="title">{album.album}</span>
   <span class="artist">{shelf ? [album.year, trackCount(album.tracks.length)].filter(Boolean).join('  •  ') : album.artist}</span>

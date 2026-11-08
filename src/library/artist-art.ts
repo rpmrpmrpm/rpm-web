@@ -13,6 +13,7 @@ export interface ArtistArtwork {
 
 export class ArtistArt {
   private readonly held = new Map<string, Promise<ArtistArtwork | null>>();
+  private readonly found = new Map<string, string | null>();
 
   constructor(
     private readonly api: Pick<Api, 'json'>,
@@ -41,7 +42,16 @@ export class ArtistArt {
   async photo(artist: string): Promise<string | null> {
     const artwork = await this.artwork(artist);
     const address = artwork?.backgrounds[0] ?? artwork?.thumbs[0];
-    return address ? this.shown(address) : null;
+    const shown = address ? await this.shown(address) : null;
+    // Kept only when the answer is sure: an act with no photograph, or a photograph that could be had.
+    if (artwork && (shown || !address)) this.found.set(artist.trim().toLowerCase(), shown);
+    return shown;
+  }
+
+  // The photograph photo found last time, without waiting: null for an act with none, undefined when it is
+  // not known yet. A tile that is drawn again shows it at once.
+  knownPhoto(artist: string): string | null | undefined {
+    return this.found.get(artist.trim().toLowerCase());
   }
 
   // Every photograph there is, for the arrows on an artist page.

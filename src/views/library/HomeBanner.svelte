@@ -7,7 +7,7 @@
   import type { CloudAlbum } from '../../library/albums';
   import { text } from '../../strings/loc';
   import { menuOn } from '../menu/menu.svelte';
-  import FeatureFace from './FeatureFace.svelte';
+  import FeatureFace, { warm } from './FeatureFace.svelte';
   import { albumMenu } from './record-menu.svelte';
 
   let { cards, albumOf, onOpen }: { cards: Feature[]; albumOf: (key: string) => CloudAlbum | undefined; onOpen: (album: CloudAlbum) => void } = $props();
@@ -35,6 +35,14 @@
     from = by * layout.slide;
     stepped++;
   }
+
+  // Every card's pictures load when the banner opens, not when a step first reaches the card.
+  $effect(() => {
+    for (const feature of cards) {
+      const album = albumOf(feature.key);
+      if (album) warm(album);
+    }
+  });
 
   $effect(() => {
     if (held || count < 2) return;

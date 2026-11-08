@@ -3,13 +3,23 @@
   // no photograph is a finished tile in the colour of their first record.
   import { artistArt, covers } from '../../app';
   import type { CloudAlbum } from '../../library/albums';
-  import { colourOf, css, type Colour } from '../../library/colour';
+  import { colourOf, css, knownColour, type Colour } from '../../library/colour';
   import { seen } from './seen';
 
   let { name, album, onOpen }: { name: string; album: CloudAlbum | undefined; onOpen: () => void } = $props();
 
   let picture = $state<string | null>(null);
   let colour = $state<Colour | null>(null);
+
+  // What is known already is drawn at once. A wall opened again does not wait for each tile to come into view
+  // and ask again. The tile still asks when it comes into view, and takes the answer.
+  $effect(() => {
+    const photo = artistArt.knownPhoto(name);
+    const sleeve = photo === null && album ? covers.known(album, 256) : null;
+    const known = photo ?? sleeve;
+    picture = photo ?? null;
+    colour = (known && knownColour(known)) || null;
+  });
 
   async function arrive() {
     const photo = await artistArt.photo(name);

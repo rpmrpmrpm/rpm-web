@@ -26,6 +26,8 @@ export function readIndex(raw: unknown): Map<string, number> {
 export class Covers {
   private index: Promise<Map<string, number>> | null = null;
   private readonly urls = new Map<string, Promise<string | null>>();
+  // The last address url gave for each album and size, for known.
+  private readonly ready = new Map<string, string>();
   private readonly waiting: (() => void)[] = [];
   private running = 0;
 
@@ -49,6 +51,13 @@ export class Covers {
     this.index = null;
     for (const url of this.urls.values()) void url.then((value) => value && URL.revokeObjectURL(value));
     this.urls.clear();
+    this.ready.clear();
+  }
+
+  // The cover url gave last time for this album and size, without waiting. A card that is drawn again shows
+  // it at once. The store may have a newer cover, so the card still asks url and takes its answer.
+  known(album: CloudAlbum, edge: number): string | null {
+    return this.ready.get(`${album.key}/${edge}`) ?? null;
   }
 
   private async turn<T>(run: () => Promise<T>): Promise<T> {
@@ -107,6 +116,14 @@ export class Covers {
 
   // A blob address for the album's cover, or null when the store holds none.
   async url(album: CloudAlbum, edge: number): Promise<string | null> {
+    const address = await this.find(album, edge);
+    const id = `${album.key}/${edge}`;
+    if (address) this.ready.set(id, address);
+    else this.ready.delete(id);
+    return address;
+  }
+
+  private async find(album: CloudAlbum, edge: number): Promise<string | null> {
     let index: Map<string, number>;
     try {
       index = await this.stored();

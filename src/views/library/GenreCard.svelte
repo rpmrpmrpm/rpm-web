@@ -11,6 +11,14 @@
 
   let picture = $state<string | null>(null);
 
+  // What is known already is drawn at once. A wall opened again does not wait for each card to come into view
+  // and ask again. While the act's photograph is not known, the card waits for it rather than show the
+  // shelf's own photograph and change it a moment later.
+  $effect(() => {
+    const photo = act ? artistArt.knownPhoto(act) : null;
+    if (photo !== undefined) picture = photo ?? (art ? photoAddress(art) : null);
+  });
+
   async function arrive() {
     const photo = act ? await artistArt.photo(act) : null;
     picture = photo ?? (art ? photoAddress(art) : null);
