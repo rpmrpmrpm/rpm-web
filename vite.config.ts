@@ -22,6 +22,10 @@ export default defineConfig({
     assetsInlineLimit: 0,
   },
   server: {
+    // 127.0.0.1, because a Google or Apple sign-in on the dev server comes back to the loopback address (see
+    // SocialReturn in src/api/session.ts). A bare "localhost" listens on ::1 alone on some systems. Browsers
+    // still reach this server as localhost.
+    host: '127.0.0.1',
     proxy: {
       '/api': forward('/api', 'https://api.rpmrpmrpm.com', key ? { 'X-RPM-Key': key } : {}),
       '/accounts': forward('/accounts', 'https://accounts.rpmrpmrpm.com'),

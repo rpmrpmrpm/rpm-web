@@ -33,6 +33,11 @@ const REFRESH_LOCK = 'rpm-session-refresh';
 const POLL_ATTEMPTS = 4;
 const POLL_WAIT_MS = 500;
 
+// Where a Google or Apple sign-in comes back to. The deployed app is at the address the server keeps for the web
+// app. A copy on the dev server of a contributor's computer is not, so it asks for the loopback return the Windows
+// app uses, at the dev server's own port, and main.ts finishes the sign-in there.
+export type SocialReturn = { returnTo: 'webapp' } | { returnTo: 'loopback'; port: number };
+
 interface Environment {
   fetcher: typeof fetch;
   now: () => number;
@@ -43,6 +48,7 @@ interface Environment {
   wait: (ms: number) => Promise<void>;
   storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
   go: (url: string) => void;
+  socialReturn: SocialReturn;
 }
 
 function browserEnvironment(onSignedOutElsewhere: () => void): Environment {
@@ -56,6 +62,7 @@ function browserEnvironment(onSignedOutElsewhere: () => void): Environment {
     wait: (ms) => new Promise((done) => setTimeout(done, ms)),
     storage: sessionStorage,
     go: (url) => location.assign(url),
+    socialReturn: import.meta.env.DEV ? { returnTo: 'loopback', port: Number(location.port) } : { returnTo: 'webapp' },
   };
 }
 
@@ -310,7 +317,7 @@ export class Session implements TokenSource {
         provider,
         appId: 'RPM',
         pollHash: await pollHash(secret),
-        returnTo: 'webapp',
+        ...this.environment.socialReturn,
       });
       if (!response.ok) return 'Login_Unable';
       const { sessionId, loginUrl } = await response.json();
@@ -320,6 +327,11 @@ export class Session implements TokenSource {
     } catch {
       return 'Login_Unable';
     }
+  }
+
+  // Whether this tab started a social sign-in that has not come back yet.
+  get socialPending(): boolean {
+    return this.environment.storage.getItem(SOCIAL_KEY) !== null;
   }
 
   // fragment is the part of the address after the #, with the one-time code in it.

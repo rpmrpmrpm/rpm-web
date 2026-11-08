@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { pollHash, Session } from '../../src/api/session';
+import { pollHash, Session, type SocialReturn } from '../../src/api/session';
 
 const json = (status: number, body: unknown = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 const me = { userId: 'u1', email: 'a@b.c', displayName: 'A', grSupporter: false, grTester: true };
 
-function make(routes: (path: string, init?: RequestInit) => Response | Promise<Response>, now = { value: 1000 }) {
+function make(
+  routes: (path: string, init?: RequestInit) => Response | Promise<Response>,
+  now = { value: 1000 },
+  socialReturn: SocialReturn = { returnTo: 'webapp' },
+) {
   const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => routes(String(url).replace('/accounts/', ''), init));
   const storage = new Map<string, string>();
   const go = vi.fn();
@@ -23,6 +27,7 @@ function make(routes: (path: string, init?: RequestInit) => Response | Promise<R
       removeItem: (key) => void storage.delete(key),
     },
     go,
+    socialReturn,
   });
   return { session, fetcher, go, storage };
 }
@@ -162,6 +167,15 @@ describe('social sign-in', () => {
     expect(await session.startSocialSignIn('Apple')).toBeNull();
     expect(JSON.parse(fetcher.mock.calls[0]![1]?.body as string).returnTo).toBe('webapp');
     expect(go).toHaveBeenCalledWith('https://x/start');
+  });
+
+  it('asks for the loopback return at the dev server\'s port when it runs on one', async () => {
+    const { session, fetcher } = make(() => json(200, { sessionId: 's1', loginUrl: 'https://x/start' }), { value: 1000 }, { returnTo: 'loopback', port: 5173 });
+    expect(await session.startSocialSignIn('Google')).toBeNull();
+    const body = JSON.parse(fetcher.mock.calls[0]![1]?.body as string);
+    expect(body.returnTo).toBe('loopback');
+    expect(body.port).toBe(5173);
+    expect(session.socialPending).toBe(true);
   });
 
   it('collects the sign-in with the secret and the code', async () => {

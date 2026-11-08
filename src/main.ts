@@ -11,6 +11,13 @@ import { chooseLanguage, loadStrings, pickedLanguage } from './strings/loc';
 captureCrashes();
 keepCodeFromAddress();
 
+// The loopback return is always on 127.0.0.1. A sign-in started on localhost, which is another site to the browser
+// with its own storage and cookies, is passed back there before anything else runs.
+if (import.meta.env.DEV && location.pathname === '/auth' && location.hostname === '127.0.0.1' && !session.socialPending) {
+  location.replace(`http://localhost:${location.port}/auth${location.search}`);
+  await new Promise(() => {});
+}
+
 // Discogs sends the browser back here, to a tab of its own. The tab the person came from hears about it.
 if (new URLSearchParams(location.search).has('discogs')) {
   new BroadcastChannel('rpm-discogs').postMessage('changed');
@@ -50,6 +57,14 @@ if (location.pathname === '/signed-in') {
   const fragment = location.hash.slice(1);
   history.replaceState(null, '', '/');
   await session.finishSocialSignIn(fragment);
+}
+
+// On the dev server a social sign-in comes back to http://127.0.0.1:{port}/auth, with the one-time code in the
+// query (see SocialReturn). The same steps finish it.
+if (import.meta.env.DEV && location.pathname === '/auth') {
+  const query = location.search.slice(1);
+  history.replaceState(null, '', '/');
+  await session.finishSocialSignIn(query);
 }
 
 if (session.state === 'restoring') await session.restore();
