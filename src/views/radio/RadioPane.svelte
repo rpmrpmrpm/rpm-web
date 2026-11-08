@@ -27,6 +27,7 @@
   import { callSign, carriesAds, displayOf, type RadioStation } from '../../radio/station';
   import { onAir } from '../../state.svelte';
   import { text } from '../../strings/loc';
+  import RecordSpinner from '../library/RecordSpinner.svelte';
   import RadioDial from './RadioDial.svelte';
   import StationLogo from './StationLogo.svelte';
 
@@ -250,10 +251,18 @@
     {/each}
   </ul>
 
-  {#if !shown.length && empty}<p class="empty">{empty}</p>{/if}
+  {#if !shown.length && asking && !savedOnly}
+    <div class="asking"><RecordSpinner size={52} /></div>
+  {:else if !shown.length && empty}<p class="empty">{empty}</p>{/if}
 </div>
 
 <style>
+  .asking {
+    display: grid;
+    place-items: center;
+    padding: 32px 0;
+  }
+
   .radio {
     position: relative;
     display: flex;

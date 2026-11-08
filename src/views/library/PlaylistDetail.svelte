@@ -11,6 +11,7 @@
   import Heart from './Heart.svelte';
   import PlaylistCover from './PlaylistCover.svelte';
   import { trackMenu } from './record-menu.svelte';
+  import PlayingBars from './PlayingBars.svelte';
 
   let { id = null, name, subtitle, tracks, glyph, version = 0, onBack, onRemove, onMove, keys }: {
     id?: string | null;
@@ -150,13 +151,13 @@
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <ol bind:this={list} class:moving={dragging !== null} onpointermove={dragged} onpointerup={released} onpointercancel={released}>
       {#each tracks as track, index (`${track.rpmId}-${index}`)}
-        <li class:on={now.track?.rpmId === track.rpmId} class:lifted={dragging === index} class:above={dropAt === index} class:below={dropAt === tracks.length && index === tracks.length - 1} use:menuOn={() => menuOf(track, index)}>
+        <li class:lifted={dragging === index} class:above={dropAt === index} class:below={dropAt === tracks.length && index === tracks.length - 1} use:menuOn={() => menuOf(track, index)}>
           <button class="song" onpointerdown={(event) => pressed(event, index)} onclick={() => played(index)} onkeydown={(event) => nudged(event, index)}>
             <span class="place">{index + 1}</span>
             <span class="sleeve">
               {#if sleeveOf(track)}<img src={sleeveOf(track)} alt="" loading="lazy" />{:else}<i class="icon">{icons.album}</i>{/if}
             </span>
-            <span class="title">{track.title}</span>
+            <span class="title">{#if now.track?.rpmId === track.rpmId}<PlayingBars />{/if}{track.title}</span>
             <span class="by">{track.artist ?? ''}</span>
             <span class="from">{track.album ?? ''}</span>
             <span class="length">{time(track)}</span>
@@ -363,10 +364,6 @@
   .title {
     color: rgb(255 255 255 / 0.93);
     font-size: 12.5px;
-  }
-
-  li.on .title {
-    color: var(--accent);
   }
 
   .by {

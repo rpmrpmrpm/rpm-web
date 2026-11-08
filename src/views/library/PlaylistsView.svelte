@@ -17,6 +17,7 @@
   import PlaylistCover from './PlaylistCover.svelte';
   import PlaylistDetail from './PlaylistDetail.svelte';
   import { pages } from './pages.svelte';
+  import RecordSpinner from './RecordSpinner.svelte';
 
   const VIEW_KEY = 'rpm.playlistView';
   const SIZE_KEY = 'rpm.playlistTile';
@@ -296,7 +297,7 @@
       <p class="refusal" role="alert">{text('Rpm_Playlists_Error')}</p>
       <button class="glass-button" onclick={read}>{text('Rpm_Library_Retry')}</button>
     {:else if held === null}
-      <p class="sub">{text('Rpm_Playlists_Loading')}</p>
+      <div class="asking"><RecordSpinner size={52} /><p class="sub">{text('Rpm_Playlists_Loading')}</p></div>
     {:else}
       {#if refusal}<p class="refusal" role="alert">{refusal}</p>{/if}
       <div class="keys">
@@ -409,6 +410,13 @@
 {/if}
 
 <style>
+  .asking {
+    display: grid;
+    gap: 10px;
+    place-items: center;
+    padding: 32px 0;
+  }
+
   .page {
     display: flex;
     flex-direction: column;

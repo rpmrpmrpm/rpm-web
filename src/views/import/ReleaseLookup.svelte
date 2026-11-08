@@ -8,6 +8,7 @@
   import { icons } from '../../design/icons';
   import { text } from '../../strings/loc';
   import Window from './Window.svelte';
+  import RecordSpinner from '../library/RecordSpinner.svelte';
 
   // The queue the result is written to. The edit windows give a queue of their own, over rows that stand for
   // the tracks they edit, so the same lookup fills their boxes.
@@ -236,7 +237,9 @@
               </li>
             {/each}
           </ul>
-        {:else if searched && !searching}
+        {:else if searching}
+          <div class="asking"><RecordSpinner size={52} /></div>
+        {:else if searched}
           <p class="soft">{text('Lookup_NoResults')}</p>
         {:else if !searched}
           <p class="soft">{text('Lookup_EmptyHint')}</p>
@@ -310,6 +313,12 @@
 </Window>
 
 <style>
+  .asking {
+    display: grid;
+    place-items: center;
+    padding: 32px 0;
+  }
+
   .sides {
     display: grid;
     flex: 1;

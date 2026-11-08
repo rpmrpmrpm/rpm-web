@@ -11,6 +11,7 @@
   import AlbumList, { type AlbumGrouping } from './AlbumList.svelte';
   import AlbumWall from './AlbumWall.svelte';
   import TrackTable from './TrackTable.svelte';
+  import RecordSpinner from './RecordSpinner.svelte';
   import { collection, pickView, type CollectionView } from './view.svelte';
 
   let { compact = false, onImport, onOpen }: { compact?: boolean; onImport: () => void; onOpen: (album: CloudAlbum) => void } = $props();
@@ -189,7 +190,7 @@
       <button class="glass-button" onclick={() => catalogue.refresh()}>{text('Rpm_Library_Retry')}</button>
     </div>
   {:else if library.state === 'reading'}
-    <p class="message">{text('Tv_Library_ReadingCount', library.read)}</p>
+    <div class="message"><RecordSpinner size={52} /><p>{text('Tv_Library_ReadingCount', library.read)}</p></div>
   {/if}
 </div>
 
@@ -388,5 +389,15 @@
   .message {
     padding: 24px 16px;
     color: var(--text-soft);
+  }
+
+  div.message {
+    display: grid;
+    gap: 10px;
+    justify-items: center;
+  }
+
+  div.message p {
+    margin: 0;
   }
 </style>

@@ -2,23 +2,31 @@
   // What is known about an act or a genre: the lead of its article, shown in full, with where it came from.
   import type { Article } from '../../library/articles';
   import { text } from '../../strings/loc';
+  import RecordSpinner from './RecordSpinner.svelte';
 
   let { heading, load, failed }: { heading: string; load: () => Promise<Article | null>; failed?: string } = $props();
 
   let article = $state.raw<Article | null>(null);
   let refused = $state(false);
+  // A record turns where the article will stand while it is asked for.
+  let asking = $state(true);
 
   $effect(() => {
     const asked = load();
     let current = true;
     article = null;
     refused = false;
+    asking = true;
     asked.then(
       (found) => {
-        if (current) article = found;
+        if (!current) return;
+        article = found;
+        asking = false;
       },
       () => {
-        if (current) refused = true;
+        if (!current) return;
+        refused = true;
+        asking = false;
       },
     );
     return () => {
@@ -27,7 +35,9 @@
   });
 </script>
 
-{#if article || (refused && failed)}
+{#if asking}
+  <div class="asking"><RecordSpinner size={52} /></div>
+{:else if article || (refused && failed)}
   <section>
     <h3>{heading}</h3>
     <div class="card">
@@ -46,6 +56,12 @@
 {/if}
 
 <style>
+  .asking {
+    display: grid;
+    place-items: center;
+    padding: 18px 0;
+  }
+
   section {
     padding: 0 14px;
   }

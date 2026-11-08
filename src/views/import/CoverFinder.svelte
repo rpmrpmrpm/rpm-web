@@ -8,6 +8,7 @@
   import type { CoverCandidate, CoverKind, PickedPicture } from '../../import/cover-search';
   import { text } from '../../strings/loc';
   import Window from './Window.svelte';
+  import RecordSpinner from '../library/RecordSpinner.svelte';
 
   let { kind, artist, album, onUse, onClose }: {
     kind: CoverKind;
@@ -94,6 +95,7 @@
   {#if kind === 'disc'}<p>{text('CoverSearch_DiscSourcesShort')}</p>{/if}
   <p role="status">{note}</p>
 
+  {#if searching && !found.length}<div class="asking"><RecordSpinner size={52} /></div>{/if}
   <div class="covers">
     {#each found as cover (cover.fullUrl)}
       <button class="cover" disabled={fetching} title={text('CoverSearch_Use')} onclick={() => use(cover)}>
@@ -110,6 +112,12 @@
 </Window>
 
 <style>
+  .asking {
+    display: grid;
+    place-items: center;
+    padding: 32px 0;
+  }
+
   form {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;

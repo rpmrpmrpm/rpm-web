@@ -12,6 +12,7 @@
   import { menuOn } from '../menu/menu.svelte';
   import Heart from './Heart.svelte';
   import { menuAt, trackMenu } from './record-menu.svelte';
+  import PlayingBars from './PlayingBars.svelte';
 
   let { album, columns = 2 }: { album: CloudAlbum; columns?: number } = $props();
 
@@ -32,10 +33,10 @@
       <div class="disc">{text('Album_DiscHeader', disc.discNumber)}</div>
     {/if}
     {#each disc.tracks as track (track.rpmId)}
-      <div class="track" class:playing={now.track?.rpmId === track.rpmId} use:menuOn={() => menuOfTrack(track)}>
+      <div class="track" use:menuOn={() => menuOfTrack(track)}>
         <button class="play" onclick={() => play(track)}>
           <span class="number">{trackOf(track) || ''}</span>
-          <span class="title">{track.title}{#if isExplicit(track)}<span class="badge">E</span>{/if}</span>
+          <span class="title">{#if now.track?.rpmId === track.rpmId}<PlayingBars />{/if}{track.title}{#if isExplicit(track)}<span class="badge">E</span>{/if}</span>
           <span class="length">{time(durationSeconds(track))}</span>
         </button>
         <span class="marks">
@@ -108,11 +109,6 @@
   .length {
     color: rgb(255 255 255 / 0.53);
     font-size: 12px;
-  }
-
-  .playing .title {
-    color: #fff;
-    font-weight: 700;
   }
 
   .badge {

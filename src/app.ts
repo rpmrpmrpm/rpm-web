@@ -20,6 +20,8 @@ import { RadioRules } from './radio/rules';
 import { Tuner } from './radio/tuner';
 import { CatalogEdits } from './library/edit';
 import { Readings } from './library/analysis';
+import { EncyclopediaCards } from './library/cards';
+import { RemoteTags } from './library/credits';
 import { Sidecars } from './library/sidecars';
 import { Favorites } from './library/favorites';
 import { AlbumRatings } from './library/ratings';
@@ -98,6 +100,8 @@ export const artistArt = new ArtistArt(api, (address) => coverSearch.shown(addre
 const languages = () => [currentLanguage().split('-')[0], 'en'].join(',');
 export const articles = new Articles(api, languages);
 export const dossiers = new Dossiers(api, languages);
+export const encyclopediaCards = new EncyclopediaCards(api, languages);
+export const remoteTags = new RemoteTags(sidecars);
 export const lyrics = new Lyrics(api);
 export const importMedia = new WorkerMedia();
 export const importQueue = new ImportQueue();

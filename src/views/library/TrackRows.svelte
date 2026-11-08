@@ -8,6 +8,7 @@
   import { catalogue } from '../../app';
   import { menuOn, type MenuEntry } from '../menu/menu.svelte';
   import Heart from './Heart.svelte';
+  import PlayingBars from './PlayingBars.svelte';
   import { menuAt, trackMenu } from './record-menu.svelte';
 
   // plain: every song is the same act's, so the row says only its name, and they stand in two columns.
@@ -27,9 +28,9 @@
 
 <ol class:plain>
   {#each tracks as track, index (`${track.rpmId}-${index}`)}
-    <li class:playing={now.track?.rpmId === track.rpmId} use:menuOn={() => menuOfTrack(track, index)}>
+    <li use:menuOn={() => menuOfTrack(track, index)}>
       <button class="song" onclick={() => player.play(tracks, index, { inAlbumOrder: false })}>
-        <span class="title">{track.title}</span>
+        <span class="title">{#if now.track?.rpmId === track.rpmId}<PlayingBars />{/if}{track.title}</span>
         {#if !plain}<span class="by">{track.artist ?? ''}{track.album ? `  •  ${track.album}` : ''}</span>{/if}
         <span class="length">{time(track)}</span>
       </button>
@@ -70,10 +71,6 @@
     display: flex;
     align-items: center;
     border-radius: 4px;
-  }
-
-  li.playing .title {
-    color: #5fe08a;
   }
 
   .song {

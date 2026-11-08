@@ -9,6 +9,7 @@
   import { text } from '../../strings/loc';
   import { menuOn } from '../menu/menu.svelte';
   import { selectionMenu, trackMenu } from './record-menu.svelte';
+  import PlayingBars from './PlayingBars.svelte';
 
   let { tracks }: { tracks: CloudTrack[] } = $props();
 
@@ -129,7 +130,6 @@
           class="row"
           role="option"
           aria-selected={selected.has(track.rpmId)}
-          class:playing={now.track?.rpmId === track.rpmId}
           class:selected={selected.has(track.rpmId)}
           style:transform="translateY({(first + index) * LINE}px)"
           style:height="{LINE}px"
@@ -138,7 +138,7 @@
           use:menuOn={() => menuFor(track, first + index)}
         >
           {#each COLUMNS as column (column.id)}
-            <span class={column.id} class:phone={column.phone}>{cell(column, track)}</span>
+            <span class={column.id} class:phone={column.phone}>{#if column.id === 'title' && now.track?.rpmId === track.rpmId}<PlayingBars />{/if}{cell(column, track)}</span>
           {/each}
         </button>
       {/each}
@@ -211,10 +211,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .row.playing .title {
-    color: #5fe08a;
   }
 
   .row.selected {

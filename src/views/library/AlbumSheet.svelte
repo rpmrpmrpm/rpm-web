@@ -10,6 +10,7 @@
   import { text } from '../../strings/loc';
   import { menuOn } from '../menu/menu.svelte';
   import AboutCards from './AboutCards.svelte';
+  import RecordSpinner from './RecordSpinner.svelte';
   import AlbumTracks from './AlbumTracks.svelte';
   import { albumMenu, menuAt } from './record-menu.svelte';
   import Stars from './Stars.svelte';
@@ -19,6 +20,8 @@
   let sleeve = $state<string | null>(null);
   let loved = $state(false);
   let known = $state.raw<Dossier | null>(null);
+  // A record turns where the cards will stand while the papers are asked for.
+  let asking = $state(false);
 
   $effect(() => headClips.warm(album.tracks.map((track) => track.rpmId)));
 
@@ -38,12 +41,17 @@
       if (current) sleeve = url;
     });
     const about = wanted.tracks[0] ? askAbout(wanted.tracks[0]) : null;
+    asking = !!about;
     if (about)
       dossiers.of(about, wanted.album, wanted.tracks.length).then(
         (answer) => {
-          if (current) known = answer;
+          if (!current) return;
+          known = answer;
+          asking = false;
         },
-        () => {},
+        () => {
+          if (current) asking = false;
+        },
       );
     return () => {
       current = false;
@@ -105,11 +113,17 @@
   </div>
 
   <div class="about">
-    <AboutCards dossier={known} artistName={album.artist} albumName={album.album} albumFirst />
+    {#if asking}<div class="asking"><RecordSpinner size={52} /></div>{:else}<AboutCards dossier={known} artistName={album.artist} albumName={album.album} albumFirst />{/if}
   </div>
 </div>
 
 <style>
+  .asking {
+    display: grid;
+    place-items: center;
+    padding: 18px 0;
+  }
+
   .sheet {
     position: relative;
     display: grid;
