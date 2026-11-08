@@ -4,10 +4,11 @@
 // publishing the Pro files.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import subsetFont from 'subset-font';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const source = readFileSync(`${root}src/design/icons.ts`, 'utf8');
 const glyphs = [...source.matchAll(/\\u([0-9a-f]{4})/g)].map((match) => String.fromCodePoint(parseInt(match[1], 16))).join('');
 

@@ -3,10 +3,11 @@
 // Run by hand when the icon changes. The results are committed.
 
 import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
 
-const folder = new URL('../public/', import.meta.url).pathname;
+const folder = fileURLToPath(new URL('../public/', import.meta.url));
 const svg = readFileSync(`${folder}favicon.svg`, 'utf8');
 const square = svg.replace(' rx="14"', '');
 
