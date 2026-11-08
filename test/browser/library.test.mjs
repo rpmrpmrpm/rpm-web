@@ -78,7 +78,7 @@ async function open(viewport = { width: 1440, height: 900 }, words = {}) {
     if (path === 'metadata/dossier') return answer(route, 200, dossier);
     if (path === 'metadata/lyrics') {
       asked.push(path);
-      return answer(route, 200, { sheets: [LRC, `${LRC}\n[00:09.00]The other cut`] });
+      return answer(route, 200, { sheets: words.none ? [] : [LRC, `${LRC}\n[00:09.00]The other cut`] });
     }
     if (path.startsWith('cloud/lyric-sheet/') && method === 'GET' && words.chosen) return answer(route, 200, { lrc: words.chosen });
     if (path.startsWith('cloud/lyric-sheet/') && method === 'PUT') {
@@ -465,6 +465,19 @@ test('the band above the panes opens when a record starts, and closes when it st
   await page.waitForTimeout(600);
   assert.equal(await height(), 78);
   assert.notEqual(await page.$('.window > aside'), null, 'and back when it stops');
+  await page.close();
+});
+
+test('a song with no words has no Lyrics block in Track info, as on the desktop', async () => {
+  const { page, problems, asked } = await open(undefined, { none: true });
+  await page.click('.card:has-text("Dummy")');
+  await page.click('.drawer .mini-key >> nth=0');
+  await page.waitForSelector('.sheet strong:text-is("Portishead")');
+  for (let tries = 0; tries < 50 && !asked.includes('metadata/lyrics'); tries++) await page.waitForTimeout(100);
+  await page.waitForTimeout(300);
+  assert.ok(asked.includes('metadata/lyrics'), 'the words were asked for');
+  assert.equal(await page.$('.sheet h3:text-is("Lyrics")'), null);
+  assert.deepEqual(problems, []);
   await page.close();
 });
 

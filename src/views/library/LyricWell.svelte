@@ -76,7 +76,9 @@
   }
 </script>
 
-{#if asked && (rows.length || track.title)}
+<!-- Only a sheet with words to read gets a block, as on the desktop: an empty card headed Lyrics is worse than no
+     card. A file of one's own can still be given in the track's edit window. -->
+{#if asked && rows.length}
   <section>
     <div class="head">
       <h3>{text('Details_Lyrics')}</h3>
@@ -88,13 +90,11 @@
       </div>
     </div>
     <input bind:this={picker} type="file" accept=".lrc,.txt" hidden onchange={own} />
-    {#if rows.length}
-      <div class="well" bind:this={scroller}>
-        {#each rows as row, index (row.at)}
-          <p class:sung={index === sung} style:opacity={opacity(index)}>{row.text}</p>
-        {/each}
-      </div>
-    {/if}
+    <div class="well" bind:this={scroller}>
+      {#each rows as row, index (row.at)}
+        <p class:sung={index === sung} style:opacity={opacity(index)}>{row.text}</p>
+      {/each}
+    </div>
     {#if note}<p class="note" role="status">{note}</p>{/if}
   </section>
 {/if}
