@@ -6,7 +6,8 @@
   import { avatarBytes, type Profile } from '../../api/profile';
   import type { DiscogsStatus } from '../../api/session';
   import type { CloudQuota } from '../../api/wire';
-  import { BECOME_SUPPORTER, cloud, profiles, session } from '../../app';
+  import { BECOME_SUPPORTER, cloud, profiles, session, streamQuality } from '../../app';
+  import { offerFor, ORIGINAL, settles } from '../../audio/ladder';
   import { BACKDROPS, backdrop, effectiveId } from '../../design/backdrop.svelte';
   import { icons } from '../../design/icons';
   import { crashConsent, setCrashConsent } from '../../report/report';
@@ -30,6 +31,12 @@
 
   const user = session.user;
   const supporter = user?.supporter === true;
+
+  // The streaming quality, as the phones offer it: the original and the ladder below it for a supporter or tester,
+  // the one rate a free account is served, shown greyed out with its reason beside it.
+  const offer = offerFor(user ? user.supporter : null);
+  let quality = $state(settles(offer, streamQuality.choice));
+  const rateName = (kilobits: number) => (kilobits === ORIGINAL ? text('Rpm_Playback_Original') : text('Rpm_Profile_QualityKbps', kilobits));
 
   // The public profile: the name and the picture shown beside reviews and on shared shelves.
   let profile = $state.raw<Profile | null>(null);
@@ -289,6 +296,20 @@
       </section>
     {:else if page === 'sound'}
       <div class="head"><h3>{text('Settings_Sound')}</h3></div>
+      <section class="card">
+        <h4><i class="icon">{icons.volume}</i>{text('Rpm_Profile_Playback')}</h4>
+        <label class="named">
+          <span class="dim">{text('Atv_SettingsQuality')}</span>
+          <select class="field quality" disabled={offer.capped} bind:value={quality} onchange={() => streamQuality.choose(quality)}>
+            {#each offer.rungs as rung (rung)}<option value={rung}>{rateName(rung)}</option>{/each}
+          </select>
+        </label>
+        {#if offer.capped}
+          <p class="dim">{text('Rpm_Profile_QualityCapped')}</p>
+          <div class="row"><a class="glass-button" href={BECOME_SUPPORTER} target="_blank" rel="noopener"><i class="icon">{icons.heart}</i>{text('Cloud_BecomeSupporter')}</a></div>
+        {/if}
+        <p class="dim">{text('Web_QualityDetail')}</p>
+      </section>
       <section class="card"><Equalizer /></section>
     {:else if page === 'cloud'}
       <div class="head"><h3>{text('Settings_Cloud')}</h3></div>
@@ -478,10 +499,23 @@
   }
 
   /* The caption above, and the field and its key on one line at the key's height. */
+  label.named {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+  }
+
   form.named {
     flex-direction: column;
     gap: 4px;
     align-items: flex-start;
+  }
+
+  .field.quality {
+    width: 220px;
+    height: 32px;
+    font-size: 13px;
   }
 
   .named .field {

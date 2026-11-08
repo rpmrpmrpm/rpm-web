@@ -8,6 +8,7 @@ import { gainFor, levelOf, levelOfRecord, type Level, type NormalizeMode } from 
 import type { Failure, WorkerTrack } from './playback.worker';
 import { RESTART_AFTER_SECONDS, restored, Retries, shuffled, StartGate, Transport, type Loaded } from './queue';
 import { Stream } from './stream';
+import { ORIGINAL } from './ladder';
 import { volumeWorks, type Volume } from './volume';
 
 // One row of the queue. A row is an object of its own, because one record can stand in the queue twice.
@@ -21,9 +22,6 @@ const EQUALIZER_KEY = 'rpm-equalizer';
 // A larger step of the playhead between two ticks is a seek, or a jump to the next audio.
 const MOST_STEP_SECONDS = 2;
 export const LOCK_SCREEN_ART = 512;
-const SMALL = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
-const COMPUTER_RATE = 0;
-const PHONE_RATE = 320;
 
 const name = (track: CloudTrack) => track.relativePath?.split('/').pop() ?? `${track.rpmId}.flac`;
 
@@ -155,6 +153,10 @@ export class Player {
     return this.queue[this.index]?.track ?? null;
   }
 
+  // The rate a track is asked for, in kilobits, 0 for the original. The app settles it from the listener's choice
+  // and the account's plan (see settleTheRate in app.ts); the player only reads it.
+  kilobits = ORIGINAL;
+
   // Stopped, and not paused: the queue stays where it was, and the art band closes.
   stopped = false;
 
@@ -191,7 +193,7 @@ export class Player {
   }
 
   private async sign(row: QueueRow, signal?: AbortSignal): Promise<CloudStream> {
-    return this.cloud.stream(row.track.rpmId, SMALL ? PHONE_RATE : COMPUTER_RATE, signal);
+    return this.cloud.stream(row.track.rpmId, this.kilobits, signal);
   }
 
   private entryOf(row: QueueRow, url?: string, startAt?: number): WorkerTrack {

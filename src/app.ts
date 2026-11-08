@@ -5,6 +5,7 @@ import { Api } from './api/http';
 import { Profiles } from './api/profile';
 import { Session } from './api/session';
 import { LOCK_SCREEN_ART, Player } from './audio/player';
+import { offerFor, settles, StreamQuality } from './audio/ladder';
 import { Volume } from './audio/volume';
 import { browserTransfers, Importer } from './import/importer';
 import { Articles } from './library/articles';
@@ -82,6 +83,27 @@ export const player = new Player(
     syncPlays();
   },
 );
+
+// The quality the listener chose, kept in this browser.
+export const streamQuality = new StreamQuality(
+  (() => {
+    try {
+      return localStorage;
+    } catch {
+      return null;
+    }
+  })(),
+);
+
+// The rate the player asks for: the listener's choice, as far as the account's plan allows. Settled again whenever
+// either changes, so a free account that becomes a supporter or a tester streams the original from that moment.
+function settleTheRate() {
+  const user = session.user;
+  player.kilobits = settles(offerFor(user ? user.supporter : null), streamQuality.choice);
+}
+settleTheRate();
+session.onChange(settleTheRate);
+streamQuality.onChange(settleTheRate);
 
 export const playlists = new Playlists(api, browserTransfers);
 export const favorites = new Favorites(api);

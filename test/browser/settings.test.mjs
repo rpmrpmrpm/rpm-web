@@ -63,3 +63,30 @@ test('the profile shows the account picture and the display name', async () => {
   assert.deepEqual(problems, []);
   await close();
 });
+
+test('a supporter streams the original until they choose a lower rate, and the next track is asked at it', async () => {
+  const { page, problems, close } = await open();
+  const asked = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith('/api/cloud/stream/')) asked.push(url.searchParams.get('rate'));
+  });
+
+  await settings(page, 'Sound');
+  assert.equal(await page.$eval('select.quality', (box) => box.selectedOptions[0].textContent), 'Original');
+  assert.equal(await page.$$eval('select.quality option', (options) => options.length), 6);
+  assert.equal(await page.$eval('select.quality', (box) => box.disabled), false);
+
+  await page.selectOption('select.quality', '320');
+  assert.equal(await page.evaluate(() => localStorage.getItem('rpm-stream-kilobits')), '320');
+  await page.click('[role=dialog] button:has-text("Close")');
+  await page.click('.rail.right button:has-text("Albums")');
+  await page.waitForSelector('.pane.right h2:has-text("collection")');
+  await page.waitForTimeout(400);
+  await page.click('.card >> nth=0');
+  await page.click('.drawer .mini-key >> nth=0');
+  await page.waitForFunction(() => document.querySelector('.band')?.classList.contains('open'));
+  assert.equal(asked[0], '320');
+  assert.deepEqual(problems, []);
+  await close();
+});
