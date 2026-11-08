@@ -9,6 +9,21 @@ import type { CatalogueStore } from './store';
 // after an import, and when the tab returns after at least this long. Never on a timer.
 const READ_AGAIN_AFTER_MS = 10 * 60 * 1000;
 
+// The order the listener chose for the wall, kept in this browser.
+const ORDERING_KEY = 'rpm-library-order';
+const ORDERINGS: readonly AlbumOrdering[] = ['Artist', 'Album', 'Added', 'Year', 'Plays'];
+
+type Prefs = Pick<Storage, 'getItem' | 'setItem'>;
+
+function storedOrdering(prefs: Prefs | null): AlbumOrdering {
+  try {
+    const found = prefs?.getItem(ORDERING_KEY);
+    return ORDERINGS.find((ordering) => ordering === found) ?? 'Artist';
+  } catch {
+    return 'Artist';
+  }
+}
+
 export type CatalogueState =
   | 'opening' // nothing to show yet
   | 'reading' // the first read, with no copy in this browser
@@ -19,7 +34,7 @@ export class Catalogue {
   tracks: CloudTrack[] = [];
   albums: CloudAlbum[] = [];
   state: CatalogueState = 'opening';
-  ordering: AlbumOrdering = 'Artist';
+  ordering: AlbumOrdering;
   // Set by the app: how often a record has been played, for the wall's order by plays.
   playsOf: (album: CloudAlbum) => number = () => 0;
   // A refresh failed while a copy is on screen. The copy stays, with a way to try again.
@@ -37,7 +52,11 @@ export class Catalogue {
     private readonly now: () => number = Date.now,
     // Runs when a whole list is in, before anything is shown from it.
     private readonly fresh: () => void = () => {},
-  ) {}
+    // Where the chosen order is kept. Null keeps it for this visit only.
+    private readonly prefs: Prefs | null = null,
+  ) {
+    this.ordering = storedOrdering(prefs);
+  }
 
   onChange(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -119,6 +138,11 @@ export class Catalogue {
 
   setOrdering(ordering: AlbumOrdering) {
     this.ordering = ordering;
+    try {
+      this.prefs?.setItem(ORDERING_KEY, ordering);
+    } catch {
+      // The browser blocks site data. The order holds for this visit.
+    }
     this.albums = sortAlbums(this.albums, ordering, this.playsOf);
     this.changed();
   }

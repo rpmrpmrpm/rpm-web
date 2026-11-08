@@ -43,7 +43,19 @@ export const session = new Session('/accounts/');
 export const api = new Api('/api/', session);
 export const cloud = new CloudClient(api);
 export const covers = new Covers(api);
-export const catalogue = new Catalogue(cloud, browserStore, Date.now, () => covers.reread());
+export const catalogue = new Catalogue(
+  cloud,
+  browserStore,
+  Date.now,
+  () => covers.reread(),
+  (() => {
+    try {
+      return localStorage;
+    } catch {
+      return null;
+    }
+  })(),
+);
 export const playLog = new PlayLog(browserPlays);
 catalogue.playsOf = (album) => {
   const plays = playLog.everythingPlayed();

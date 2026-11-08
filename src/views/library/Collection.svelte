@@ -19,7 +19,29 @@
   type View = CollectionView;
 
   let search = $state('');
-  let target = $state(166);
+  // The cover size on the wall, kept in this browser like the view and the grouping.
+  const SIZE_KEY = 'rpm-library-cover-size';
+  const SMALLEST = 120;
+  const LARGEST = 280;
+
+  function storedSize(): number {
+    try {
+      const stored = Number(localStorage.getItem(SIZE_KEY));
+      return stored >= SMALLEST && stored <= LARGEST ? stored : 166;
+    } catch {
+      return 166;
+    }
+  }
+
+  let target = $state(storedSize());
+
+  function keepSize() {
+    try {
+      localStorage.setItem(SIZE_KEY, String(target));
+    } catch {
+      // It holds for this visit.
+    }
+  }
   const view = $derived(collection.view);
 
   const VIEWS: [View, string, string][] = [
@@ -156,7 +178,7 @@
         {#if !compact}
           <span class="size">
             <i class="small"></i>
-            <input class="slim" style:--fill="{((target - 120) / 160) * 100}%" type="range" min="120" max="280" step="2" aria-label={text('AlbumGrid_CoverSize')} bind:value={target} />
+            <input class="slim" style:--fill="{((target - SMALLEST) / (LARGEST - SMALLEST)) * 100}%" type="range" min={SMALLEST} max={LARGEST} step="2" aria-label={text('AlbumGrid_CoverSize')} bind:value={target} onchange={keepSize} />
             <i class="big"></i>
           </span>
         {/if}

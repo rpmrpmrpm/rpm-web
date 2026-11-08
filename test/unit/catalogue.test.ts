@@ -15,6 +15,19 @@ function memoryStore(kept: CloudTrack[] | null = null): CatalogueStore {
 }
 
 describe('the catalogue', () => {
+  it('keeps the chosen order for the next visit', () => {
+    const held: Record<string, string> = {};
+    const prefs = { getItem: (key: string) => held[key] ?? null, setItem: (key: string, value: string) => void (held[key] = value) };
+    expect(new Catalogue({ list: async () => [] }, memoryStore(), Date.now, () => {}, prefs).ordering).toBe('Artist');
+    new Catalogue({ list: async () => [] }, memoryStore(), Date.now, () => {}, prefs).setOrdering('Added');
+    expect(new Catalogue({ list: async () => [] }, memoryStore(), Date.now, () => {}, prefs).ordering).toBe('Added');
+  });
+
+  it('reads an order it does not know as by artist', () => {
+    const prefs = { getItem: () => 'Colour', setItem: () => {} };
+    expect(new Catalogue({ list: async () => [] }, memoryStore(), Date.now, () => {}, prefs).ordering).toBe('Artist');
+  });
+
   it('opens on the copy in this browser, then reads the store', async () => {
     let answer!: (tracks: CloudTrack[]) => void;
     const list = vi.fn(() => new Promise<CloudTrack[]>((done) => (answer = done)));
