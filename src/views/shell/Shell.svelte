@@ -69,6 +69,9 @@
   ];
   let playerOpen = $state(false);
 
+  // Something on the band: a station, or a track that is not stopped. The same as the band's own onStage.
+  const playing = $derived(onAir.station !== null || (now.track !== null && !now.stopped));
+
   const layout = $derived(width >= WIDE ? 'wide' : width >= 700 ? 'medium' : 'narrow');
 
   // A collection too small for Home opens on the library, where the music is. Once, so it never undoes a choice.
@@ -230,7 +233,8 @@
 {:else}
   <div class="window">
     <Header />
-    {#if !(art.parked && (now.track || onAir.station))}<DesktopOffer />{/if}
+    <!-- The offer of the desktop app stands on the band only while nothing plays: the record has it then. -->
+    {#if !playing}<DesktopOffer />{/if}
 
     <div class="panes" class:leftOpen={left !== null} class:bench={left === 'import'}>
       <section class="pane left">

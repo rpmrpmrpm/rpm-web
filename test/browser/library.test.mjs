@@ -459,10 +459,12 @@ test('the band above the panes opens when a record starts, and closes when it st
   await page.waitForFunction(() => document.querySelector('.band').classList.contains('open'));
   await page.waitForTimeout(600);
   assert.ok((await height()) > 150, 'the band has opened');
+  assert.equal(await page.$('.window > aside'), null, 'the offer of the desktop app is away while a record plays');
   await page.click('.deck button[title="Stop"]');
   await page.waitForFunction(() => !document.querySelector('.band').classList.contains('open'));
   await page.waitForTimeout(600);
   assert.equal(await height(), 78);
+  assert.notEqual(await page.$('.window > aside'), null, 'and back when it stops');
   await page.close();
 });
 
