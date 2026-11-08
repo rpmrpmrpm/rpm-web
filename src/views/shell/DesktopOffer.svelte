@@ -1,5 +1,7 @@
 <script lang="ts">
-  // The top right of the window on a computer: open the desktop app if it is here, or download it.
+  // The top right of the window on a computer: open the desktop app if it is here, or download it. One line of
+  // small text, on the line of the tagline under the wordmark and the same size, so it does not compete with the
+  // music.
   import { canOpen, desktopPlatform, DesktopApp, OPEN_ADDRESS } from '../../desktop/desktop-app';
   import { text } from '../../strings/loc';
   import DesktopGet from './DesktopGet.svelte';
@@ -28,29 +30,35 @@
   <aside>
     <p class:trouble={note}>{note || text(here ? 'Web_DesktopHere' : 'Web_DesktopPitch')}</p>
     {#if openable}
-      <a class={here ? 'deck-pill' : 'link'} href={OPEN_ADDRESS} target={openTarget} onclick={opened}>{text('Web_DesktopOpen')}</a>
+      <a href={OPEN_ADDRESS} target={openTarget} onclick={opened}>{text('Web_DesktopOpen')}</a>
     {/if}
     {#if !here}
-      <DesktopGet onTrouble={(trouble) => (note = trouble)} />
+      <DesktopGet plain onTrouble={(trouble) => (note = trouble)} />
     {/if}
   </aside>
 {/if}
 
 <style>
+  /* The tagline's line in the header: 25 of padding, the 36 of the wordmark and 1 of gap, then 14 high. Also set
+     in Header.svelte, change both. The right edge is the panes' edge. */
   aside {
     position: absolute;
     z-index: 3;
-    top: 16px;
+    top: 62px;
     right: 24px;
     display: flex;
-    gap: 14px;
+    gap: 12px;
     align-items: center;
+    height: 14px;
+    color: rgb(255 255 255 / 0.65);
+    font-size: 11px;
+    line-height: 14px;
+    white-space: nowrap;
   }
 
   p {
     margin: 0;
-    color: var(--text-soft);
-    font-size: 12px;
+    color: rgb(255 255 255 / 0.4);
   }
 
   p.trouble {
@@ -63,9 +71,15 @@
     }
   }
 
-  a.deck-pill {
-    height: 28px;
-    padding: 0 12px;
-    font-size: 12px;
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  @media (hover: hover) {
+    a:hover {
+      color: #fff;
+      text-decoration: underline;
+    }
   }
 </style>

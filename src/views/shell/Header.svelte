@@ -282,6 +282,7 @@
     line-height: 13px;
   }
 
+  /* DesktopOffer.svelte stands on this line at the right, change both. */
   .tagline {
     position: relative;
     width: fit-content;

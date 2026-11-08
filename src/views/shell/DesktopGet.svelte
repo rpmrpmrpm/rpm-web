@@ -5,7 +5,8 @@
   import { desktopPlatform, downloadFor, type DownloadTarget } from '../../desktop/desktop-app';
   import { text } from '../../strings/loc';
 
-  let { onTrouble = () => {} }: { onTrouble?: (note: string) => void } = $props();
+  // plain: a text link, for a line of small text, rather than a pill button.
+  let { onTrouble = () => {}, plain = false }: { onTrouble?: (note: string) => void; plain?: boolean } = $props();
 
   const platform = desktopPlatform(navigator);
   const name = platform === 'windows' ? text('Web_DesktopWindows') : text('Web_DesktopMac');
@@ -31,7 +32,7 @@
 
 {#if platform}
   <div class="download">
-    <button class="deck-pill" disabled={busy} onclick={pressed}>{text('Web_DesktopDownload', name)}</button>
+    <button class={plain ? 'plain' : 'deck-pill'} disabled={busy} onclick={pressed}>{text('Web_DesktopDownload', name)}</button>
     {#if choosing}
       <div class="menu">
         <button onclick={() => download('mac-arm64')}>{text('Web_DesktopAppleSilicon')}</button>
@@ -51,6 +52,22 @@
     height: 28px;
     padding: 0 12px;
     font-size: 12px;
+  }
+
+  .plain {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  @media (hover: hover) {
+    .plain:hover {
+      color: #fff;
+      text-decoration: underline;
+    }
   }
 
   .menu {
