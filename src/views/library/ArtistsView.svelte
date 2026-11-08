@@ -9,8 +9,9 @@
   import AlphabetRail from './AlphabetRail.svelte';
   import ArtistPage from './ArtistPage.svelte';
   import ArtistTile from './ArtistTile.svelte';
+  import { pages } from './pages.svelte';
 
-  let { onOpen, openName = $bindable(null) }: { onOpen: (album: CloudAlbum) => void; openName?: string | null } = $props();
+  let { onOpen }: { onOpen: (album: CloudAlbum) => void } = $props();
 
   let search = $state('');
   let scroller = $state<HTMLElement | null>(null);
@@ -23,7 +24,7 @@
     const wanted = searchKey(search);
     return wanted ? sorted.filter((artist) => artistMatches(artist.name, search)) : sorted;
   });
-  const open = $derived(openName === null ? null : (every.find((artist) => artist.name === openName) ?? null));
+  const open = $derived(pages.artist === null ? null : (every.find((artist) => artist.name === pages.artist) ?? null));
   const first = (artist: ArtistWallItem) => held.get(ownAlbums(artist)[0] ?? '');
 
   const letterOf = (name: string) => {
@@ -47,7 +48,7 @@
     if (tile) lit = letterOf(tile.dataset.artist!);
   }
 
-  const onCloseArtist = () => (openName = null);
+  const onCloseArtist = () => (pages.artist = null);
 </script>
 
 {#if open}
@@ -70,7 +71,7 @@
         <div class="tiles">
           {#each shown as artist (artist.name)}
             <div data-artist={artist.name}>
-              <ArtistTile name={artist.name} album={first(artist)} onOpen={() => (openName = artist.name)} />
+              <ArtistTile name={artist.name} album={first(artist)} onOpen={() => (pages.artist = artist.name)} />
             </div>
           {/each}
         </div>

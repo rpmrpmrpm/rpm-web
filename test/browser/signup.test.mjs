@@ -19,6 +19,8 @@ after(() => browser.close());
 // One fake service for one page. The account is a tester once a good code has been sent.
 async function open(path, { signedIn = false, tester = false, viewport = { width: 1440, height: 900 } } = {}) {
   const page = await browser.newPage({ viewport });
+  // The library is empty here, and the setup over an empty library is tested in setup.test.mjs.
+  await page.addInitScript(() => localStorage.setItem('rpm-setup-done:new-user', '1'));
   const account = { signedIn, tester, sent: [], redeemed: [] };
   const answer = (route, status, body = {}) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 

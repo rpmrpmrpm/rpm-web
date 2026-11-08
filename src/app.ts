@@ -6,6 +6,7 @@ import { Profiles } from './api/profile';
 import { Session } from './api/session';
 import { HeadClips } from './audio/heads';
 import { LOCK_SCREEN_ART, Player } from './audio/player';
+import { Volume } from './audio/volume';
 import { browserTransfers, Importer } from './import/importer';
 import { Articles } from './library/articles';
 import { currentLanguage } from './strings/loc';
@@ -59,8 +60,20 @@ export function syncPlays() {
   void playLog.sync(cloud, `web-${installId()}`);
 }
 
+// One level for the player and the radio. Reading localStorage throws where the browser blocks site data.
+const volume = new Volume(
+  (() => {
+    try {
+      return localStorage;
+    } catch {
+      return null;
+    }
+  })(),
+);
+
 export const player = new Player(
   cloud,
+  volume,
   async (track) => {
     const album = catalogue.albums.find((a) => a.tracks.some((t) => t.rpmId === track.rpmId));
     return album ? covers.address(album, LOCK_SCREEN_ART) : null;
@@ -115,7 +128,7 @@ export const tuner = new Tuner({
   starting: () => player.stop(),
   tuned: (station) => radioDirectory.reportPlayed(station.uuid),
   heard: (part) => void radioListens.note(part),
-});
+}, volume);
 
 // Each stops the other. The keys on the lock screen go to whichever is playing.
 player.onStarting = () => tuner.stop();

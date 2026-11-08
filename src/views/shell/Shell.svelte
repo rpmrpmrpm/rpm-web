@@ -2,6 +2,7 @@
   // The window. Three shells over one set of views, chosen by the width available: the desktop's panes,
   // one pane at a time, and the phone apps' tabs.
   import '../../state.svelte';
+  import { importQueue, session } from '../../app';
   import { art, library, now, onAir } from '../../state.svelte';
   import { text } from '../../strings/loc';
   import { icons } from '../../design/icons';
@@ -12,9 +13,9 @@
   import Window from '../import/Window.svelte';
   import FeedbackWindow from '../profile/FeedbackWindow.svelte';
   import Settings from '../profile/Settings.svelte';
-  import Library, { type LibraryMode } from '../library/Library.svelte';
+  import Library from '../library/Library.svelte';
+  import { toWall, type LibraryMode } from '../library/pages.svelte';
   import RecordActions from '../library/RecordActions.svelte';
-  import { asked } from '../library/record-menu.svelte';
   import ContextMenu from '../menu/ContextMenu.svelte';
   import TrackInfo from '../library/TrackInfo.svelte';
   import RadioPane from '../radio/RadioPane.svelte';
@@ -24,6 +25,8 @@
   import Header from './Header.svelte';
   import Mark from './Mark.svelte';
   import Room from './Room.svelte';
+  import Setup from '../setup/Setup.svelte';
+  import { browserStores, endSetup, openingStep, type SetupStep } from '../setup/setup';
 
   type Left = 'info' | 'radio' | 'import' | null;
 
@@ -43,6 +46,8 @@
   let drawer = $state<Left>(opensOut);
   let drawerClear = $state(opensOut !== null);
   let lastLeft: Exclude<Left, null> = 'info';
+  // What stood in the left pane before Import was opened over the row, to go back to when it closes.
+  let beneath: Left = opensOut;
   let moving: ReturnType<typeof setTimeout> | undefined;
 
   // mode is what was asked for. shownMode changes when the old view has faded.
@@ -80,6 +85,7 @@
 
   function moveLeft(next: Left) {
     clearTimeout(moving);
+    if (next === 'import' && left !== 'import') beneath = left;
     if (next) {
       lastLeft = next;
       drawer = next;
@@ -94,8 +100,11 @@
 
   const pickLeft = (view: Left) => moveLeft(left === view ? null : view);
 
+  // Whether the library is hidden by the left pane: Import lies over the whole row in a wide window, and in a
+  // medium one any open left view takes the room.
+  const covered = $derived(layout === 'wide' ? left === 'import' : layout === 'medium' && left !== null);
+
   function pickMode(next: LibraryMode) {
-    asked.opening = null;
     if (next === mode) return;
     clearTimeout(swapping);
     mode = next;
@@ -104,6 +113,41 @@
       shownMode = next;
       modeClear = true;
     }, FADE_MS);
+  }
+
+  // A press on Home or on one of the library's keys always shows that view, as on the desktop: what covers the
+  // library steps aside, and a page open in the view closes. Without this a press can change a view that is
+  // hidden, and seem to do nothing.
+  function press(next: LibraryMode) {
+    if (covered) moveLeft(layout === 'wide' ? beneath : null);
+    toWall(next);
+    pickMode(next);
+  }
+
+  // The setup, once per account in this browser, over a library that is still empty. Decided once, when the
+  // library has first been read.
+  let setupAt = $state<SetupStep | 'hello' | null>(null);
+  let setupDecided = false;
+  $effect(() => {
+    if (setupDecided || library.state !== 'ready' || !session.user) return;
+    setupDecided = true;
+    const { store, tab } = browserStores();
+    setupAt = openingStep(store, tab, session.user.userId, library.albums.length === 0);
+  });
+
+  // After the setup: the Import pane when music was put in it, so the import can be followed, and the library
+  // otherwise.
+  function setupFinished() {
+    const { store, tab: kept } = browserStores();
+    if (session.user) endSetup(store, kept, session.user.userId);
+    setupAt = null;
+    if (importQueue.rows.length > 0) {
+      if (layout === 'narrow') tab = 'import';
+      else if (left !== 'import') moveLeft('import');
+    } else if (library.albums.length > 0) {
+      if (layout === 'narrow') tab = 'library';
+      else press('albums');
+    }
   }
 
   // A first run on an empty library starts at Import, which is what there is to do.
@@ -150,10 +194,22 @@
     {/if}
 
     <nav class="tabs">
-      <button class:on={tab === 'home'} onclick={() => (tab = 'home')}>
+      <button
+        class:on={tab === 'home'}
+        onclick={() => {
+          tab = 'home';
+          toWall('home');
+        }}
+      >
         <i class="icon">{icons.home}</i>{text('Rpm_Tab_Home')}
       </button>
-      <button class:on={tab === 'library'} onclick={() => (tab = 'library')}>
+      <button
+        class:on={tab === 'library'}
+        onclick={() => {
+          tab = 'library';
+          toWall(mode === 'home' ? 'albums' : mode);
+        }}
+      >
         <i class="icon">{icons.album}</i>{text('RightNav_Albums')}
       </button>
       <button class:on={tab === 'radio'} onclick={() => (tab = 'radio')}>
@@ -201,12 +257,12 @@
         {/if}
       </section>
 
-      {#if (layout === 'wide' && left !== 'import') || left === null}
+      {#if !covered}
         <section class="pane right">
           <div class="view" class:clear={modeClear}><Library mode={shownMode} onPick={pickMode} onImport={() => moveLeft('import')} /></div>
           <nav class="rail right">
             {#each RIGHT as [id, icon, label]}
-              <button class:on={mode === id} onclick={() => pickMode(id)}><i class="icon">{icon}</i>{text(label)}</button>
+              <button class:on={mode === id} onclick={() => press(id)}><i class="icon">{icon}</i>{text(label)}</button>
             {/each}
           </nav>
         </section>
@@ -215,9 +271,9 @@
 
     <Deck
       paneOpen={left !== null}
-      atHome={mode === 'home'}
+      atHome={mode === 'home' && !covered}
       onPane={() => moveLeft(left ? null : lastLeft)}
-      onHome={() => pickMode('home')}
+      onHome={() => press('home')}
       onSettings={() => (settingsOpen = true)}
       onFeedback={() => (feedbackOpen = true)}
       onAbout={() => (aboutOpen = true)}
@@ -238,6 +294,9 @@
 {/if}
 {#if aboutOpen}
   <AboutWindow onClose={() => (aboutOpen = false)} />
+{/if}
+{#if setupAt}
+  <Setup opening={setupAt} onDone={setupFinished} />
 {/if}
 
 <style>

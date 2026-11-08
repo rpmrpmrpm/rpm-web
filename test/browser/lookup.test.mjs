@@ -41,6 +41,8 @@ const LIBRARY = [held('a', 'Clandestino'), held('b', 'Bongo Bong')];
 
 async function open(viewport = { width: 1440, height: 900 }, library = []) {
   const page = await browser.newPage({ viewport });
+  // The library starts empty here, and the setup over an empty library is tested in setup.test.mjs.
+  await page.addInitScript(() => localStorage.setItem('rpm-setup-done:user', '1'));
   const asked = [];
   const sent = [];
   const problems = [];

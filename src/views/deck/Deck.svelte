@@ -50,7 +50,15 @@
 
     {#if canSetVolume}
       <span class="rule"></span>
-      <i class="icon mark">{icons.volume}</i>
+      <!-- The speaker mark is also the mute, as on the desktop. It takes no focus on a click, so a space bar after it
+           still pauses. -->
+      <button
+        class="mark"
+        title={text(now.volume === 0 ? 'Transport_Unmute' : 'Transport_Mute')}
+        aria-label={text(now.volume === 0 ? 'Transport_Unmute' : 'Transport_Mute')}
+        onmousedown={(event) => event.preventDefault()}
+        onclick={() => player.toggleMute()}><i class="icon">{now.volume === 0 ? icons.mute : icons.volume}</i></button
+      >
       <button class="key small" title={text('Transport_VolumeDown')} onclick={() => player.setVolume(now.volume - 0.05)}><i class="icon">{icons.minus}</i></button>
       <input
         class="volume slider"
@@ -182,10 +190,19 @@
 
   .mark {
     width: 16px;
+    height: 16px;
     margin: 0 2px;
+    padding: 0;
+    border: 0;
+    background: none;
     color: rgb(255 255 255 / 0.53);
     font-size: 13px;
     text-align: center;
+    cursor: pointer;
+  }
+
+  .mark:hover {
+    color: #fff;
   }
 
   .volume {

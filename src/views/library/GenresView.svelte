@@ -14,17 +14,17 @@
   import GenreMark from './GenreMark.svelte';
   import ArtistTile from './ArtistTile.svelte';
   import Shelf from './Shelf.svelte';
+  import { pages } from './pages.svelte';
 
   let { onOpen, onArtist }: { onOpen: (album: CloudAlbum) => void; onArtist: (name: string) => void } = $props();
 
-  let openName = $state<string | null>(null);
   let table = $state.raw<Record<string, GenreArt>>({});
 
   void genreArtTable().then((loaded) => (table = loaded));
 
   const held = $derived(albumsByKey(library.albums));
   const wall = $derived(genreWall(library.albums));
-  const open = $derived(openName === null ? null : (wall.find((genre) => genre.name === openName) ?? null));
+  const open = $derived(pages.genre === null ? null : (wall.find((genre) => genre.name === pages.genre) ?? null));
   const page = $derived(open ? shelvesOf(open, held, artistWall(library.albums)) : null);
 
   const recordsOf = (keys: readonly string[]) => keys.flatMap((key) => held.get(key) ?? []);
@@ -55,7 +55,7 @@
   <div class="page detail" style:--colour={openArt?.colour ?? '#30343c'}>
     <header class="head" style:background-image={openPhoto ? `url(${openPhoto})` : null}>
       <span class="across"></span>
-      <button class="back-key back" title={text('Genres_Title')} aria-label={text('Genres_Title')} onclick={() => (openName = null)}><i class="icon">{icons.backArrow}</i></button>
+      <button class="back-key back" title={text('Genres_Title')} aria-label={text('Genres_Title')} onclick={() => (pages.genre = null)}><i class="icon">{icons.backArrow}</i></button>
       <div class="title">
         <span class="mark" style:aspect-ratio={openArt?.aspect ?? 'auto'}><GenreMark art={openArt} name={shown(open.name)} /></span>
         <p>{text('Genres_InLibrary', open.albums.length, page.acts.length)}</p>
@@ -100,7 +100,7 @@
     {#if wall.length}
       <div class="wall">
         {#each wall as genre (genre.name)}
-          <GenreCard name={shown(genre.name)} act={actOf(genre)} albums={genre.albums.length} art={table[genre.name]} onOpen={() => (openName = genre.name)} />
+          <GenreCard name={shown(genre.name)} act={actOf(genre)} albums={genre.albums.length} art={table[genre.name]} onOpen={() => (pages.genre = genre.name)} />
         {/each}
       </div>
     {:else if library.state === 'ready'}

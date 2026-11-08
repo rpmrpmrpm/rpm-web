@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type LibraryMode = 'home' | 'albums' | 'artists' | 'genres' | 'playlists';
+  export type { LibraryMode } from './pages.svelte';
 </script>
 
 <script lang="ts">
@@ -12,6 +12,7 @@
   import GenresView from './GenresView.svelte';
   import HomeView from './HomeView.svelte';
   import PlaylistsView from './PlaylistsView.svelte';
+  import { pages, toWall, type LibraryMode } from './pages.svelte';
   import { asked } from './record-menu.svelte';
 
   let {
@@ -31,11 +32,17 @@
 
   const onOpen = (album: CloudAlbum) => (asked.opening = album);
 
-  // Pressing an act on a genre page opens their page on the artist wall.
-  let openArtist = $state<string | null>(null);
+  // Pressing an act on a genre page opens their page on the artist wall. This is not a press on the Artists key,
+  // so the page is not closed on the way.
   function onArtist(name: string) {
-    openArtist = name;
+    pages.artist = name;
     onPick('artists');
+  }
+
+  // A chip asks for its view, not for a page open in it.
+  function picked(id: LibraryMode) {
+    toWall(id);
+    onPick(id);
   }
 </script>
 
@@ -43,7 +50,7 @@
   {#if picker}
     <div class="picks" role="tablist">
       {#each PICKS as [id, label]}
-        <button class="chip" class:on={mode === id} role="tab" aria-selected={mode === id} onclick={() => onPick(id)}>{text(label)}</button>
+        <button class="chip" class:on={mode === id} role="tab" aria-selected={mode === id} onclick={() => picked(id)}>{text(label)}</button>
       {/each}
     </div>
   {/if}
@@ -53,7 +60,7 @@
     {:else if mode === 'home'}
       <HomeView {onOpen} {onImport} />
     {:else if mode === 'artists'}
-      <ArtistsView {onOpen} bind:openName={openArtist} />
+      <ArtistsView {onOpen} />
     {:else if mode === 'genres'}
       <GenresView {onOpen} {onArtist} />
     {:else if mode === 'playlists'}

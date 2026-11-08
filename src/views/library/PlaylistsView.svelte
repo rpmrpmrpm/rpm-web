@@ -16,8 +16,7 @@
   import DesktopGet from '../shell/DesktopGet.svelte';
   import PlaylistCover from './PlaylistCover.svelte';
   import PlaylistDetail from './PlaylistDetail.svelte';
-
-  type Opened = { kind: 'list'; id: string } | { kind: 'generated'; list: GeneratedList } | { kind: 'queue' };
+  import { pages } from './pages.svelte';
 
   const VIEW_KEY = 'rpm.playlistView';
   const SIZE_KEY = 'rpm.playlistTile';
@@ -43,7 +42,6 @@
   let held = $state.raw<CloudPlaylist[] | null>(null);
   let generated = $state.raw<GeneratedList[]>([]);
   let failed = $state(false);
-  let opened = $state.raw<Opened | null>(null);
   let path = $state.raw<string[]>([]);
   let made = $state.raw<string[][]>([]);
   let view = $state<'icons' | 'list'>(stored(VIEW_KEY) === 'list' ? 'list' : 'icons');
@@ -71,10 +69,10 @@
   const tracksOf = (ids: readonly string[]): CloudTrack[] => ids.flatMap((id) => byId.get(id) ?? []);
   const secondsOf = (tracks: readonly CloudTrack[]) => tracks.reduce((sum, track) => sum + durationSeconds(track), 0);
 
-  const open = $derived(opened?.kind === 'list' ? (held?.find((playlist) => playlist.playlistId === (opened as { id: string }).id) ?? null) : null);
+  const open = $derived(pages.playlist?.kind === 'list' ? (held?.find((playlist) => playlist.playlistId === (pages.playlist as { id: string }).id) ?? null) : null);
   const shownTracks = $derived.by(() => {
-    if (opened?.kind === 'queue') return now.queue;
-    if (opened?.kind === 'generated') return tracksOf(opened.list.trackIds);
+    if (pages.playlist?.kind === 'queue') return now.queue;
+    if (pages.playlist?.kind === 'generated') return tracksOf(pages.playlist.list.trackIds);
     return tracksOf(open?.trackIds ?? []);
   });
   const missing = $derived((open?.trackIds.length ?? 0) - (open ? shownTracks.length : 0));
@@ -113,7 +111,7 @@
   async function remove() {
     if (!open) return;
     const id = open.playlistId;
-    opened = null;
+    pages.playlist = null;
     await act(() => playlists.remove(id));
   }
 
@@ -177,7 +175,7 @@
     return `${count === 1 ? text('Stats_PlaylistsOne') : text('Stats_Playlists', count)}  •  ${length}`;
   });
 
-  const openedName = $derived(opened?.kind === 'queue' ? text('Playlists_NowPlaying') : opened?.kind === 'generated' ? generatedName(opened.list) : (open?.name ?? ''));
+  const openedName = $derived(pages.playlist?.kind === 'queue' ? text('Playlists_NowPlaying') : pages.playlist?.kind === 'generated' ? generatedName(pages.playlist.list) : (open?.name ?? ''));
   const openedLine = $derived(
     `${trackCount(shownTracks.length)}${missing > 0 ? `  •  ${missing === 1 ? text('Rpm_Playlist_MissingOne') : text('Rpm_Playlist_Missing', missing)}` : ''}`,
   );
@@ -214,7 +212,7 @@
   ];
 
   const openThen = (list: CloudPlaylist, run: () => void) => () => {
-    opened = { kind: 'list', id: list.playlistId };
+    pages.playlist = { kind: 'list', id: list.playlistId };
     run();
   };
 
@@ -254,15 +252,15 @@
   </li>
 {/snippet}
 
-{#if opened}
+{#if pages.playlist}
   <PlaylistDetail
     id={open?.playlistId ?? null}
     name={openedName}
     subtitle={openedLine}
     tracks={shownTracks}
-    glyph={opened.kind === 'queue' ? icons.play : icons.playlist}
+    glyph={pages.playlist.kind === 'queue' ? icons.play : icons.playlist}
     version={coverVersion}
-    onBack={() => (opened = null)}
+    onBack={() => (pages.playlist = null)}
     onRemove={open ? (track, index) => { const id = open!.playlistId; void act(() => playlists.removeAt(id, track.rpmId, index)); } : undefined}
     onMove={open ? moved : undefined}
   >
@@ -323,15 +321,15 @@
           <ul class="wall" style:--tile="{tile}px">
             {#if root}
               {#snippet queueCover()}<PlaylistCover tracks={now.queue} glyph={icons.play} />{/snippet}
-              {@render tileFace(text('Playlists_NowPlaying'), queueCover, () => (opened = { kind: 'queue' }))}
+              {@render tileFace(text('Playlists_NowPlaying'), queueCover, () => (pages.playlist = { kind: 'queue' }))}
             {/if}
             {#each inHere as playlist (playlist.playlistId)}
               {#snippet listCover()}<PlaylistCover id={playlist.playlistId} tracks={tracksOf(playlist.trackIds)} version={coverVersion} />{/snippet}
-              {@render tileFace(playlist.name, listCover, () => (opened = { kind: 'list', id: playlist.playlistId }), () => listMenu(playlist))}
+              {@render tileFace(playlist.name, listCover, () => (pages.playlist = { kind: 'list', id: playlist.playlistId }), () => listMenu(playlist))}
             {/each}
             {#each automaticLists as list, index (`${list.kind}-${index}`)}
               {#snippet autoCover()}<PlaylistCover tracks={tracksOf(list.trackIds)} />{/snippet}
-              {@render tileFace(generatedName(list), autoCover, () => (opened = { kind: 'generated', list }), () => playingMenu(tracksOf(list.trackIds)))}
+              {@render tileFace(generatedName(list), autoCover, () => (pages.playlist = { kind: 'generated', list }), () => playingMenu(tracksOf(list.trackIds)))}
             {/each}
             {#each folders as name (name)}
               {#snippet folderCover()}<PlaylistCover tracks={[]} glyph={icons.folderClosed} />{/snippet}
@@ -342,12 +340,12 @@
       {:else}
         <ul class="tree">
           {#each favourite.trackIds.length ? [favourite, ...generated] : generated as list, index (`${list.kind}-${index}`)}
-            <li><button style:padding-left="22px" onclick={() => (opened = { kind: 'generated', list })} use:menuOn={() => playingMenu(tracksOf(list.trackIds))}><i class="icon">{icons.playlist}</i><span>{generatedName(list)}</span></button></li>
+            <li><button style:padding-left="22px" onclick={() => (pages.playlist = { kind: 'generated', list })} use:menuOn={() => playingMenu(tracksOf(list.trackIds))}><i class="icon">{icons.playlist}</i><span>{generatedName(list)}</span></button></li>
           {/each}
           {#each rows as row (`${row.folder?.join('/') ?? row.list?.playlistId}`)}
             <li>
               {#if row.list}
-                <button style:padding-left="{22 + row.depth * 18}px" onclick={() => (opened = { kind: 'list', id: row.list!.playlistId })} use:menuOn={() => listMenu(row.list!)}><i class="icon">{icons.playlist}</i><span>{row.name}</span></button>
+                <button style:padding-left="{22 + row.depth * 18}px" onclick={() => (pages.playlist = { kind: 'list', id: row.list!.playlistId })} use:menuOn={() => listMenu(row.list!)}><i class="icon">{icons.playlist}</i><span>{row.name}</span></button>
               {:else}
                 {@const open = expanded.has(row.folder!.join('/'))}
                 <button style:padding-left="{4 + row.depth * 18}px" title={text(open ? 'Playlists_Collapse' : 'Playlists_Expand')} aria-expanded={open} onclick={() => toggle(row.folder!)} use:menuOn={() => folderMenu(row.folder!)}>

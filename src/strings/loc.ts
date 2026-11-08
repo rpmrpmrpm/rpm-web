@@ -59,6 +59,13 @@ export async function loadStrings(wanted: string): Promise<void> {
   language = wanted;
 }
 
+// One key in every language the app speaks, in the order of LANGUAGES. It loads every table, so it is for the
+// setup's welcome, which is shown once.
+export async function inEveryLanguage(key: string): Promise<string[]> {
+  const loaded = await Promise.all(LANGUAGES.map(async ([code]) => (await tables[`./${code}.json`]?.())?.default[key]));
+  return loaded.filter((found): found is string => typeof found === 'string');
+}
+
 // The text for a key, with {0}, {1} filled in. A missing key shows the key, so it is seen in testing
 // rather than showing an empty space.
 export function text(key: string, ...values: (string | number)[]): string {

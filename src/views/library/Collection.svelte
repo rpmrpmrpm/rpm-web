@@ -11,33 +11,15 @@
   import AlbumList, { type AlbumGrouping } from './AlbumList.svelte';
   import AlbumWall from './AlbumWall.svelte';
   import TrackTable from './TrackTable.svelte';
+  import { collection, pickView, type CollectionView } from './view.svelte';
 
   let { compact = false, onImport, onOpen }: { compact?: boolean; onImport: () => void; onOpen: (album: CloudAlbum) => void } = $props();
 
-  type View = 'grid' | 'list' | 'table';
-  const VIEW_KEY = 'rpm-library-view';
-
-  function storedView(): View {
-    try {
-      const stored = localStorage.getItem(VIEW_KEY);
-      return stored === 'list' || stored === 'table' ? stored : 'grid';
-    } catch {
-      return 'grid';
-    }
-  }
+  type View = CollectionView;
 
   let search = $state('');
   let target = $state(166);
-  let view = $state<View>(storedView());
-
-  function pickView(next: View) {
-    view = next;
-    try {
-      localStorage.setItem(VIEW_KEY, next);
-    } catch {
-      // It holds for this visit.
-    }
-  }
+  const view = $derived(collection.view);
 
   const VIEWS: [View, string, string][] = [
     ['grid', icons.grid, 'Library_ViewGrid'],

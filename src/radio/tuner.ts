@@ -3,6 +3,7 @@
 // be read out of it. The rest is RadioStreamSource: a dropped stream is a wait and another try, and only a station that
 // stays silent is given up on.
 
+import type { Volume } from '../audio/volume';
 import { logosOf } from './logo';
 import { displayOf, type RadioStation } from './station';
 
@@ -78,10 +79,15 @@ export class Tuner {
   private tries = 0;
   private retry: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(private readonly hooks: TunerHooks) {
+  // The radio plays at the player's level: there is one volume. See Volume.
+  constructor(
+    private readonly hooks: TunerHooks,
+    sound: Volume,
+  ) {
     this.audio = new Audio();
     this.audio.preload = 'none';
     this.audio.setAttribute('playsinline', '');
+    sound.drive(this.audio);
     this.audio.addEventListener('playing', () => {
       this.tries = 0;
       this.set('on');
@@ -105,10 +111,6 @@ export class Tuner {
   private set(air: Air) {
     this.air = air;
     this.changed();
-  }
-
-  setVolume(volume: number) {
-    this.audio.volume = volume;
   }
 
   private count() {

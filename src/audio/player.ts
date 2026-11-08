@@ -8,6 +8,7 @@ import { gainFor, levelOf, levelOfRecord, type Level, type NormalizeMode } from 
 import type { Failure, WorkerTrack } from './playback.worker';
 import { RESTART_AFTER_SECONDS, restored, Retries, shuffled, StartGate, Transport, type Loaded } from './queue';
 import { Stream } from './stream';
+import { volumeWorks, type Volume } from './volume';
 
 // One row of the queue. A row is an object of its own, because one record can stand in the queue twice.
 export interface QueueRow {
@@ -16,7 +17,6 @@ export interface QueueRow {
 
 export type Repeat = 'off' | 'all' | 'one';
 
-const VOLUME_KEY = 'rpm-volume';
 const EQUALIZER_KEY = 'rpm-equalizer';
 // A larger step of the playhead between two ticks is a seek, or a jump to the next audio.
 const MOST_STEP_SECONDS = 2;
@@ -96,6 +96,7 @@ export class Player {
 
   constructor(
     private readonly cloud: Signer,
+    private readonly sound: Volume,
     private readonly findArtwork: (track: CloudTrack) => Promise<string | null> = async () => null,
     private readonly listened: (rpmId: string) => void = () => {},
     private readonly heads: Heads = noHeads,
@@ -103,7 +104,8 @@ export class Player {
     this.audio = new Audio();
     this.audio.preload = 'auto';
     this.audio.setAttribute('playsinline', '');
-    this.audio.volume = this.storedVolume();
+    sound.drive(this.audio);
+    sound.onChange(() => this.changed());
 
     this.stream = new Stream(this.audio, {
       arrived: () => this.arrived(),
@@ -171,35 +173,20 @@ export class Player {
   }
 
   get volume(): number {
-    return this.audio.volume;
+    return this.sound.level;
   }
 
-  // iOS ignores element.volume, so its slider would do nothing. The hardware keys set the level there.
   get volumeWorks(): boolean {
-    const before = this.audio.volume;
-    this.audio.volume = before > 0.5 ? before - 0.1 : before + 0.1;
-    const works = this.audio.volume !== before;
-    this.audio.volume = before;
-    return works;
+    return volumeWorks(this.audio);
   }
 
+  // The one level, which the radio follows too. See Volume.
   setVolume(level: number) {
-    this.audio.volume = Math.min(Math.max(level, 0), 1);
-    try {
-      localStorage.setItem(VOLUME_KEY, String(this.audio.volume));
-    } catch {
-      // The level holds until the page closes.
-    }
-    this.changed();
+    this.sound.set(level);
   }
 
-  private storedVolume(): number {
-    try {
-      const stored = Number(localStorage.getItem(VOLUME_KEY));
-      return stored > 0 && stored <= 1 ? stored : 1;
-    } catch {
-      return 1;
-    }
+  toggleMute() {
+    this.sound.toggleMute();
   }
 
   private setLoaded(loaded: Loaded) {

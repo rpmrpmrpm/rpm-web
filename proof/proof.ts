@@ -4,6 +4,7 @@
 
 import { readTrack, type CloudTrack } from '../src/api/wire';
 import { Player, type Signer } from '../src/audio/player';
+import { Volume } from '../src/audio/volume';
 
 const LOG_KEY = 'rpm-proof-log';
 const element = (id: string) => document.getElementById(id)!;
@@ -58,7 +59,7 @@ declare global {
   }
 }
 
-const player = new Player(signer, async (track) => `/art/${track.rpmId}.png`, undefined, {
+const player = new Player(signer, new Volume(null), async (track) => `/art/${track.rpmId}.png`, undefined, {
   held: (rpmId) => window.heads?.get(rpmId) ?? null,
   warm: () => {},
 });

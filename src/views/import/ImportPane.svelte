@@ -1,10 +1,11 @@
 <script lang="ts">
   // The import workbench. Rows are proposed here: nothing leaves the browser until Import is pressed, and
   // the ticks are the selection.
-  import { catalogue, importer, importMedia, importQueue, queueKeeper } from '../../app';
+  import { importQueue, queueKeeper } from '../../app';
   import { icons } from '../../design/icons';
   import { bestPreset, FILENAME_PRESETS } from '../../import/filename-tags';
   import { handlesOfDrop, pickedFromDrop, pickedFromHandles, pickedFromInput } from '../../import/pick';
+  import { starterMusic } from '../../import/starter';
   import { tagsMissing, type ChipFilter, type ImportRow, type PickedFile, type QueueGroup } from '../../import/queue';
   import { text } from '../../strings/loc';
   import { menuOn, openMenu, type MenuEntry } from '../menu/menu.svelte';
@@ -13,8 +14,8 @@
   import ReleaseLookup from './ReleaseLookup.svelte';
   import TagPanel from './TagPanel.svelte';
   import TagsFromTags from './TagsFromTags.svelte';
+  import { addToQueue, importing, runImport } from './importing.svelte';
 
-  const small = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
   const folderPicker = 'webkitdirectory' in HTMLInputElement.prototype && !/iPhone|iPad/.test(navigator.userAgent);
 
   // Chrome and Edge. A folder picked this way can be opened again on the next visit.
@@ -26,7 +27,6 @@
   let version = $state(0);
   importQueue.onChange(() => version++);
 
-  let running = $state(false);
   let recognising = $state(false);
   let chip = $state<ChipFilter | null>(null);
   let search = $state('');
@@ -38,7 +38,6 @@
   let toast = $state('');
   let preset = $state(0);
   let dropping = $state(false);
-  let message = $state('');
   let dragged = $state<ImportRow[]>([]);
 
   const duplicates = $derived.by(() => {
@@ -123,20 +122,23 @@
   const window_ = $derived(lines.slice(first, first + Math.ceil(viewport / LINE) + 12));
 
   async function add(picked: PickedFile[]) {
-    const rows = importQueue.add(picked);
-    if (rows.length && !showNames) preset = bestPreset(importQueue.rows.map((row) => row.path));
+    await addToQueue(picked, (rows) => {
+      if (rows.length && !showNames) preset = bestPreset(importQueue.rows.map((row) => row.path));
+    });
+  }
 
-    for (const row of rows) {
-      if (row.state !== 'reading') continue;
-      try {
-        const { tags, hasArt } = await importMedia.tags(row.file);
-        importQueue.read(row, tags, hasArt);
-      } catch {
-        row.state = 'unreadable';
-        row.ticked = false;
-        row.note = 'Cloud_FailUnreadable';
-        importQueue.changed();
-      }
+  // The three tracks rpm ships, for someone with no music to hand.
+  let fetchingStarter = $state(false);
+  let starterNote = $state('');
+  async function tryStarter() {
+    fetchingStarter = true;
+    starterNote = '';
+    try {
+      await add(await starterMusic(import.meta.env.BASE_URL, (...args) => fetch(...args)));
+    } catch {
+      starterNote = text('Web_StarterFailed');
+    } finally {
+      fetchingStarter = false;
     }
   }
 
@@ -186,30 +188,6 @@
     const files = event.currentTarget.files;
     if (files) void add(pickedFromInput(files));
     event.currentTarget.value = '';
-  }
-
-  const leaving = (event: BeforeUnloadEvent) => event.preventDefault();
-
-  async function run() {
-    running = true;
-    message = '';
-    addEventListener('beforeunload', leaving);
-
-    // A phone that sleeps stops the page, and an upload with it.
-    let lock: WakeLockSentinel | null = null;
-    try {
-      lock = (await navigator.wakeLock?.request('screen')) ?? null;
-    } catch {
-      // A page that may not hold the screen on still imports.
-    }
-
-    const outcome = await importer.run(importQueue.importableRows(), small ? 1 : 3);
-
-    void lock?.release();
-    removeEventListener('beforeunload', leaving);
-    running = false;
-    if (outcome === 'full') message = text('Rpm_Error_StorageFull');
-    await catalogue.refresh();
   }
 
   const folderOf = (row: ImportRow) => {
@@ -307,7 +285,7 @@
             { label: text('Queue_DeselectAll'), glyph: icons.minus, run: () => setTicks(rows, false) },
             'rule',
           ] as MenuEntry[])),
-      { label: text('Review_CtxRecognize'), glyph: icons.magic, disabled: running, run: only(() => (recognising = true)) },
+      { label: text('Review_CtxRecognize'), glyph: icons.magic, disabled: importing.running, run: only(() => (recognising = true)) },
       { label: text('Queue_ActionTagsFromFilename'), glyph: icons.file, run: only(() => (showNames = true)) },
       { label: text('Queue_ToolTagsFromRelease'), glyph: icons.book, run: only(() => (lookingUp = true)) },
       { label: text('Queue_ToolTagsFromTags'), glyph: icons.swap, run: only(() => (fromTags = true)) },
@@ -420,12 +398,17 @@
           <label class="glass-button">{text('Web_ImportAddFolder')}<input type="file" webkitdirectory hidden onchange={picked} /></label>
         {/if}
       </div>
+      <div class="starter">
+        <button class="glass-button" disabled={fetchingStarter} onclick={tryStarter}><i class="icon">{icons.music}</i>{text('Wizard_TryStarter')}</button>
+        <p>{text('Wizard_TryStarterHint')}</p>
+        {#if starterNote}<p class="error" role="alert">{starterNote}</p>{/if}
+      </div>
       <div class="get"><DesktopGet /></div>
     </div>
   {:else}
     <div class="toolbar">
       <div class="keys">
-        <button class="tool-key" disabled={running || !recognisable.length} title={text('Queue_ToolRecognize')} aria-label={text('Queue_ToolRecognize')} onclick={() => (recognising = true)}><i class="icon">{icons.magic}</i></button>
+        <button class="tool-key" disabled={importing.running || !recognisable.length} title={text('Queue_ToolRecognize')} aria-label={text('Queue_ToolRecognize')} onclick={() => (recognising = true)}><i class="icon">{icons.magic}</i></button>
         <span class="divider"></span>
         <button class="tool-key" class:on={showNames} title={text('Queue_ActionTagsFromFilename')} aria-label={text('Queue_ActionTagsFromFilename')} onclick={() => (showNames = !showNames)}><i class="icon">{icons.file}</i></button>
         <button class="tool-key" disabled={!ticked.length} title={text('Queue_ToolTagsFromRelease')} aria-label={text('Queue_ToolTagsFromRelease')} onclick={() => (lookingUp = true)}><i class="icon">{icons.book}</i></button>
@@ -537,11 +520,11 @@
         <button title={text('Queue_DeselectAll')} onclick={() => importQueue.setAllTicks(false)}>{text('Queue_SelectNoneWord')}</button>
       </div>
       <p class="status" role="status">
-        {#if message}<span class="error">{message}</span>{:else if toast}{toast}{:else if running}{text('Web_ImportKeepOpen')}{:else}{facts}{/if}
+        {#if importing.message}<span class="error">{importing.message}</span>{:else if toast}{toast}{:else if importing.running}{text('Web_ImportKeepOpen')}{:else}{facts}{/if}
       </p>
-      {#if counts.done > 0 && !running}<button class="glass-button slim" onclick={clearDone}>{text('Web_ImportClearDone')}</button>{/if}
+      {#if counts.done > 0 && !importing.running}<button class="glass-button slim" onclick={clearDone}>{text('Web_ImportClearDone')}</button>{/if}
       <label class="glass-button slim add"><i class="icon">{icons.plus}</i>{text('AddMusic_Title')}<input type="file" multiple hidden onchange={picked} /></label>
-      <button class="glass-button primary slim" disabled={running || importable === 0} onclick={run}><i class="icon">{icons.import}</i>{text('Queue_ImportAction')}<i class="icon chevron">{icons.forward}</i></button>
+      <button class="glass-button primary slim" disabled={importing.running || importable === 0} onclick={() => void runImport()}><i class="icon">{icons.import}</i>{text('Queue_ImportAction')}<i class="icon chevron">{icons.forward}</i></button>
     </footer>
       </div>
     </div>
@@ -625,6 +608,13 @@
     color: rgb(255 255 255 / 0.53);
     font-size: 11.5px;
     line-height: 1.45;
+  }
+
+  .starter {
+    display: grid;
+    gap: 6px;
+    justify-items: center;
+    margin-top: 6px;
   }
 
   .adds {
@@ -1067,7 +1057,8 @@
     white-space: nowrap;
   }
 
-  .error {
+  .error,
+  .empty p.error {
     color: var(--error);
   }
 

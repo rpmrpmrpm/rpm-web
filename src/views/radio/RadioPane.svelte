@@ -5,6 +5,7 @@
 
   import { radioDirectory, radioFavorites, radioRules, session, tuner } from '../../app';
   import { icons } from '../../design/icons';
+  import { storeCountry, storedCountry } from '../../radio/country';
   import { DirectoryDown } from '../../radio/directory';
   import {
     FORMATS,
@@ -29,7 +30,6 @@
   import RadioDial from './RadioDial.svelte';
   import StationLogo from './StationLogo.svelte';
 
-  const COUNTRY_KEY = 'rpm.radioCountry';
   const TYPING_MS = 400;
 
   const ORDERS: [Ordering, string][] = [
@@ -45,14 +45,6 @@
     ['without', 'Radio_AdsWithout'],
     ['with', 'Radio_AdsWith'],
   ];
-
-  const storedCountry = () => {
-    try {
-      return localStorage.getItem(COUNTRY_KEY);
-    } catch {
-      return null;
-    }
-  };
 
   let found = $state.raw<RadioStation[]>([]);
   let countries = $state.raw<Country[]>([]);
@@ -123,12 +115,7 @@
   function setCountry(code: string | null) {
     country = code;
     panel = null;
-    try {
-      if (code) localStorage.setItem(COUNTRY_KEY, code);
-      else localStorage.removeItem(COUNTRY_KEY);
-    } catch {
-      // A preference. It holds for this visit either way.
-    }
+    storeCountry(code);
     void search();
   }
 

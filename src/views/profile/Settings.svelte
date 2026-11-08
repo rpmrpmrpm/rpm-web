@@ -196,12 +196,12 @@
           </div>
         </div>
         {#if profile}
-          <form onsubmit={saveName}>
-            <label class="named">
-              <span class="dim">{text('Profile_DisplayName')}</span>
-              <input class="field" maxlength="40" bind:value={name} oninput={() => (nameNote = '')} />
-            </label>
-            <button class="glass-button" type="submit" disabled={workingName || name.trim() === profile.displayName || name.trim().length < 2}><i class="icon">{icons.save}</i>{text('Details_Save')}</button>
+          <form class="named" onsubmit={saveName}>
+            <label class="dim" for="display-name">{text('Profile_DisplayName')}</label>
+            <div class="row">
+              <input id="display-name" class="field" maxlength="40" bind:value={name} oninput={() => (nameNote = '')} />
+              <button class="glass-button" type="submit" disabled={workingName || name.trim() === profile.displayName || name.trim().length < 2}><i class="icon">{icons.save}</i>{text('Details_Save')}</button>
+            </div>
             {#if nameNote}<p class="dim" role="status">{nameNote}</p>{/if}
           </form>
           <div class="row">
@@ -477,10 +477,17 @@
     font-size: 17px;
   }
 
-  .named {
-    display: flex;
+  /* The caption above, and the field and its key on one line at the key's height. */
+  form.named {
     flex-direction: column;
     gap: 4px;
+    align-items: flex-start;
+  }
+
+  .named .field {
+    width: 220px;
+    height: 32px;
+    font-size: 13px;
   }
 
   .plan {
