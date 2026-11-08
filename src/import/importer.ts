@@ -331,9 +331,9 @@ export class Importer {
     }
   }
 
-  // Works through the rows, a few at a time. Quota full stops the whole run: a track that does not fit
-  // means the account has reached its limit.
-  async run(rows: readonly ImportRow[], atOnce: number): Promise<'done' | 'full' | 'stopped'> {
+  // Works through the rows, a few at a time, and gives finished the number of rows that are through, after each
+  // one. Quota full stops the whole run: a track that does not fit means the account has reached its limit.
+  async run(rows: readonly ImportRow[], atOnce: number, finished: (count: number) => void): Promise<'done' | 'full' | 'stopped'> {
     this.running = true;
     this.stopped = false;
     this.coversDone.clear();
@@ -349,6 +349,7 @@ export class Importer {
     }
 
     const pending = [...rows];
+    let through = 0;
     const lane = async () => {
       while (pending.length > 0 && !full && !this.stopped) {
         const row = pending.shift()!;
@@ -358,6 +359,7 @@ export class Importer {
           full = true;
           this.note(row, 'failed', 'Rpm_Error_StorageFull');
         }
+        finished(++through);
       }
     };
     await Promise.all(Array.from({ length: atOnce }, lane));

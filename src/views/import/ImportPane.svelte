@@ -6,14 +6,16 @@
   import { bestPreset, FILENAME_PRESETS } from '../../import/filename-tags';
   import { handlesOfDrop, pickedFromDrop, pickedFromHandles, pickedFromInput } from '../../import/pick';
   import { starterMusic } from '../../import/starter';
-  import { tagsMissing, type ChipFilter, type ImportRow, type PickedFile, type QueueGroup } from '../../import/queue';
+  import { allImported, tagsMissing, type ChipFilter, type ImportRow, type PickedFile, type QueueGroup } from '../../import/queue';
   import { text } from '../../strings/loc';
   import { menuOn, openMenu, type MenuEntry } from '../menu/menu.svelte';
   import DesktopGet from '../shell/DesktopGet.svelte';
+  import FilingProgress from './FilingProgress.svelte';
   import RecogniseWindow from './RecogniseWindow.svelte';
   import ReleaseLookup from './ReleaseLookup.svelte';
   import TagPanel from './TagPanel.svelte';
   import TagsFromTags from './TagsFromTags.svelte';
+  import Window from './Window.svelte';
   import { addToQueue, importing, runImport } from './importing.svelte';
 
   const folderPicker = 'webkitdirectory' in HTMLInputElement.prototype && !/iPhone|iPad/.test(navigator.userAgent);
@@ -23,9 +25,24 @@
   type AskedHandle = FileSystemHandle & { requestPermission?: (options: { mode: 'read' }) => Promise<PermissionState> };
   const chooseFolder = (window as FolderChooser).showDirectoryPicker;
 
+  // onClose closes the pane, in the way the layout around it does that.
+  let { onClose }: { onClose: () => void } = $props();
+
   // A plain counter, raised on every queue change, because the rows are not reactive objects.
   let version = $state(0);
   importQueue.onChange(() => version++);
+
+  // The last run put every track in the cloud, and the list still says so. A list that changed since then is not
+  // asked about.
+  const askClose = $derived.by(() => {
+    void version;
+    return importing.allImported && !importing.running && allImported(importQueue.rows);
+  });
+
+  function answerClose(close: boolean) {
+    importing.allImported = false;
+    if (close) onClose();
+  }
 
   let recognising = $state(false);
   let chip = $state<ChipFilter | null>(null);
@@ -406,6 +423,12 @@
       <div class="get"><DesktopGet /></div>
     </div>
   {:else}
+    <!-- While an import runs, the work is hidden but stays in place, so the scroll and the tag panel's edits are
+         kept, and the filing art stands over it. -->
+    <div class="work" class:away={importing.running}>
+    {#if importing.running}
+      <div class="filing"><FilingProgress caption={text('Web_ImportingUpload')} through={importing.through} total={importing.total} note={text('Web_ImportKeepOpen')} /></div>
+    {/if}
     <div class="toolbar">
       <div class="keys">
         <button class="tool-key" disabled={importing.running || !recognisable.length} title={text('Queue_ToolRecognize')} aria-label={text('Queue_ToolRecognize')} onclick={() => (recognising = true)}><i class="icon">{icons.magic}</i></button>
@@ -520,7 +543,7 @@
         <button title={text('Queue_DeselectAll')} onclick={() => importQueue.setAllTicks(false)}>{text('Queue_SelectNoneWord')}</button>
       </div>
       <p class="status" role="status">
-        {#if importing.message}<span class="error">{importing.message}</span>{:else if toast}{toast}{:else if importing.running}{text('Web_ImportKeepOpen')}{:else}{facts}{/if}
+        {#if importing.message}<span class="error">{importing.message}</span>{:else if toast}{toast}{:else}{facts}{/if}
       </p>
       {#if counts.done > 0 && !importing.running}<button class="glass-button slim" onclick={clearDone}>{text('Web_ImportClearDone')}</button>{/if}
       <label class="glass-button slim add"><i class="icon">{icons.plus}</i>{text('AddMusic_Title')}<input type="file" multiple hidden onchange={picked} /></label>
@@ -528,8 +551,19 @@
     </footer>
       </div>
     </div>
+    </div>
   {/if}
 </div>
+
+{#if askClose}
+  <Window title={text('Web_ImportAllDoneTitle')} glyph={icons.import} minWidth={420} maxWidth={520} minHeight={260} openHeight={280} onClose={() => answerClose(false)}>
+    <p class="ask">{text('Web_ImportAllDoneBody')}</p>
+    {#snippet footer()}
+      <button class="glass-button" onclick={() => answerClose(false)}>{text('Web_ImportAllDoneStay')}</button>
+      <button class="glass-button primary" onclick={() => answerClose(true)}><i class="icon">{icons.close}</i>{text('Web_ImportAllDoneClose')}</button>
+    {/snippet}
+  </Window>
+{/if}
 
 {#if lookingUp}
   <ReleaseLookup rows={ticked} onClose={() => (lookingUp = false)} onDone={(note) => (toast = note)} />
@@ -631,6 +665,31 @@
 
   .get {
     margin-top: 6px;
+  }
+
+  .work {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .work.away > :not(.filing) {
+    visibility: hidden;
+  }
+
+  .filing {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    overflow: auto;
+  }
+
+  .ask {
+    margin: 0;
   }
 
   .toolbar {

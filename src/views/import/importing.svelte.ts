@@ -3,7 +3,7 @@
 // cannot be started a second time from there.
 
 import { catalogue, importer, importMedia, importQueue } from '../../app';
-import type { ImportRow, PickedFile } from '../../import/queue';
+import { allImported, type ImportRow, type PickedFile } from '../../import/queue';
 import { text } from '../../strings/loc';
 
 const SMALL = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
@@ -12,6 +12,12 @@ class Importing {
   running = $state(false);
   // Why the last import stopped, or empty.
   message = $state('');
+  // The count of the run: how many of its tracks are through, out of how many it was given.
+  through = $state(0);
+  total = $state(0);
+  // The last run ended with every track in the list in the cloud. The Import pane asks whether to close, and
+  // clears this when it has an answer.
+  allImported = $state(false);
 }
 
 export const importing = new Importing();
@@ -40,8 +46,12 @@ const leaving = (event: BeforeUnloadEvent) => event.preventDefault();
 // Imports every row that is ticked and ready. Asking while an import runs does nothing.
 export async function runImport() {
   if (importing.running) return;
+  const rows = importQueue.importableRows();
   importing.running = true;
   importing.message = '';
+  importing.through = 0;
+  importing.total = rows.length;
+  importing.allImported = false;
   addEventListener('beforeunload', leaving);
 
   // A phone that sleeps stops the page, and an upload with it.
@@ -53,8 +63,9 @@ export async function runImport() {
   }
 
   try {
-    const outcome = await importer.run(importQueue.importableRows(), SMALL ? 1 : 3);
+    const outcome = await importer.run(rows, SMALL ? 1 : 3, (count) => (importing.through = count));
     if (outcome === 'full') importing.message = text('Rpm_Error_StorageFull');
+    importing.allImported = allImported(importQueue.rows);
   } finally {
     void lock?.release();
     removeEventListener('beforeunload', leaving);

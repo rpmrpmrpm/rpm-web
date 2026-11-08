@@ -103,9 +103,12 @@
 
   const pickLeft = (view: Left) => moveLeft(left === view ? null : view);
 
-  // Whether the library is hidden by the left pane: Import lies over the whole row in a wide window, and in a
-  // medium one any open left view takes the room.
-  const covered = $derived(layout === 'wide' ? left === 'import' : layout === 'medium' && left !== null);
+  // Back to what stood in the left pane before Import was opened over the row.
+  const closeImport = () => moveLeft(beneath);
+
+  // Whether the library is hidden by the left pane. Import lies over the whole row, because a grid of tags needs
+  // every column. Track info and the radio stand beside the library at every width that has two panes.
+  const covered = $derived(left === 'import');
 
   function pickMode(next: LibraryMode) {
     if (next === mode) return;
@@ -122,7 +125,7 @@
   // library steps aside, and a page open in the view closes. Without this a press can change a view that is
   // hidden, and seem to do nothing.
   function press(next: LibraryMode) {
-    if (covered) moveLeft(layout === 'wide' ? beneath : null);
+    if (covered) closeImport();
     toWall(next);
     pickMode(next);
   }
@@ -183,7 +186,12 @@
       {:else if tab === 'radio'}
         <RadioPane />
       {:else if tab === 'import'}
-        <ImportPane />
+        <ImportPane
+          onClose={() => {
+            tab = 'library';
+            toWall(mode === 'home' ? 'albums' : mode);
+          }}
+        />
       {:else}
         <div class="account">
           <Settings />
@@ -257,7 +265,7 @@
         {:else if drawer === 'radio'}
           <div class="view" class:clear={drawerClear}><RadioPane /></div>
         {:else if drawer === 'import'}
-          <div class="view" class:clear={drawerClear}><ImportPane /></div>
+          <div class="view" class:clear={drawerClear}><ImportPane onClose={closeImport} /></div>
         {/if}
       </section>
 

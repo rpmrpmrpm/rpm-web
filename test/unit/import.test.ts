@@ -7,7 +7,7 @@ import { bestPreset, parseFilename } from '../../src/import/filename-tags';
 import { answerChallenge, buildSidecar, catalogueTags, classify, Importer, normalizeMime, type Transfers } from '../../src/import/importer';
 import type { ImportMedia } from '../../src/import/media';
 import { relativePath, sanitizeSegment } from '../../src/import/naming';
-import { ImportQueue } from '../../src/import/queue';
+import { allImported, ImportQueue } from '../../src/import/queue';
 
 const file = (name: string, size = 10) => new File([new Uint8Array(size)], name);
 
@@ -224,11 +224,38 @@ describe('the upload sequence', () => {
 
   it('runs in the desktop order and marks the row done at complete', async () => {
     const { queue, rows } = queueOf('A/1.flac');
-    await importer(queue).run(rows, 1);
+    await importer(queue).run(rows, 1, () => {});
     expect(rows[0]!.state).toBe('done');
     const order = ['POST cloud/upload/init', 'PUT sidecar', 'PUT blob', 'POST cloud/upload/complete'];
     expect(calls.filter((call) => order.includes(call))).toEqual(order);
     expect(calls.filter((call) => call === 'PUT rendition')).toHaveLength(2);
+  });
+
+  it('counts each row that is through, in every lane', async () => {
+    const { queue, rows } = queueOf('A/1.flac', 'A/2.flac', 'A/3.flac');
+    const finished = vi.fn();
+    await importer(queue).run(rows, 2, finished);
+    expect(finished.mock.calls.map(([count]) => count)).toEqual([1, 2, 3]);
+  });
+
+  it('counts a row that met a full store as through', async () => {
+    answers['cloud/upload/init'] = () => new Response('{}', { status: 507 });
+    const { queue, rows } = queueOf('A/1.flac', 'A/2.flac');
+    const finished = vi.fn();
+    expect(await importer(queue).run(rows, 1, finished)).toBe('full');
+    expect(finished.mock.calls.map(([count]) => count)).toEqual([1]);
+    expect(rows[1]!.state).toBe('ready');
+  });
+
+  it('knows when every row in the list has reached the cloud', () => {
+    const { rows } = queueOf('A/1.flac', 'A/2.flac');
+    expect(allImported([])).toBe(false);
+    rows[0]!.state = 'done';
+    expect(allImported(rows)).toBe(false);
+    rows[1]!.state = 'known';
+    expect(allImported(rows)).toBe(true);
+    rows[1]!.state = 'failed';
+    expect(allImported(rows)).toBe(false);
   });
 
   it('sends a disc label under its own key, once per album', async () => {
@@ -237,7 +264,7 @@ describe('the upload sequence', () => {
     queue.applyTags(rows, { Artist: 'ABBA', Album: 'Arrival' });
     const label = { bytes: new Uint8Array([1]), mime: 'image/png' };
     queue.setDisc(rows, label);
-    await importer(queue).run(rows, 1);
+    await importer(queue).run(rows, 1, () => {});
     expect(calls).toContain('POST cloud/art/f245c4a44d16d5ca62f1abdf5da5458d');
     expect(calls.filter((call) => call === 'POST cloud/art/f245c4a44d16d5ca62f1abdf5da5458d')).toHaveLength(1);
   });
@@ -245,7 +272,7 @@ describe('the upload sequence', () => {
   it('sends nothing for a disc when none was picked', async () => {
     const { queue, rows } = queueOf('A/1.flac');
     queue.applyTags(rows, { Artist: 'ABBA', Album: 'Arrival' });
-    await importer(queue).run(rows, 1);
+    await importer(queue).run(rows, 1, () => {});
     expect(calls).not.toContain('POST cloud/art/f245c4a44d16d5ca62f1abdf5da5458d');
   });
 
@@ -256,7 +283,7 @@ describe('the upload sequence', () => {
     const { queue, rows } = queueOf('A/1.flac');
     queue.applyTags(rows, { Artist: 'ABBA', Album: 'Arrival' });
     queue.setDisc(rows, { bytes: new Uint8Array([1]), mime: 'image/png' });
-    await importer(queue).run(rows, 1);
+    await importer(queue).run(rows, 1, () => {});
     expect(rows[0]!.state).toBe('known');
     expect(calls).toContain('POST cloud/art/f245c4a44d16d5ca62f1abdf5da5458d');
   });
@@ -265,7 +292,7 @@ describe('the upload sequence', () => {
     answers['cloud/art/'] = () => json({}, 500);
     const { queue, rows } = queueOf('A/1.flac');
     queue.setDisc(rows, { bytes: new Uint8Array([1]), mime: 'image/png' });
-    await importer(queue).run(rows, 1);
+    await importer(queue).run(rows, 1, () => {});
     expect(rows[0]!.state).toBe('done');
   });
 
@@ -273,7 +300,7 @@ describe('the upload sequence', () => {
     answers['cloud/upload/init'] = () =>
       json({ status: 'challenge', sidecarUrl: 'sidecar', challengeId: 'c', nonce: 'AQ==', ranges: [{ offset: 0, length: 2 }] });
     const { queue, rows } = queueOf('A/1.flac');
-    await importer(queue).run(rows, 1);
+    await importer(queue).run(rows, 1, () => {});
     expect(calls).toContain('POST cloud/upload/prove');
     expect(calls).not.toContain('PUT blob');
     expect(rows[0]!.state).toBe('done');
@@ -283,7 +310,7 @@ describe('the upload sequence', () => {
     held.set('a'.repeat(64), 'old-id');
     answers['cloud/verify'] = () => json({ files: [{ rpmId: 'old-id', ok: true }] });
     const { queue, rows } = queueOf('A/1.flac');
-    await importer(queue).run(rows, 1);
+    await importer(queue).run(rows, 1, () => {});
     expect(rows[0]).toMatchObject({ state: 'known', note: 'Web_ImportAlreadyThere' });
     expect(calls).not.toContain('POST cloud/upload/init');
   });
@@ -292,20 +319,20 @@ describe('the upload sequence', () => {
     held.set('a'.repeat(64), 'old-id');
     answers['cloud/verify'] = () => json({ files: [{ rpmId: 'old-id', ok: false }] });
     const { queue, rows } = queueOf('A/1.flac');
-    await importer(queue).run(rows, 1);
+    await importer(queue).run(rows, 1, () => {});
     expect(rows[0]!.state).toBe('done');
   });
 
   it('counts a track as imported even if its renditions fail', async () => {
     const { queue, rows } = queueOf('A/1.flac');
-    await importer(queue, { renditions: async () => { throw new Error('encoder'); } }).run(rows, 1);
+    await importer(queue, { renditions: async () => { throw new Error('encoder'); } }).run(rows, 1, () => {});
     expect(rows[0]!.state).toBe('done');
   });
 
   it('marks an unreadable file failed at once, without retrying', async () => {
     const canonical = vi.fn(async () => { throw new Error('Invalid data found when processing input'); });
     const { queue, rows } = queueOf('A/1.flac');
-    await importer(queue, { canonical }).run(rows, 1);
+    await importer(queue, { canonical }).run(rows, 1, () => {});
     expect(rows[0]).toMatchObject({ state: 'failed', note: 'Cloud_FailUnreadable' });
     expect(canonical).toHaveBeenCalledTimes(1);
   });
@@ -320,14 +347,14 @@ describe('the upload sequence', () => {
       return json({ status: 'upload', sidecarUrl: 'sidecar', blobUrl: 'blob' });
     };
     const { queue, rows } = queueOf('A/1.flac');
-    await importer(queue).run(rows, 1);
+    await importer(queue).run(rows, 1, () => {});
     expect(rows[0]!.state).toBe('done');
   });
 
   it('stops the run when the quota is full, and leaves the rest ready', async () => {
     answers['cloud/quota'] = () => json({ usedBytes: 999, quotaBytes: 1000, fileCount: 0 });
     const { queue, rows } = queueOf('A/1.flac', 'A/2.flac');
-    expect(await importer(queue).run(rows, 1)).toBe('full');
+    expect(await importer(queue).run(rows, 1, () => {})).toBe('full');
     expect(rows[0]).toMatchObject({ state: 'failed', note: 'Rpm_Error_StorageFull' });
     expect(rows[1]!.state).toBe('ready');
   });
@@ -335,14 +362,14 @@ describe('the upload sequence', () => {
   it('treats an unlimited account as having room', async () => {
     answers['cloud/quota'] = () => json({ usedBytes: 999, quotaBytes: 1000, fileCount: 0, unlimited: true });
     const { queue, rows } = queueOf('A/1.flac');
-    expect(await importer(queue).run(rows, 1)).toBe('done');
+    expect(await importer(queue).run(rows, 1, () => {})).toBe('done');
   });
 
   it('keeps an id already in the file', async () => {
     const { queue, rows } = queueOf('A/1.flac');
     rows[0]!.tags.RpmId = '072008A6-107F-4773-9DE7-EEC47E22C83F';
     const importing = importer(queue);
-    await importing.run(rows, 1);
+    await importing.run(rows, 1, () => {});
     expect(calls.join()).not.toContain('new-id/upload');
   });
 

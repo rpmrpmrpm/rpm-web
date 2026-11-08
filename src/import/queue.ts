@@ -155,6 +155,9 @@ export interface QueueGroup {
 
 const importable = (row: ImportRow) => row.state === 'ready' || row.state === 'failed';
 
+// Every row in the list has reached the cloud, in this run or before it. False for an empty list.
+export const allImported = (rows: readonly ImportRow[]): boolean => rows.length > 0 && rows.every((row) => row.state === 'done' || row.state === 'known');
+
 export const tagsMissing = (row: ImportRow): boolean => !row.tags.Title || !row.tags.Artist || !row.tags.Album;
 
 // Whether a row is the reason for a recognition run. It does not hold the row out of an import.

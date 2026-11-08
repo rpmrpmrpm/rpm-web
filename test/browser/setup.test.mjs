@@ -126,6 +126,64 @@ test('the library keys always show their view: over Import, and over a page open
   await close();
 });
 
+test('a medium window keeps the library beside Track info and the radio, and Import takes the row', async () => {
+  const { page, close } = await open({ viewport: { width: 900, height: 860 } });
+  await page.waitForSelector('.rail');
+  await page.click('.rail button:has-text("Track info")');
+  await page.waitForSelector('.panes.leftOpen .pane.right');
+  await page.click('.rail button:has-text("Internet Radio")');
+  await page.waitForTimeout(500);
+  assert.ok(await page.$('.pane.right'));
+
+  await page.click('.rail button:has-text("Import")');
+  await page.waitForSelector('.pane.right', { state: 'detached' });
+  await close();
+});
+
+test('an import shows its progress where the list was, and asks once whether to close the pane', async () => {
+  const { page, problems, close } = await open();
+  // The upload calls, answered on the page's own address. complete waits until the test lets it go, so the
+  // progress can be read while the run is on.
+  let letGo = () => {};
+  const held = new Promise((done) => (letGo = done));
+  const json = (route, body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route(`${site}/store/**`, (route) => route.fulfill({ status: 200, body: '' }));
+  await page.route(`${site}/api/cloud/quota`, (route) => json(route, { usedBytes: 0, quotaBytes: 1e12, fileCount: 0 }));
+  await page.route(`${site}/api/cloud/upload/init`, (route) => json(route, { status: 'upload', sidecarUrl: `${site}/store/sidecar`, blobUrl: `${site}/store/blob` }));
+  await page.route(`${site}/api/cloud/upload/complete`, async (route) => {
+    await held;
+    await json(route, { usedBytes: 1, quotaBytes: 1e12, fileCount: 1 });
+  });
+  await page.route(`${site}/api/cloud/rendition/*/upload*`, (route) => json(route, { url: `${site}/store/rendition` }));
+
+  await page.waitForSelector('.rail');
+  await page.click('.rail button:has-text("Import")');
+  await page.click('.bench button:has-text("Try our tracks")');
+  await page.waitForSelector('.bench .pane-head:has-text("3 tracks ticked for import")', { timeout: 20000 });
+  // The length is known when the last file has been read, and only a read file is ready to import.
+  await page.waitForSelector('.bench :text("12:46")', { timeout: 20000 });
+  await page.click('.bench footer button:has-text("Import")');
+
+  await page.waitForSelector('.bench .filing :text("Uploading selected files to your collection")');
+  assert.equal(await page.textContent('.bench .filing .count'), '0 / 3 files');
+  assert.equal(await page.$eval('.bench .work .toolbar', (bar) => getComputedStyle(bar).visibility), 'hidden');
+
+  letGo();
+  await page.waitForSelector('[role=dialog]:has-text("All tracks are imported. Do you want to close the import pane?")', { timeout: 90000 });
+  assert.equal(await page.$('.bench .filing'), null);
+  await page.click('[role=dialog] button:has-text("Close")');
+  await page.waitForSelector('.pane.right');
+  assert.equal(await page.$('[role=dialog]'), null);
+
+  // Asked once: the list still says every track is in, but the answer was given.
+  await page.click('.rail button:has-text("Import")');
+  await page.waitForSelector('.bench .pane-head');
+  await page.waitForTimeout(500);
+  assert.equal(await page.$('[role=dialog]'), null);
+  assert.deepEqual(problems, []);
+  await close();
+});
+
 test('the speaker mark mutes and puts the level back, and the radio plays at the same level', async () => {
   const { page, close } = await open();
   await page.waitForSelector('.deck .volume');
