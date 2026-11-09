@@ -2,11 +2,12 @@
   // Recognise: one window for the whole run, as the desktop's. Which files will be looked up, what each one
   // came back as, and the way to correct an answer. The account decides how far a run reaches, and the
   // server has the last word, so there is no control for it here.
-  import { BECOME_SUPPORTER, recogniser as importRecogniser, session } from '../../app';
+  import { recogniser as importRecogniser, session } from '../../app';
   import { icons } from '../../design/icons';
   import { needsName, type ImportRow } from '../../import/queue';
   import { nameOf, type Outcome, type Recogniser, type Report } from '../../import/recognise';
   import { currentLanguage, text } from '../../strings/loc';
+  import BecomeSupporter from '../profile/BecomeSupporter.svelte';
   import Window from './Window.svelte';
 
   // The recogniser writes what it finds to the rows of its queue. The library gives one of its own, over rows
@@ -132,7 +133,7 @@
       <div class="pitch">
         <i class="icon">{icons.heart}</i>
         <span>{text('Recognize_SupportPitch')}</span>
-        <a class="tool" href={BECOME_SUPPORTER} target="_blank" rel="noopener">{text('Cloud_BecomeSupporter')}</a>
+        <BecomeSupporter kind="tool" />
       </div>
     {/if}
   {/snippet}

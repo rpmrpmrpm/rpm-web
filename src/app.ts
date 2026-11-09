@@ -149,7 +149,6 @@ export const BETA_FORM = 'https://rpmrpmrpm.com/beta';
 export const WEBSITE = 'https://rpmrpmrpm.com';
 export const HELP = 'https://rpmrpmrpm.com/support';
 export const CREDITS = 'https://rpmrpmrpm.com/credits';
-export const BECOME_SUPPORTER = 'https://rpmrpmrpm.com/become-supporter';
 export const FORGOT_PASSWORD = 'https://rpmrpmrpm.com/forgot-password';
 export const TERMS = 'https://rpmrpmrpm.com/terms';
 export const PRIVACY = 'https://rpmrpmrpm.com/privacy';

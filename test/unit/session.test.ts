@@ -322,3 +322,49 @@ describe('Discogs', () => {
     expect(await session.discogsStatus()).toBeNull();
   });
 });
+
+describe('paying for supporting rpm', () => {
+  const paying = (checkout: Response, manage: Response = json(404)) => (path: string) => {
+    if (path === 'supporter/checkout') return checkout;
+    if (path === 'supporter/manage') return manage;
+    return signedIn(path);
+  };
+
+  it('asks for a checkout with the account\'s token and goes there', async () => {
+    const { session, fetcher, go } = make(paying(json(200, { url: 'https://checkout.stripe.com/c/pay/cs_1', alreadyPaying: false })));
+    await session.restore();
+    expect(await session.becomeSupporter()).toBe(true);
+    const call = fetcher.mock.calls.find(([url]) => String(url).endsWith('supporter/checkout'));
+    expect(call?.[1]?.method).toBe('POST');
+    expect((call?.[1]?.headers as Record<string, string>).Authorization).toBe('Bearer token');
+    expect(go).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_1');
+  });
+
+  it('stays on the page when no checkout could be had', async () => {
+    const { session, go } = make(paying(json(503)));
+    await session.restore();
+    expect(await session.becomeSupporter()).toBe(false);
+    expect(go).not.toHaveBeenCalled();
+  });
+
+  it('opens the portal for an account that pays', async () => {
+    const { session, go } = make(paying(json(503), json(200, { url: 'https://billing.stripe.com/p/session/1' })));
+    await session.restore();
+    expect(await session.manageSubscription()).toBe('opened');
+    expect(go).toHaveBeenCalledWith('https://billing.stripe.com/p/session/1');
+  });
+
+  it('says so when the account has never paid, and that is not a failure', async () => {
+    const { session, go } = make(paying(json(503), json(404)));
+    await session.restore();
+    expect(await session.manageSubscription()).toBe('none');
+    expect(go).not.toHaveBeenCalled();
+  });
+
+  it('says the portal failed when the service fails', async () => {
+    const { session, go } = make(paying(json(503), json(503)));
+    await session.restore();
+    expect(await session.manageSubscription()).toBe('failed');
+    expect(go).not.toHaveBeenCalled();
+  });
+});

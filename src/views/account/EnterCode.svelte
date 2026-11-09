@@ -2,6 +2,7 @@
   import { forgetCode, keptCode } from '../../api/beta-code';
   import { BETA_FORM, session } from '../../app';
   import { text } from '../../strings/loc';
+  import BecomeSupporter from '../profile/BecomeSupporter.svelte';
   import Card from './Card.svelte';
 
   let code = $state(keptCode());
@@ -37,6 +38,10 @@
     {#if error}<p class="error" role="alert">{error}</p>{/if}
     <button class="glass-button primary" type="submit" disabled={busy}>{text('SignUp_Confirm')}</button>
   </form>
+  <div class="support">
+    <p class="subtitle">{text('Web_BetaSupporter')}</p>
+    <BecomeSupporter kind="glass-button" />
+  </div>
   <div class="foot">
     <a class="link" href={BETA_FORM}>{text('Web_BetaApply')}</a>
     <button class="link" onclick={() => session.signOut()}>{text('Login_SignOut')}</button>
@@ -64,6 +69,12 @@
   .error {
     color: var(--error);
     font-size: 13px;
+  }
+
+  .support {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .foot {

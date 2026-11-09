@@ -247,6 +247,38 @@ export class Session implements TokenSource {
     }
   }
 
+  // Sends the browser to pay for supporting rpm: a Stripe checkout, or the Stripe portal for an account
+  // that already pays. False when no address could be had; the page then stays where it is.
+  async becomeSupporter(): Promise<boolean> {
+    const url = await this.paymentPage('supporter/checkout');
+    if (url === 'none' || url === 'failed') return false;
+    this.environment.go(url);
+    return true;
+  }
+
+  // Sends the browser to the Stripe portal, where a supporter cancels or changes the card. 'none' is an
+  // account that has never paid through Stripe, which is an answer and not a failure.
+  async manageSubscription(): Promise<'opened' | 'none' | 'failed'> {
+    const url = await this.paymentPage('supporter/manage');
+    if (url === 'none' || url === 'failed') return url;
+    this.environment.go(url);
+    return 'opened';
+  }
+
+  private async paymentPage(path: string): Promise<string | 'none' | 'failed'> {
+    try {
+      const token = await this.accessToken();
+      if (!token) return 'failed';
+      const response = await this.post(path, {}, { Authorization: `Bearer ${token}` });
+      if (response.status === 404) return 'none';
+      if (!response.ok) return 'failed';
+      const url = (await response.json()).url;
+      return typeof url === 'string' && url.startsWith('https://') ? url : 'failed';
+    } catch {
+      return 'failed';
+    }
+  }
+
   // A short-lived address for a desktop installer, or null when there is none to give.
   async desktopDownload(platform: string): Promise<string | null> {
     try {

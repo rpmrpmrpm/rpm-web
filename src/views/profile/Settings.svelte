@@ -6,13 +6,14 @@
   import { avatarBytes, type Profile } from '../../api/profile';
   import type { DiscogsStatus } from '../../api/session';
   import type { CloudQuota } from '../../api/wire';
-  import { BECOME_SUPPORTER, cloud, profiles, session, streamQuality } from '../../app';
+  import { cloud, profiles, session, streamQuality } from '../../app';
   import { offerFor, ORIGINAL, settles } from '../../audio/ladder';
   import { BACKDROPS, backdrop, effectiveId } from '../../design/backdrop.svelte';
   import { icons } from '../../design/icons';
   import { crashConsent, setCrashConsent } from '../../report/report';
   import { currentLanguage, LANGUAGES, setLanguage, text } from '../../strings/loc';
   import Equalizer from '../deck/Equalizer.svelte';
+  import BecomeSupporter from './BecomeSupporter.svelte';
   import SupporterBadge from './SupporterBadge.svelte';
 
   type Page = 'profile' | 'display' | 'sound' | 'cloud' | 'catalog';
@@ -127,6 +128,19 @@
   onDestroy(() => channel.close());
 
   const sendCrashes = crashConsent();
+
+  // The Stripe portal opens in this tab. Only a failure, or an account with no subscription, is said here.
+  let managing = $state(false);
+  let manageNote = $state<'' | 'Supporter_NoSubscription' | 'Supporter_CheckoutFailed'>('');
+
+  async function manage() {
+    managing = true;
+    manageNote = '';
+    const outcome = await session.manageSubscription();
+    if (outcome === 'none') manageNote = 'Supporter_NoSubscription';
+    else if (outcome === 'failed') manageNote = 'Supporter_CheckoutFailed';
+    managing = false;
+  }
 
   let deleting = $state(false);
   let typed = $state('');
@@ -244,15 +258,18 @@
           <p class="plan">{text('Rpm_Profile_PlanTester')}</p>
           <p class="dim">{text('Rpm_Profile_PlanTesterDetail')}</p>
           <p class="dim thanks">{text('Rpm_Profile_PlanTesterThanks')}</p>
+          <div class="row"><BecomeSupporter kind="glass-button" /></div>
         {:else if supporter}
           <SupporterBadge />
           <p class="dim">{text('Rpm_Profile_PlanSupporterDetail')}</p>
           <p class="dim thanks">{text('Rpm_Profile_PlanSupporterThanks')}</p>
+          <div class="row"><button class="glass-button" type="button" disabled={managing} onclick={manage}>{text('Supporter_Manage')}</button></div>
+          {#if manageNote}<p class="dim" role="status">{text(manageNote)}</p>{/if}
         {:else}
           <p class="plan">{text('Rpm_Profile_PlanFree')}</p>
           <p class="dim">{text('Rpm_Profile_PlanFreeDetail')}</p>
           <p class="dim thanks">{text('Rpm_Profile_PlanFreeAppeal')}</p>
-          <div class="row"><a class="glass-button" href={BECOME_SUPPORTER} target="_blank" rel="noopener"><i class="icon">{icons.heart}</i>{text('Cloud_BecomeSupporter')}</a></div>
+          <div class="row"><BecomeSupporter kind="glass-button" /></div>
         {/if}
       </section>
 
@@ -306,7 +323,7 @@
         </label>
         {#if offer.capped}
           <p class="dim">{text('Rpm_Profile_QualityCapped')}</p>
-          <div class="row"><a class="glass-button" href={BECOME_SUPPORTER} target="_blank" rel="noopener"><i class="icon">{icons.heart}</i>{text('Cloud_BecomeSupporter')}</a></div>
+          <div class="row"><BecomeSupporter kind="glass-button" /></div>
         {/if}
         <p class="dim">{text('Web_QualityDetail')}</p>
       </section>
@@ -329,7 +346,7 @@
           <p class="dim">{text(standing)}</p>
         </div>
         {#if !supporter}
-          <div class="row"><a class="glass-button" href={BECOME_SUPPORTER} target="_blank" rel="noopener"><i class="icon">{icons.heart}</i>{text('Cloud_BecomeSupporter')}</a></div>
+          <div class="row"><BecomeSupporter kind="glass-button" /></div>
         {/if}
       </section>
     {:else}

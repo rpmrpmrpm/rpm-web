@@ -5,7 +5,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { fade } from 'svelte/transition';
 
-  import { BECOME_SUPPORTER, importQueue, radioDirectory, session } from '../../app';
+  import { importQueue, radioDirectory, session } from '../../app';
   import { backdrop, BACKDROPS, effectiveId } from '../../design/backdrop.svelte';
   import { icons } from '../../design/icons';
   import wallPicture from '../../design/images/setup/layout-wall.jpg';
@@ -19,6 +19,7 @@
   import { currentLanguage, inEveryLanguage, LANGUAGES, setLanguage, text } from '../../strings/loc';
   import { addToQueue, importing, runImport } from '../import/importing.svelte';
   import { collection, pickView, type CollectionView } from '../library/view.svelte';
+  import BecomeSupporter from '../profile/BecomeSupporter.svelte';
   import Mark from '../shell/Mark.svelte';
   import { taglineParts } from '../shell/tagline';
   import { browserStores, keepStep, SETUP_STEPS, stepNumber, type SetupStep } from './setup';
@@ -295,7 +296,7 @@
               <div class="card pitch">
                 <h2>{text('Wizard_SupportTitle')}</h2>
                 <p>{text('Wizard_SupportPitch')}</p>
-                <a class="glass-button" href={BECOME_SUPPORTER} target="_blank" rel="noopener"><i class="icon">{icons.heart}</i>{text('Cloud_BecomeSupporter')}</a>
+                <BecomeSupporter kind="glass-button" />
               </div>
             {/if}
           {/if}
