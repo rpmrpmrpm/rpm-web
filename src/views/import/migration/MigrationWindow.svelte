@@ -250,7 +250,10 @@
     return minutes < 60 ? text('Stats_Minutes', minutes) : text('Stats_HoursMinutes', Math.floor(minutes / 60), minutes % 60);
   };
   const stopped = $derived(
-    migrating.end === 'signin' ? text('Migration_StoppedSignIn') : migrating.end === 'cloudfull' ? text('Migration_StoppedCloudFull') : text('Migration_Paused'),
+    migrating.end === 'signin' ? text('Migration_StoppedSignIn')
+      : migrating.end === 'cloudfull' ? text('Migration_StoppedCloudFull')
+      : migrating.end === 'failed' ? text('Migration_StoppedError')
+      : text('Migration_Paused'),
   );
 </script>
 

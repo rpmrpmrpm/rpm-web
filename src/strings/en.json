@@ -433,6 +433,7 @@
 "Migration_Start": "Start import",
 "Migration_Status": "Importing from {0}: {1} of {2}",
 "Migration_StoppedCloudFull": "Stopped: your cloud storage is full.",
+"Migration_StoppedError": "Stopped because of an error. Continue to try again.",
 "Migration_StoppedSignIn": "Stopped: the server asks you to sign in again.",
 "Migration_SummaryAlready": "About {0} already in rpm",
 "Migration_SummaryKicker": "What was found",

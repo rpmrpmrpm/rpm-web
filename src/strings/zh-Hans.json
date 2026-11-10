@@ -433,6 +433,7 @@
 "Migration_Start": "开始导入",
 "Migration_Status": "正在从 {0} 导入：{2} 首中的第 {1} 首",
 "Migration_StoppedCloudFull": "已停止：你的云存储已满。",
+"Migration_StoppedError": "因出错而停止。继续即可重试。",
 "Migration_StoppedSignIn": "已停止：服务器要求重新登录。",
 "Migration_SummaryAlready": "约 {0} 首已在 rpm 中",
 "Migration_SummaryKicker": "找到的内容",

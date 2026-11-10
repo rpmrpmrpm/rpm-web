@@ -433,6 +433,7 @@
 "Migration_Start": "Import starten",
 "Migration_Status": "Import aus {0}: {1} von {2}",
 "Migration_StoppedCloudFull": "Angehalten: Ihr Cloud-Speicher ist voll.",
+"Migration_StoppedError": "Wegen eines Fehlers angehalten. Fortsetzen, um es erneut zu versuchen.",
 "Migration_StoppedSignIn": "Angehalten: Der Server verlangt eine erneute Anmeldung.",
 "Migration_SummaryAlready": "Etwa {0} bereits in rpm",
 "Migration_SummaryKicker": "Gefunden",

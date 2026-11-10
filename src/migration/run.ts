@@ -47,7 +47,8 @@ export interface TrackImporter {
   importOne(file: File, path: string, addedAt: number): Promise<ImportOutcome>;
 }
 
-export type RunEnd = 'finished' | 'paused' | 'signin' | 'cloudfull';
+// 'failed' is never returned by the run: the window sets it when the run throws an error nothing expected.
+export type RunEnd = 'finished' | 'paused' | 'signin' | 'cloudfull' | 'failed';
 // 'waiting': the media server or the cloud gives no answer, and the run tries again by itself.
 export type Stage = 'tracks' | 'playlists' | 'finishing' | 'waiting';
 

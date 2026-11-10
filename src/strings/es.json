@@ -433,6 +433,7 @@
 "Migration_Start": "Iniciar importación",
 "Migration_Status": "Importando desde {0}: {1} de {2}",
 "Migration_StoppedCloudFull": "Detenido: tu almacenamiento en la nube está lleno.",
+"Migration_StoppedError": "Detenido por un error. Continúa para volver a intentarlo.",
 "Migration_StoppedSignIn": "Detenido: el servidor pide que inicies sesión de nuevo.",
 "Migration_SummaryAlready": "Unas {0} ya están en rpm",
 "Migration_SummaryKicker": "Lo que se encontró",

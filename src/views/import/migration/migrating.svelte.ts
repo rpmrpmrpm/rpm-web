@@ -210,8 +210,10 @@ export async function startMigration(library: SourceLibrary, connection: Connect
       skipped: library.skipped,
     };
     migrating.end = end;
-  } catch {
-    migrating.end = 'paused';
+  } catch (error) {
+    // Not "paused": the person did not pause it, and must see that something went wrong.
+    console.warn('The import from another app failed', error);
+    migrating.end = 'failed';
   } finally {
     void lock?.release();
     removeEventListener('beforeunload', leaving);
