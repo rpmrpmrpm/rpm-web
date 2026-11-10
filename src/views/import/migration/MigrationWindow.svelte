@@ -321,15 +321,16 @@
         {#if musicFolder.length}<span class="quiet">{musicFolder.length}</span>{/if}
       </div>
     {:else if serverKind}
-      <label class="field">{text('Migration_ServerAddress')}<input bind:value={address} autocomplete="url" /></label>
-      <label class="field">{text('Migration_UserName')}<input bind:value={user} autocomplete="username" /></label>
-      <label class="field">{text('Migration_Password')}<input type="password" bind:value={password} autocomplete="current-password" /></label>
-      {#if kind === 'jellyfin'}<button class="glass-button" onclick={quickConnect}>{text('Migration_QuickConnect')}</button>{/if}
+      <!-- "field" is the app's style for an input box (base.css); the label around it is "labelled". -->
+      <label class="labelled">{text('Migration_ServerAddress')}<input class="field" type="url" bind:value={address} autocomplete="url" /></label>
+      <label class="labelled">{text('Migration_UserName')}<input class="field" type="text" bind:value={user} autocomplete="username" /></label>
+      <label class="labelled">{text('Migration_Password')}<input class="field" type="password" bind:value={password} autocomplete="current-password" /></label>
+      {#if kind === 'jellyfin'}<div><button class="glass-button" onclick={quickConnect}>{text('Migration_QuickConnect')}</button></div>{/if}
     {:else}
       <button class="glass-button" onclick={plexSignIn}>{text('Migration_PlexSignIn')}</button>
       {#if plexChoices.length > 1}
-        <label class="field">{text('Migration_PlexServer')}
-          <select bind:value={plexPick}>{#each plexChoices as server, index (server.machineId)}<option value={index}>{server.name}</option>{/each}</select>
+        <label class="labelled">{text('Migration_PlexServer')}
+          <select class="field" bind:value={plexPick}>{#each plexChoices as server, index (server.machineId)}<option value={index}>{server.name}</option>{/each}</select>
         </label>
       {/if}
     {/if}
@@ -440,10 +441,16 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
     padding-bottom: 6px;
   }
+  /* Six tiles: three by two, as on the desktop; two columns when the window is narrow. */
   .tiles {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 10px;
+  }
+  @media (max-width: 560px) {
+    .tiles {
+      grid-template-columns: repeat(2, 1fr);
+    }
   }
   .tile {
     display: flex;
@@ -477,23 +484,13 @@
     flex-wrap: wrap;
     margin: 8px 0;
   }
-  .field {
+  .labelled {
     display: flex;
     flex-direction: column;
     gap: 4px;
     margin-bottom: 10px;
     font-size: 12px;
     color: rgba(255, 255, 255, 0.7);
-  }
-  .field input,
-  .field select {
-    font: inherit;
-    font-size: 13px;
-    padding: 6px 8px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    background: rgba(0, 0, 0, 0.25);
-    color: white;
   }
   .line {
     font-size: 13px;

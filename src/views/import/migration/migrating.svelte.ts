@@ -151,7 +151,7 @@ const migrationCloud: MigrationCloud = {
   putPlays: (device, rows) => cloud.sendTrackPlays(device, rows),
   putAdded: (rows) => cloud.putTrackAdded(rows),
   async playlists() {
-    return (await playlists.list()).map((p) => ({ playlistId: p.playlistId, name: p.name, folder: p.folder ?? [] }));
+    return (await playlists.list()).map((p) => ({ playlistId: p.playlistId, name: p.name, folder: p.folder ?? [], trackIds: p.trackIds }));
   },
   async createPlaylist(name, trackIds, folder) {
     return (await playlists.create(name, trackIds, folder)).playlistId;
@@ -225,7 +225,9 @@ export async function startMigration(library: SourceLibrary, connection: Connect
       server: serverFor(connection),
       picked: connection.kind === 'musicbee' || connection.kind === 'itunes' || connection.kind === 'playlistfiles' ? connection.picked : new Map(),
       label,
-      progress: (progress) => (migrating.progress = progress),
+      progress: (progress) => {
+        migrating.progress = progress;
+      },
       signal: stop.signal,
     });
     const bySource = new Map(library.tracks.map((t) => [t.sourceId, t]));
@@ -258,5 +260,5 @@ export function pauseMigration() {
   migrating.stop?.abort();
 }
 
-// "12.4 GB", as the import pane writes sizes.
-export const size = (bytes: number) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`);
+// "12.4 GB", as the desktop and the web's Settings write sizes.
+export { byteSize as size } from '../../../library/bytes';

@@ -31,7 +31,7 @@ export interface MigrationCloud {
   putRatings(rows: { rpmId: string; rating: number }[]): Promise<void>;
   putPlays(device: string, rows: { rpmId: string; plays: number; lastPlayedAt: number }[]): Promise<void>;
   putAdded(rows: { rpmId: string; addedAt: number }[]): Promise<void>;
-  playlists(): Promise<{ playlistId: string; name: string; folder: string[] }[]>;
+  playlists(): Promise<{ playlistId: string; name: string; folder: string[]; trackIds: string[] }[]>;
   createPlaylist(name: string, trackIds: string[], folder: string[]): Promise<string>;
   // Adds to a playlist this import made. When the list is still exactly `made`, it becomes `whole`, in the other
   // app's order; when the person changed it, `fresh` goes on the end. Returns whether it became `whole`.
@@ -360,6 +360,19 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
         continue;
       }
       let name = playlist.name.trim() || options.label;
+      // Another device may have imported this playlist already (its record is its own): a playlist in the same
+      // folder, under this name or with the source's name in brackets, holding exactly these tracks in this
+      // order, is that one. It is linked instead of made a second time.
+      const ids = resolved.map((s) => trackIds.get(s)!);
+      const twin = ids.length === 0 ? undefined : existing.find((p) =>
+        p.folder.join('/') === playlist.folder.join('/')
+        && [name.toLowerCase(), `${name} (${options.label})`.toLowerCase()].includes(p.name.toLowerCase())
+        && p.trackIds.length === ids.length && p.trackIds.every((t, i) => t === ids[i]));
+      if (twin) {
+        record.notePlaylist(playlist.sourceId, twin.playlistId, resolved);
+        outcomes.push({ name: twin.name, entries: resolved.length, unmatched, wasSmart: playlist.smart, renamed: false });
+        continue;
+      }
       const taken = existing.some((p) => p.name.toLowerCase() === name.toLowerCase() && p.folder.join('/') === playlist.folder.join('/'));
       if (taken) name = `${name} (${options.label})`;
       const id = await cloud.createPlaylist(name, resolved.map((s) => trackIds.get(s)!), playlist.folder);

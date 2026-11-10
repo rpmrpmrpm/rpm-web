@@ -1,6 +1,7 @@
 <script lang="ts">
   // Settings, as the desktop's window has them: a rail beside a page. Only the pages the web app has are on
   // the rail. On a phone the same pages stand under the Account tab.
+  import { byteSize } from '../../library/bytes';
   import { onDestroy } from 'svelte';
 
   import { avatarBytes, type Profile } from '../../api/profile';
@@ -166,17 +167,7 @@
     if (await session.disconnectDiscogs()) await readDiscogs();
   }
 
-  // "12.4 GB", as the desktop's ByteSize: no decimals below a megabyte, one above.
-  function human(bytes: number): string {
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let value = bytes;
-    let unit = 0;
-    while (value >= 1024 && unit < units.length - 1) {
-      value /= 1024;
-      unit++;
-    }
-    return unit < 2 ? `${Math.round(value)} ${units[unit]}` : `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${units[unit]}`;
-  }
+  const human = byteSize;
 
   // Within this of the limit is almost full, as CloudSpace.AlmostFullBytes on the desktop.
   const ALMOST_FULL = 2 * 2 ** 30;

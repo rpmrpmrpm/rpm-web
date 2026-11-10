@@ -377,6 +377,22 @@ describe('the web import run', () => {
     expect(cloud.plays.flatMap((p) => p.rows.map((r) => r.lastPlayedAt))).toEqual([0]);
   });
 
+  it('links a playlist another device already imported instead of making a second one', async () => {
+    const cloud = new FakeCloud();
+    cloud.lists = [
+      { playlistId: 'mine', name: 'Mix', folder: [], trackIds: [] },
+      { playlistId: 'from-desktop', name: 'Mix (MusicBee)', folder: [], trackIds: ['id-B.flac', 'id-A.flac'] },
+    ];
+    const lib = library([local('a', 'Record', 'A'), local('b', 'Record', 'B')], {
+      playlists: [{ sourceId: 'p1', name: 'Mix', folder: [], smart: false, trackIds: ['b', 'a'], unresolved: [] }],
+    });
+
+    const { record } = await run(lib, { cloud });
+
+    expect(cloud.lists).toHaveLength(2);
+    expect(record.playlist('p1')).toEqual({ playlistId: 'from-desktop', entries: ['b', 'a'] });
+  });
+
   it('appends only new playlist entries on a second run', async () => {
     const store = new MemoryRecordStore();
     const cloud = new FakeCloud();
