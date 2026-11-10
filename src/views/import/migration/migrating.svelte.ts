@@ -173,6 +173,11 @@ export async function unfinishedImport(library: SourceLibrary): Promise<ReturnTy
   }
 }
 
+// Forgets an unfinished import: its record goes; what it brought in stays in the account.
+export async function forgetImport(state: RecordState): Promise<void> {
+  await browserRecords.remove(state.key);
+}
+
 // The other libraries imported into this account before, for the summary's note on plays counted twice.
 export async function otherImports(library: SourceLibrary): Promise<string[]> {
   const user = session.user?.userId;

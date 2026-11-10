@@ -373,6 +373,8 @@
 "Migration_ContinueImport": "Import aus {0} fortsetzen",
 "Migration_ContinueStopped": "Import fortsetzen",
 "Migration_FileUnreadable": "Diese Datei konnte nicht als Mediathekdatei gelesen werden.",
+"Migration_Forget": "Vergessen",
+"Migration_ForgetHint": "Vergisst diesen unvollständigen Import und seine gespeicherte Anmeldung. Was importiert wurde, bleibt in rpm.",
 "Migration_Hide": "Ausblenden",
 "Migration_HintFile": "Nutzt die gespeicherte Mediathekdatei",
 "Migration_HintPlaylistFiles": ".m3u, .m3u8 und .pls aus jedem Player",

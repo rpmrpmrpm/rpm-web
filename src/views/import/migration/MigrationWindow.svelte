@@ -9,6 +9,7 @@
   import { finishQuickConnect, jellyfinWithPassword, startQuickConnect } from '../../../migration/jellyfin';
   import { matchPicked, readITunesLibrary } from '../../../migration/itunes';
   import type { SourceKind, SourceLibrary } from '../../../migration/model';
+  import type { RecordState } from '../../../migration/record';
   import { readPlaylistFiles } from '../../../migration/playlist-files';
   import { plexFinish, plexPickConnection, plexServers, plexStart, type PlexServerChoice } from '../../../migration/plex';
   import { reachable, ServerBlocked, SignInExpired, SignInFailed } from '../../../migration/server';
@@ -16,7 +17,7 @@
   import { text } from '../../../strings/loc';
   import Window from '../Window.svelte';
   import {
-    cloudSpace, fetcher, jellyfinDevice, migrating, pauseMigration, plexClient, serverFor, size, startMigration, summaryOf, unfinished, unfinishedImport, otherImports,
+    cloudSpace, fetcher, jellyfinDevice, migrating, pauseMigration, plexClient, serverFor, size, startMigration, summaryOf, unfinished, unfinishedImport, otherImports, forgetImport,
     type Connection,
   } from './migrating.svelte';
 
@@ -45,10 +46,19 @@
   let pastRun = $state<{ found: number; imported: number; alreadyInRpm: number; notImported: number } | null>(null);
   // Other libraries imported before: plays they share with this one are counted twice.
   let others = $state<string[]>([]);
-  let open = $state<{ kind: SourceKind; name: string }[]>([]);
+  let open = $state<RecordState[]>([]);
   let work: AbortController | null = null;
 
-  unfinished().then((records) => (open = records.map((r) => ({ kind: r.kind, name: r.name }))));
+  unfinished().then((records) => (open = records));
+
+  async function forget(state: RecordState) {
+    try {
+      await forgetImport(state);
+      open = open.filter((r) => r.key !== state.key);
+    } catch (caught) {
+      fail(caught);
+    }
+  }
 
   const chooseFolder = (window as { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker;
   const fileKind = $derived(kind === 'musicbee' || kind === 'itunes');
@@ -273,8 +283,11 @@
 <Window title={text('Migration_Title')} glyph={icons.import} minWidth={460} maxWidth={720} openHeight={560} onClose={close}>
   {#if face === 'apps'}
     <h4 class="kicker">{text('Migration_ChooseKicker')}</h4>
-    {#each open as unfinishedImport (unfinishedImport.kind + unfinishedImport.name)}
-      <button class="glass-button continue" onclick={() => choose(unfinishedImport.kind)}>{text('Migration_ContinueImport', unfinishedImport.name || sourceName(unfinishedImport.kind))}</button>
+    {#each open as unfinishedImport (unfinishedImport.key)}
+      <div class="continue-row">
+        <button class="glass-button continue" onclick={() => choose(unfinishedImport.kind)}>{text('Migration_ContinueImport', unfinishedImport.name || sourceName(unfinishedImport.kind))}</button>
+        <button class="glass-button" title={text('Migration_ForgetHint')} onclick={() => forget(unfinishedImport)}>{text('Migration_Forget')}</button>
+      </div>
     {/each}
     <div class="tiles">
       {#each SOURCES as source (source.kind)}
@@ -452,7 +465,9 @@
     color: rgba(255, 255, 255, 0.55);
     text-align: center;
   }
-  .continue {
+  .continue-row {
+    display: flex;
+    gap: 8px;
     margin-bottom: 10px;
   }
   .row {

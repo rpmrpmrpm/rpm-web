@@ -427,6 +427,22 @@ describe('the record of an import', () => {
   });
 });
 
+describe('forgetting an import', () => {
+  it('removes its record, so it is no longer offered and a new import starts fresh', async () => {
+    const store = new MemoryRecordStore();
+    const lib = library([local('s1', 'Record', 'One')]);
+    const record = await MigrationRecord.open(store, 'user-1', lib);
+    record.addFound(['s1']);
+    record.note('s1', 'imported', 'id-1');
+    await record.flush();
+
+    await store.remove(record.key);
+
+    expect(await MigrationRecord.unfinished(store, 'user-1', lib)).toBeNull();
+    expect((await MigrationRecord.open(store, 'user-1', lib)).counts().found).toBe(0);
+  });
+});
+
 describe('other imports', () => {
   it('names the other libraries that brought tracks in, for the summary', async () => {
     const store = new MemoryRecordStore();

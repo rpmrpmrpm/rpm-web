@@ -373,6 +373,8 @@
 "Migration_ContinueImport": "Continue import from {0}",
 "Migration_ContinueStopped": "Continue import",
 "Migration_FileUnreadable": "This file could not be read as a library file.",
+"Migration_Forget": "Forget",
+"Migration_ForgetHint": "Forgets this unfinished import and its saved sign-in. What was imported stays in rpm.",
 "Migration_Hide": "Hide",
 "Migration_HintFile": "Uses the library file it saves",
 "Migration_HintPlaylistFiles": ".m3u, .m3u8 and .pls from any player",

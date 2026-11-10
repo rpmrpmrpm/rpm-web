@@ -373,6 +373,8 @@
 "Migration_ContinueImport": "继续从 {0} 导入",
 "Migration_ContinueStopped": "继续导入",
 "Migration_FileUnreadable": "无法将此文件读取为资料库文件。",
+"Migration_Forget": "忘记",
+"Migration_ForgetHint": "忘记这次未完成的导入及其保存的登录信息。已导入的内容保留在 rpm 中。",
 "Migration_Hide": "隐藏",
 "Migration_HintFile": "使用它保存的资料库文件",
 "Migration_HintPlaylistFiles": "任何播放器的 .m3u、.m3u8 和 .pls",

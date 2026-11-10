@@ -373,6 +373,8 @@
 "Migration_ContinueImport": "Reprendre l'import depuis {0}",
 "Migration_ContinueStopped": "Reprendre l'importation",
 "Migration_FileUnreadable": "Ce fichier n'a pas pu être lu comme fichier de bibliothèque.",
+"Migration_Forget": "Oublier",
+"Migration_ForgetHint": "Oublie cette importation inachevée et sa connexion enregistrée. Ce qui a été importé reste dans rpm.",
 "Migration_Hide": "Masquer",
 "Migration_HintFile": "Utilise le fichier de bibliothèque qu'elle enregistre",
 "Migration_HintPlaylistFiles": ".m3u, .m3u8 et .pls de tout lecteur",

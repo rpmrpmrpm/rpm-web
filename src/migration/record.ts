@@ -35,6 +35,8 @@ export interface RecordStore {
   load(key: string): Promise<RecordState | null>;
   save(state: RecordState): Promise<void>;
   list(prefix: string): Promise<RecordState[]>;
+  // Forgets an import: it is no longer offered, and a new import of that library starts fresh.
+  remove(key: string): Promise<void>;
 }
 
 export interface PlaylistOutcome {
@@ -215,6 +217,7 @@ export class MemoryRecordStore implements RecordStore {
   async load(key: string) { const found = this.records.get(key); return found ? structuredClone(found) : null; }
   async save(state: RecordState) { this.records.set(state.key, structuredClone(state)); }
   async list(prefix: string) { return [...this.records.values()].filter((r) => r.key.startsWith(prefix)).map((r) => structuredClone(r)); }
+  async remove(key: string) { this.records.delete(key); }
 }
 
 const DATABASE = 'rpm-migration';
@@ -260,5 +263,12 @@ export const browserRecords: RecordStore = {
       const request = db.transaction(RECORDS).objectStore(RECORDS).getAll();
       request.onsuccess = () => done((request.result as RecordState[]).filter((r) => r.key.startsWith(prefix)));
       request.onerror = () => fail(request.error);
+    })),
+  remove: (key) =>
+    using((db) => new Promise<void>((done, fail) => {
+      const tx = db.transaction(RECORDS, 'readwrite');
+      tx.objectStore(RECORDS).delete(key);
+      tx.oncomplete = () => done();
+      tx.onerror = () => fail(tx.error);
     })),
 };
