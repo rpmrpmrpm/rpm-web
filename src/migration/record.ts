@@ -79,10 +79,22 @@ export class MigrationRecord {
     this.count(row, 1);
   }
 
-  static async open(store: RecordStore, userId: string, library: SourceLibrary): Promise<MigrationRecord> {
-    // Playlist files have no library id; the sorted paths of the playlists stand in.
+  // Playlist files have no library id; the sorted paths of the playlists stand in.
+  private static async keys(userId: string, library: SourceLibrary) {
     const libraryKey = library.libraryId || (library.kind === 'playlistfiles' ? await shortHash(library.playlists.map((p) => p.sourceId).sort().join('\n')) : '');
-    const key = `${userId}:${library.kind}:${libraryKey}`;
+    return { libraryKey, key: `${userId}:${library.kind}:${libraryKey}` };
+  }
+
+  // The counts of an unfinished import of this library, or null when there is none (never imported, or
+  // finished). It changes nothing, so the window can ask whether to continue it or start over first.
+  static async unfinished(store: RecordStore, userId: string, library: SourceLibrary) {
+    const { key } = await MigrationRecord.keys(userId, library);
+    const state = await store.load(key);
+    return state && state.finishedAt === 0 ? new MigrationRecord(store, state).counts() : null;
+  }
+
+  static async open(store: RecordStore, userId: string, library: SourceLibrary): Promise<MigrationRecord> {
+    const { libraryKey, key } = await MigrationRecord.keys(userId, library);
     const state = (await store.load(key)) ?? {
       key, kind: library.kind, libraryKey, name: library.name, startedAt: Date.now(), finishedAt: 0, order: [], tracks: {}, playlists: {},
     };
@@ -101,6 +113,15 @@ export class MigrationRecord {
       this.state.tracks[id] = row;
       this.state.order.push(id);
       this.count(row, 1);
+    }
+  }
+
+  // "Start over": every track is checked again, as on a first run. The tracks that are in the account already
+  // are found by the matching and not uploaded twice. The links to the playlists stay, so they are filled in
+  // and not made a second time.
+  startOver() {
+    for (const row of Object.values(this.state.tracks)) {
+      this.change(row, { state: 'found', attempts: 0, nextTry: 0, reason: null, detail: null, rpmId: null });
     }
   }
 

@@ -161,7 +161,21 @@ const migrationCloud: MigrationCloud = {
 
 const what = (artist: string, title: string) => (artist ? `${artist} - ${title}` : title);
 
-export async function startMigration(library: SourceLibrary, connection: Connection, label: string, retry: string[] = []): Promise<void> {
+// The counts of an unfinished import of this library, or null. The summary then asks whether to continue it
+// or start over.
+export async function unfinishedImport(library: SourceLibrary): Promise<ReturnType<MigrationRecord['counts']> | null> {
+  const user = session.user?.userId;
+  if (!user) return null;
+  try {
+    return await MigrationRecord.unfinished(browserRecords, user, library);
+  } catch {
+    return null;
+  }
+}
+
+// how: continue where an earlier import of this library stopped (or start fresh when there was none), or start
+// over and check every track again. retry: the tracks the report's "Try again" starts over.
+export async function startMigration(library: SourceLibrary, connection: Connection, label: string, how: 'continue' | 'startover', retry: string[]): Promise<void> {
   const user = session.user?.userId;
   if (migrating.running || !user) return;
 
@@ -185,6 +199,7 @@ export async function startMigration(library: SourceLibrary, connection: Connect
 
   try {
     const record = await MigrationRecord.open(browserRecords, user, library);
+    if (how === 'startover') record.startOver();
     if (retry.length > 0) record.retry(retry);
     const end = await runMigration({
       library,

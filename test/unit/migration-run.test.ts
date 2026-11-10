@@ -391,6 +391,42 @@ describe('the web import run', () => {
   });
 });
 
+describe('the record of an import', () => {
+  it('finds an unfinished import without changing it', async () => {
+    const store = new MemoryRecordStore();
+    const lib = library([local('s1', 'Record', 'One'), local('s2', 'Record', 'Two')]);
+    expect(await MigrationRecord.unfinished(store, 'user-1', lib)).toBeNull();
+
+    const record = await MigrationRecord.open(store, 'user-1', lib);
+    record.addFound(['s1', 's2']);
+    record.note('s1', 'imported', 'id-1');
+    await record.flush();
+
+    expect(await MigrationRecord.unfinished(store, 'user-1', lib)).toEqual({ found: 2, imported: 1, alreadyInRpm: 0, notImported: 0, waiting: 1 });
+    expect(await MigrationRecord.unfinished(store, 'user-2', lib)).toBeNull();
+
+    record.finish();
+    await record.flush();
+    expect(await MigrationRecord.unfinished(store, 'user-1', lib)).toBeNull();
+  });
+
+  it('starts over by checking every track again, and keeps the playlists it made', async () => {
+    const store = new MemoryRecordStore();
+    const lib = library([local('s1', 'Record', 'One'), local('s2', 'Record', 'Two')]);
+    const record = await MigrationRecord.open(store, 'user-1', lib);
+    record.addFound(['s1', 's2']);
+    record.note('s1', 'imported', 'id-1');
+    record.note('s2', 'notimported', null, 'Migration_ReasonFileNotFound');
+    record.notePlaylist('p1', 'pl-9', ['s1']);
+
+    record.startOver();
+
+    expect(record.due(Date.now()).map((r) => r.sourceId)).toEqual(['s1', 's2']);
+    expect(record.counts()).toEqual({ found: 2, imported: 0, alreadyInRpm: 0, notImported: 0, waiting: 2 });
+    expect(record.playlist('p1')).toEqual({ playlistId: 'pl-9', entries: ['s1'] });
+  });
+});
+
 describe('the rules shared with the desktop', () => {
   it('merges details as the desktop does', () => {
     const source = local('s', 'R', 'T', { rating: 9, favorite: true, added: Y2015, lastPlayed: Y2021 });
