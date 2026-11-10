@@ -147,6 +147,21 @@ describe('the web import run', () => {
     expect(cloud.marks.map((m) => m.rpmId)).toEqual(['cloud-1']);
   });
 
+  it('matches a song whose artist or album rpm corrected, but not the same title on another record', async () => {
+    const cloud = new FakeCloud();
+    cloud.tracks = [
+      { rpmId: 'cloud-1', artist: 'Beyoncé', album: 'Record', title: 'One', durationSeconds: 200, extension: '.flac', favorite: false, rating: 0, addedAt: 1 },
+      { rpmId: 'cloud-2', artist: 'Band', album: 'Record (Deluxe Edition)', title: 'Two!', durationSeconds: 200, extension: '.flac', favorite: false, rating: 0, addedAt: 1 },
+      { rpmId: 'cloud-3', artist: 'Other Act', album: 'Elsewhere', title: 'Intro', durationSeconds: 200, extension: '.flac', favorite: false, rating: 0, addedAt: 1 },
+    ];
+    const lib = library([local('s1', 'Record', 'One', { artist: 'Beyonce' }), local('s2', 'Record', 'Two'), local('s3', 'Record', 'Intro')]);
+
+    const { record, importer } = await run(lib, { cloud });
+
+    expect(record.rows('already').map((r) => [r.sourceId, r.rpmId])).toEqual([['s1', 'cloud-1'], ['s2', 'cloud-2']]);
+    expect(importer.calls).toHaveLength(1);
+  });
+
   it('keeps a rating the account already has', async () => {
     const cloud = new FakeCloud();
     cloud.tracks = [{ rpmId: 'cloud-1', artist: 'Band', album: 'Record', title: 'One', durationSeconds: 200, extension: '.flac', favorite: true, rating: 3, addedAt: 1 }];

@@ -5,7 +5,7 @@
 
 import type { PickedFile } from '../import/queue';
 import { QuotaFull } from '../import/importer';
-import { albumBatches, LENGTH_TOLERANCE, lossless, mergeDetails, songKey } from './merge';
+import { albumBatches, LENGTH_TOLERANCE, lossless, loose, mergeDetails, songKey } from './merge';
 import { deviceId, type SourceLibrary, type SourceTrack } from './model';
 import type { MigrationRecord, PlaylistOutcome } from './record';
 import { type MediaServer, ServerBlocked, SignInExpired } from './server';
@@ -98,9 +98,23 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
   const bySource = new Map(library.tracks.map((t) => [t.sourceId, t]));
   // The account's songs, and the ones this run puts there, so a song listed twice is uploaded once.
   const catalogue = new Map<string, CatalogueTrack[]>();
+  const byTitle = new Map<string, CatalogueTrack[]>();
   const learn = (track: CatalogueTrack) => {
     const key = songKey(track.artist, track.album, track.title);
     catalogue.set(key, [...(catalogue.get(key) ?? []), track]);
+    const title = loose(track.title);
+    if (title) byTitle.set(title, [...(byTitle.get(title) ?? []), track]);
+  };
+  // The song the account holds already, or undefined. First the same artist, album and title. Then, for a
+  // song whose tags rpm corrected after its own import, the same title in its loose form with the artist or
+  // the album still the same. A title alone is not enough: "Intro" is on many records.
+  const sameSong = (track: SourceTrack): CatalogueTrack | undefined => {
+    const close = (c: CatalogueTrack) => Math.abs(c.durationSeconds - track.durationSeconds) <= LENGTH_TOLERANCE;
+    const exact = catalogue.get(songKey(track.artist, track.album, track.title))?.find(close);
+    if (exact) return exact;
+    const artist = loose(track.artist);
+    const album = loose(track.album);
+    return byTitle.get(loose(track.title))?.find((c) => close(c) && ((artist !== '' && loose(c.artist) === artist) || (album !== '' && loose(c.album) === album)));
   };
   for (const track of cloud.catalogue()) learn(track);
   const byFile = new Map<string, string>();
@@ -231,7 +245,7 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
     }
 
     // A song the account holds already, by its tags and length: merged, not uploaded.
-    const same = catalogue.get(songKey(track.artist, track.album, track.title))?.find((c) => Math.abs(c.durationSeconds - track.durationSeconds) <= LENGTH_TOLERANCE);
+    const same = sameSong(track);
     if (same) {
       const lower = lossless(extensionOf(track)) && !lossless(same.extension);
       details(same.rpmId, { rating: same.rating, favorite: same.favorite, favoritedAt: 0, added: same.addedAt, lastPlayed: 0 }, track, ratings, plays, added);

@@ -33,6 +33,11 @@ export const LENGTH_TOLERANCE = 2;
 export const songKey = (artist: string, album: string, title: string) =>
   `${artist.trim().toLowerCase()}\u0001${album.trim().toLowerCase()}\u0001${title.trim().toLowerCase()}`;
 
+// A looser form for matching a song whose tags rpm corrected after its own import: accents removed, only
+// letters and digits kept, lower case ("Beyoncé" and "Beyonce!" are the same). It is MigrationEstimate.Loose of
+// the desktop app.
+export const loose = (text: string) => text.normalize('NFD').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+
 export interface KnownSong {
   artist: string;
   album: string;
