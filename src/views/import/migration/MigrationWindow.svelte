@@ -23,7 +23,9 @@
   let { onClose }: { onClose: () => void } = $props();
 
   type Face = 'apps' | 'connect' | 'reading' | 'summary' | 'run';
-  let face = $state<Face>(migrating.running || migrating.end ? 'run' : 'apps');
+  // A running or stopped import opens where it is; a finished one shows its report once, then the window starts
+  // at the list of apps so another import can be started.
+  let face = $state<Face>(migrating.running || (migrating.end && (migrating.end !== 'finished' || !migrating.reportSeen)) ? 'run' : 'apps');
   let kind = $state<SourceKind>('musicbee');
   let error = $state('');
   let note = $state('');
@@ -229,6 +231,11 @@
     onClose();
   }
 
+  // The report counts as seen once it is on screen.
+  $effect(() => {
+    if (face === 'run' && migrating.end === 'finished' && migrating.report) migrating.reportSeen = true;
+  });
+
   const summary = $derived(library ? summaryOf(library) : null);
   const progress = $derived(migrating.progress);
   const done = $derived(progress ? progress.counts.imported + progress.counts.alreadyInRpm + progress.counts.notImported : 0);
@@ -300,9 +307,9 @@
     <div class="reading"><progress></progress><p class="line">{text('Migration_Reading', found)}</p></div>
   {:else if face === 'summary' && library && summary}
     <h4 class="kicker">{text('Migration_SummaryKicker')}</h4>
-    <p class="big">{text('Migration_SummaryTracks', library.tracks.length, size(summary.totalBytes))}</p>
-    <p class="line">{text('Migration_SummaryPlaylists', library.playlists.length)}</p>
-    <p class="line">{text('Migration_SummaryAlready', summary.aboutAlreadyInRpm)}</p>
+    <p class="big">{library.tracks.length === 1 ? text('Migration_SummaryTracksOne', size(summary.totalBytes)) : text('Migration_SummaryTracks', library.tracks.length, size(summary.totalBytes))}</p>
+    {#if library.playlists.length}<p class="line">{library.playlists.length === 1 ? text('Migration_SummaryPlaylistsOne') : text('Migration_SummaryPlaylists', library.playlists.length)}</p>{/if}
+    {#if summary.aboutAlreadyInRpm > 0}<p class="line">{text('Migration_SummaryAlready', summary.aboutAlreadyInRpm)}</p>{/if}
     {#if library.skipped.length}<p class="quiet">{text('Migration_SummarySkipped', library.skipped.length)}</p>{/if}
     {#if space && !space.unlimited}
       {@const free = Math.max(0, space.quota - space.used)}
@@ -314,7 +321,7 @@
       {@const report = migrating.report}
       <h4 class="kicker">{text('Migration_ReportTitle', report.label)}</h4>
       <p class="big">{text('Migration_ReportCounts', report.counts.found, report.counts.imported, report.counts.alreadyInRpm, report.counts.notImported)}</p>
-      {#if report.playlists.length}<p class="line">{text('Migration_ReportPlaylists', report.playlists.length)}</p>{/if}
+      {#if report.playlists.length}<p class="line">{report.playlists.length === 1 ? text('Migration_ReportPlaylistsOne') : text('Migration_ReportPlaylists', report.playlists.length)}</p>{/if}
       {#each report.playlists.filter((p) => p.unmatched > 0 || p.wasSmart) as playlist (playlist.name)}
         <p class="quiet">{playlist.wasSmart && playlist.unmatched === 0 ? text('Migration_ReportSmart', playlist.name) : text('Migration_ReportPlaylistUnmatched', playlist.name, playlist.unmatched)}</p>
       {/each}

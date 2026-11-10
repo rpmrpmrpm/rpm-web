@@ -66,6 +66,8 @@ class Migrating {
   library = $state.raw<SourceLibrary | null>(null);
   connection = $state.raw<Connection | null>(null);
   label = $state('');
+  // The window has shown the last finished import's report; it opens at the list of apps next time.
+  reportSeen = false;
   // Not reactive: only Pause reads it.
   stop: AbortController | null = null;
 }
@@ -165,6 +167,7 @@ export async function startMigration(library: SourceLibrary, connection: Connect
   migrating.label = label;
   migrating.end = null;
   migrating.report = null;
+  migrating.reportSeen = false;
   migrating.progress = null;
   const stop = new AbortController();
   migrating.stop = stop;
