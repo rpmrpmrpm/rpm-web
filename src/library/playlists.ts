@@ -150,6 +150,12 @@ export class Playlists {
     });
   }
 
+  // Every track given goes on the end, repeats included. An import from another app writes a playlist out as
+  // the other app had it.
+  append(id: string, trackIds: readonly string[]): Promise<void> {
+    return this.change(id, (playlist) => ({ name: playlist.name, trackIds: [...playlist.trackIds, ...trackIds] }));
+  }
+
   // One copy, the one at this place. A track can be on a playlist twice.
   removeAt(id: string, rpmId: string, place: number): Promise<void> {
     return this.change(id, (playlist) => {

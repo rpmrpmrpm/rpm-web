@@ -17,6 +17,8 @@
   import TagsFromTags from './TagsFromTags.svelte';
   import Window from './Window.svelte';
   import { addToQueue, importing, runImport } from './importing.svelte';
+  import MigrationWindow from './migration/MigrationWindow.svelte';
+  import { migrating } from './migration/migrating.svelte';
 
   const folderPicker = 'webkitdirectory' in HTMLInputElement.prototype && !/iPhone|iPad/.test(navigator.userAgent);
 
@@ -45,6 +47,8 @@
   }
 
   let recognising = $state(false);
+  // The import from another app: its own window, and a running import keeps a way back to it.
+  let migrationOpen = $state(false);
   let chip = $state<ChipFilter | null>(null);
   let search = $state('');
   let showTags = $state(false);
@@ -414,7 +418,11 @@
         {:else if folderPicker}
           <label class="glass-button">{text('Web_ImportAddFolder')}<input type="file" webkitdirectory hidden onchange={picked} /></label>
         {/if}
+        <button class="glass-button" onclick={() => (migrationOpen = true)}>{text('AddMusic_OtherApp')}</button>
       </div>
+      {#if migrating.running}
+        <button class="tool" onclick={() => (migrationOpen = true)}>{text('Migration_Status', migrating.label, migrating.progress ? migrating.progress.counts.imported + migrating.progress.counts.alreadyInRpm + migrating.progress.counts.notImported : 0, migrating.progress?.counts.found ?? 0)}</button>
+      {/if}
       <div class="starter">
         <button class="glass-button" disabled={fetchingStarter} onclick={tryStarter}><i class="icon">{icons.music}</i>{text('Wizard_TryStarter')}</button>
         <p>{text('Wizard_TryStarterHint')}</p>
@@ -563,6 +571,10 @@
       <button class="glass-button primary" onclick={() => answerClose(true)}><i class="icon">{icons.close}</i>{text('Web_ImportAllDoneClose')}</button>
     {/snippet}
   </Window>
+{/if}
+
+{#if migrationOpen}
+  <MigrationWindow onClose={() => (migrationOpen = false)} />
 {/if}
 
 {#if lookingUp}

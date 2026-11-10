@@ -46,6 +46,12 @@ describe('playlists', () => {
     expect(puts[0]!.body).toMatchObject({ trackIds: ['a', 'b', 'c'], ifUnchangedSince: 7, folder: ['Folder'], name: 'Mine' });
   });
 
+  it('appends every track given, repeats included', async () => {
+    const { playlists, puts } = fake([list()]);
+    await playlists.append('p', ['b', 'c', 'b']);
+    expect(puts[0]!.body).toMatchObject({ trackIds: ['a', 'b', 'b', 'c', 'b'], ifUnchangedSince: 7 });
+  });
+
   it('makes the same change to what the store holds after a conflict', async () => {
     const { playlists, puts } = fake([list()], 1);
     await playlists.add('p', ['c']);
