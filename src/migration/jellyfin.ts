@@ -2,7 +2,7 @@
 // desktop app. Jellyfin has no star ratings, so the rating is always 0.
 
 import { isoDate, type RemoteFile, SkipReason, type SourceLibrary, type SourcePlaylist, type SourceSkip, type SourceTrack } from './model';
-import { arr, base, blob, extensionOf, type Fetch, HttpStatus, json, type MediaServer, num, obj, SignInExpired, SignInFailed, str } from './server';
+import { arr, base, blob, extensionOf, type Fetch, FirstPage, HttpStatus, json, type MediaServer, num, obj, SignInExpired, SignInFailed, str } from './server';
 
 export interface JellyfinSession {
   server: string;
@@ -70,8 +70,10 @@ export class JellyfinServer implements MediaServer {
 
   private async *pages(path: string, signal?: AbortSignal, progress?: (count: number) => void): AsyncGenerator<Record<string, unknown>> {
     let start = 0;
+    const first = new FirstPage();
     for (;;) {
       const page = obj(await this.get(`${path}${path.includes('?') ? '&' : '?'}StartIndex=${start}&Limit=${PAGE}`, signal));
+      if (first.again(page['Items'])) return;
       const items = arr(page['Items']).map(obj);
       for (const item of items) yield item;
       start += items.length;
@@ -85,11 +87,15 @@ export class JellyfinServer implements MediaServer {
     const user = this.session.userId;
 
     const tracks: SourceTrack[] = [];
+    const seen = new Set<string>();
     const skipped: SourceSkip[] = [];
     for await (const item of this.pages(`Users/${user}/Items?IncludeItemTypes=Audio&Recursive=true&Fields=DateCreated,MediaSources,Path&EnableUserData=true`, signal, found)) {
       const track = trackOf(item);
       if ('what' in track) skipped.push(track);
-      else tracks.push(track);
+      else if (!seen.has(track.sourceId)) {
+        seen.add(track.sourceId);
+        tracks.push(track);
+      }
     }
 
     const known = new Set(tracks.map((t) => t.sourceId));

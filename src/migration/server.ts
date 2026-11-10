@@ -103,6 +103,23 @@ export function extensionOf(path: string, container: string): string {
   return '';
 }
 
+// Notices a server that ignores the page it is asked for and sends its first page again, as some do with an
+// offset they do not support. Without this, a reader that waits for a short page would ask for ever, and one
+// that counts to the total would list every track again. It is MediaServerHttp.FirstPage of the desktop app.
+export class FirstPage {
+  private first: string | null = null;
+
+  // True when items is the first page again, from the second page on.
+  again(items: unknown): boolean {
+    const text = JSON.stringify(items ?? null);
+    if (this.first === null) {
+      this.first = text;
+      return false;
+    }
+    return text === this.first;
+  }
+}
+
 // Reading the loose JSON the servers answer with.
 type Loose = Record<string, unknown>;
 export const obj = (value: unknown): Loose => (typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Loose) : {});

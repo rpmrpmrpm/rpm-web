@@ -65,6 +65,13 @@ describe('Jellyfin', () => {
     expect(library.skipped).toEqual([{ what: 'Band - Clip', reasonKey: 'Migration_SkipNotMusic' }]);
   });
 
+  it('gives each track once from a server that ignores the start index', async () => {
+    const { fetcher } = fake((url) => (url.searchParams.get('IncludeItemTypes') === 'Audio' ? sample('jellyfin/items-0.json') : jellyfinAnswer(url)));
+    const library = await new JellyfinServer(fetcher, session, 'dev').read(() => {}, AbortSignal.timeout(5000));
+    expect(library.tracks.map((t) => t.sourceId)).toEqual([...new Set(library.tracks.map((t) => t.sourceId))]);
+    expect(library.tracks).toHaveLength(2);
+  });
+
   it('falls back to the static stream when downloads are not allowed', async () => {
     const { fetcher } = fake((url) => (url.pathname === '/Items/j1/Download' ? status(403) : url.pathname === '/Audio/j1/stream' && url.searchParams.get('static') === 'true' ? bytes([1, 2, 3]) : status(404)));
     const file = await new JellyfinServer(fetcher, session, 'dev').open({ kind: 'remote', key: 'j1', extension: '.flac', size: 3 });
@@ -136,6 +143,12 @@ describe('Plex', () => {
     const library = await new PlexServer(fetcher, choice, connection).read(() => {});
     expect(library.tracks.map((t) => [t.sourceId, t.file.kind === 'remote' ? t.file.extension : ''])).toEqual([['601', '.m4a'], ['602', '.m4a']]);
     expect(library.skipped).toEqual([{ what: 'Band - Clip', reasonKey: 'Migration_SkipNotMusic' }, { what: 'Band - Stream', reasonKey: 'Migration_SkipNotAFile' }]);
+  });
+
+  it('gives each track once from a server that ignores the container start', async () => {
+    const { fetcher } = fake((url) => (url.pathname === '/library/sections/3/all' ? sample('plex/tracks-0.json') : plexAnswer(url)));
+    const library = await new PlexServer(fetcher, choice, connection).read(() => {});
+    expect(library.tracks).toHaveLength(2);
   });
 
   it('gets the account token once the code is approved', async () => {
@@ -229,6 +242,12 @@ describe('Navidrome and Subsonic', () => {
     const { fetcher, seen } = fake(subsonicAnswer);
     await new SubsonicServer(fetcher, login, 2).read(() => {});
     expect(seen.filter((s) => s.url.pathname === '/rest/search3').map((s) => s.url.searchParams.get('songOffset'))).toEqual(['0', '2']);
+  });
+
+  it('reads a server that ignores paging once, instead of for ever', async () => {
+    const { fetcher } = fake((url) => (url.pathname === '/rest/search3' ? sample('subsonic/search3-all.json') : subsonicAnswer(url)));
+    const library = await new SubsonicServer(fetcher, login, 2).read(() => {}, AbortSignal.timeout(5000));
+    expect(library.tracks.map((t) => t.sourceId)).toEqual(['s1', 's2', 's3']);
   });
 
   it('takes the file type from the path before the suffix', async () => {

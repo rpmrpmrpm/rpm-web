@@ -4,7 +4,7 @@
 
 import { md5 } from './md5';
 import { isoDate, type RemoteFile, shortHash, SkipReason, type SourceLibrary, type SourcePlaylist, type SourceSkip, type SourceTrack } from './model';
-import { arr, base, blob, extensionOf, type Fetch, json, type MediaServer, num, obj, SignInExpired, SignInFailed, str } from './server';
+import { arr, base, blob, extensionOf, type Fetch, FirstPage, json, type MediaServer, num, obj, SignInExpired, SignInFailed, str } from './server';
 
 export interface SubsonicLogin {
   server: string;
@@ -61,14 +61,20 @@ export class SubsonicServer implements MediaServer {
   async read(found: (count: number) => void, signal?: AbortSignal): Promise<SourceLibrary> {
     const tracks: SourceTrack[] = [];
     const skipped: SourceSkip[] = [];
+    const seen = new Set<string>();
+    const first = new FirstPage();
     for (let offset = 0; ; offset += this.pageSize) {
       // An empty query lists every song, in pages. The API has no total, so a short page is the end.
       const page = await this.call('search3', `query=&artistCount=0&albumCount=0&songCount=${this.pageSize}&songOffset=${offset}`, signal);
+      if (first.again(obj(page['searchResult3'])['song'])) break;
       const songs = arr(obj(page['searchResult3'])['song']).map(obj);
       for (const song of songs) {
         const track = trackOf(song);
         if ('what' in track) skipped.push(track);
-        else tracks.push(track);
+        else if (!seen.has(track.sourceId)) {
+          seen.add(track.sourceId);
+          tracks.push(track);
+        }
       }
       found(tracks.length);
       if (songs.length < this.pageSize) break;

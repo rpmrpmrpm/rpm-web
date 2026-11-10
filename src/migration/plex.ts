@@ -3,7 +3,7 @@
 // Plex rates out of 10, the same scale as rpm, and has no favourites.
 
 import { type RemoteFile, SkipReason, type SourceLibrary, type SourcePlaylist, type SourceSkip, type SourceTrack } from './model';
-import { arr, base, blob, extensionOf, type Fetch, json, type MediaServer, num, obj, str } from './server';
+import { arr, base, blob, extensionOf, type Fetch, FirstPage, json, type MediaServer, num, obj, str } from './server';
 
 export interface PlexPin {
   id: number;
@@ -83,8 +83,10 @@ export class PlexServer implements MediaServer {
 
   private async *pages(path: string, signal?: AbortSignal): AsyncGenerator<Record<string, unknown>> {
     let start = 0;
+    const first = new FirstPage();
     for (;;) {
       const page = obj(obj(await this.get(`${path}${path.includes('?') ? '&' : '?'}X-Plex-Container-Start=${start}&X-Plex-Container-Size=${PAGE}`, signal))['MediaContainer']);
+      if (first.again(page['Metadata'])) return;
       const items = arr(page['Metadata']).map(obj);
       for (const item of items) yield item;
       start += items.length;
@@ -96,12 +98,16 @@ export class PlexServer implements MediaServer {
   async read(found: (count: number) => void, signal?: AbortSignal): Promise<SourceLibrary> {
     const sections = arr(obj(obj(await this.get('library/sections', signal))['MediaContainer'])['Directory']).map(obj);
     const tracks: SourceTrack[] = [];
+    const seen = new Set<string>();
     const skipped: SourceSkip[] = [];
     for (const section of sections.filter((d) => str(d['type']) === 'artist')) {
       for await (const item of this.pages(`library/sections/${encodeURIComponent(str(section['key']))}/all?type=10`, signal)) {
         const track = trackOf(item);
         if ('what' in track) skipped.push(track);
-        else tracks.push(track);
+        else if (!seen.has(track.sourceId)) {
+          seen.add(track.sourceId);
+          tracks.push(track);
+        }
       }
       found(tracks.length);
     }
