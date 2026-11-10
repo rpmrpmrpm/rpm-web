@@ -3,8 +3,8 @@
 // is never sent, only the MD5 of it with a fresh salt, as the protocol defines.
 
 import { md5 } from './md5';
-import { isoDate, type RemoteFile, shortHash, type SourceLibrary, type SourcePlaylist, type SourceTrack } from './model';
-import { arr, base, blob, type Fetch, json, type MediaServer, num, obj, SignInExpired, SignInFailed, str } from './server';
+import { isoDate, type RemoteFile, shortHash, SkipReason, type SourceLibrary, type SourcePlaylist, type SourceSkip, type SourceTrack } from './model';
+import { arr, base, blob, extensionOf, type Fetch, json, type MediaServer, num, obj, SignInExpired, SignInFailed, str } from './server';
 
 export interface SubsonicLogin {
   server: string;
@@ -60,11 +60,16 @@ export class SubsonicServer implements MediaServer {
 
   async read(found: (count: number) => void, signal?: AbortSignal): Promise<SourceLibrary> {
     const tracks: SourceTrack[] = [];
+    const skipped: SourceSkip[] = [];
     for (let offset = 0; ; offset += this.pageSize) {
       // An empty query lists every song, in pages. The API has no total, so a short page is the end.
       const page = await this.call('search3', `query=&artistCount=0&albumCount=0&songCount=${this.pageSize}&songOffset=${offset}`, signal);
       const songs = arr(obj(page['searchResult3'])['song']).map(obj);
-      tracks.push(...songs.map(trackOf));
+      for (const song of songs) {
+        const track = trackOf(song);
+        if ('what' in track) skipped.push(track);
+        else tracks.push(track);
+      }
       found(tracks.length);
       if (songs.length < this.pageSize) break;
     }
@@ -85,7 +90,7 @@ export class SubsonicServer implements MediaServer {
     }
 
     const server = this.login.server.replace(/\/+$/, '');
-    return { kind: 'navidrome', libraryId: await shortHash(`${server}|${this.login.user}`), name: new URL(server).host, tracks, playlists, skipped: [] };
+    return { kind: 'navidrome', libraryId: await shortHash(`${server}|${this.login.user}`), name: new URL(server).host, tracks, playlists, skipped };
   }
 
   // "download" gives the original file; "stream" could transcode and count as a play. A refused download still
@@ -105,13 +110,15 @@ export class SubsonicServer implements MediaServer {
   }
 }
 
-function trackOf(song: Record<string, unknown>): SourceTrack {
+// The track, or why it is not imported: a file that is not audio rpm reads.
+function trackOf(song: Record<string, unknown>): SourceTrack | SourceSkip {
   const id = str(song['id']);
-  const suffix = str(song['suffix']);
+  const extension = extensionOf(str(song['path']), str(song['suffix']));
+  if (!extension) return { what: str(song['artist']) ? `${str(song['artist'])} - ${str(song['title'])}` : str(song['title']), reasonKey: SkipReason.NotMusic };
   const size = num(song['size']);
   return {
     sourceId: id,
-    file: { kind: 'remote', key: id, extension: suffix ? '.' + suffix.toLowerCase() : '', size },
+    file: { kind: 'remote', key: id, extension, size },
     title: str(song['title']),
     artist: str(song['artist']),
     album: str(song['album']),

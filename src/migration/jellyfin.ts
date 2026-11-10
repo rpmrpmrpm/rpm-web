@@ -1,8 +1,8 @@
 // Jellyfin: signing in, and reading a user's music. It is RPM.Core/Migration/Jellyfin.cs of the
 // desktop app. Jellyfin has no star ratings, so the rating is always 0.
 
-import { isoDate, type RemoteFile, type SourceLibrary, type SourcePlaylist, type SourceTrack } from './model';
-import { arr, base, blob, type Fetch, HttpStatus, json, type MediaServer, num, obj, SignInExpired, SignInFailed, str } from './server';
+import { isoDate, type RemoteFile, SkipReason, type SourceLibrary, type SourcePlaylist, type SourceSkip, type SourceTrack } from './model';
+import { arr, base, blob, extensionOf, type Fetch, HttpStatus, json, type MediaServer, num, obj, SignInExpired, SignInFailed, str } from './server';
 
 export interface JellyfinSession {
   server: string;
@@ -85,8 +85,11 @@ export class JellyfinServer implements MediaServer {
     const user = this.session.userId;
 
     const tracks: SourceTrack[] = [];
-    for await (const item of this.pages(`Users/${user}/Items?IncludeItemTypes=Audio&Recursive=true&Fields=DateCreated,MediaSources&EnableUserData=true`, signal, found)) {
-      tracks.push(trackOf(item));
+    const skipped: SourceSkip[] = [];
+    for await (const item of this.pages(`Users/${user}/Items?IncludeItemTypes=Audio&Recursive=true&Fields=DateCreated,MediaSources,Path&EnableUserData=true`, signal, found)) {
+      const track = trackOf(item);
+      if ('what' in track) skipped.push(track);
+      else tracks.push(track);
     }
 
     const known = new Set(tracks.map((t) => t.sourceId));
@@ -101,7 +104,7 @@ export class JellyfinServer implements MediaServer {
       }
       playlists.push({ sourceId: id, name: str(playlist['Name']), folder: [], smart: false, trackIds, unresolved });
     }
-    return { kind: 'jellyfin', libraryId: this.session.serverId, name, tracks, playlists, skipped: [] };
+    return { kind: 'jellyfin', libraryId: this.session.serverId, name, tracks, playlists, skipped };
   }
 
   async open(file: RemoteFile, signal?: AbortSignal): Promise<Blob> {
@@ -118,17 +121,19 @@ export class JellyfinServer implements MediaServer {
   }
 }
 
-function trackOf(item: Record<string, unknown>): SourceTrack {
+// The track, or why it is not imported: a file that is not audio rpm reads.
+function trackOf(item: Record<string, unknown>): SourceTrack | SourceSkip {
   const id = str(item['Id']);
   const source = obj(arr(item['MediaSources'])[0]);
-  const container = str(source['Container']) || str(item['Container']);
-  const size = num(source['Size']);
-  const user = obj(item['UserData']);
   const albumArtist = str(item['AlbumArtist']);
   const artist = arr(item['Artists']).map(str).find((a) => a.length > 0) ?? albumArtist;
+  const extension = extensionOf(str(source['Path']) || str(item['Path']), str(source['Container']) || str(item['Container']));
+  if (!extension) return { what: artist ? `${artist} - ${str(item['Name'])}` : str(item['Name']), reasonKey: SkipReason.NotMusic };
+  const size = num(source['Size']);
+  const user = obj(item['UserData']);
   return {
     sourceId: id,
-    file: { kind: 'remote', key: id, extension: container ? '.' + container.split(',')[0]!.toLowerCase() : '', size },
+    file: { kind: 'remote', key: id, extension, size },
     title: str(item['Name']),
     artist,
     album: str(item['Album']),

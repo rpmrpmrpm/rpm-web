@@ -53,6 +53,18 @@ describe('Jellyfin', () => {
     for (const s of seen) expect(header(s.init, 'Authorization')).toContain('Token="jellyfin-token-0001"');
   });
 
+  it('takes the file type from the path, and reads a container list as one type', async () => {
+    const items = { TotalRecordCount: 3, Items: [
+      { Id: 'j1', Name: 'A', MediaSources: [{ Container: 'mov,mp4,m4a,3gp,3g2,mj2', Path: '/media/music/a.m4a', Size: 10 }] },
+      { Id: 'j2', Name: 'B', MediaSources: [{ Container: 'mov,mp4,m4a,3gp,3g2,mj2', Size: 10 }] },
+      { Id: 'j3', Name: 'Clip', AlbumArtist: 'Band', MediaSources: [{ Container: 'matroska,webm', Path: '/media/music/clip.mkv', Size: 10 }] },
+    ] };
+    const { fetcher } = fake((url) => (url.searchParams.get('IncludeItemTypes') === 'Audio' ? new Response(JSON.stringify(items), { status: 200 }) : jellyfinAnswer(url)));
+    const library = await new JellyfinServer(fetcher, session, 'dev').read(() => {});
+    expect(library.tracks.map((t) => [t.sourceId, t.file.kind === 'remote' ? t.file.extension : ''])).toEqual([['j1', '.m4a'], ['j2', '.m4a']]);
+    expect(library.skipped).toEqual([{ what: 'Band - Clip', reasonKey: 'Migration_SkipNotMusic' }]);
+  });
+
   it('falls back to the static stream when downloads are not allowed', async () => {
     const { fetcher } = fake((url) => (url.pathname === '/Items/j1/Download' ? status(403) : url.pathname === '/Audio/j1/stream' && url.searchParams.get('static') === 'true' ? bytes([1, 2, 3]) : status(404)));
     const file = await new JellyfinServer(fetcher, session, 'dev').open({ kind: 'remote', key: 'j1', extension: '.flac', size: 3 });
@@ -111,6 +123,19 @@ describe('Plex', () => {
   it('matches the expected result for the sample', async () => {
     const { fetcher } = fake(plexAnswer);
     expect(shape(await new PlexServer(fetcher, choice, connection).read(() => {}))).toEqual(expected('plex'));
+  });
+
+  it('takes the file type from the file name, reads an mp4 container as m4a, and lists what it skips', async () => {
+    const tracks = { MediaContainer: { totalSize: 4, Metadata: [
+      { ratingKey: '601', title: 'A', Media: [{ container: 'mp4', Part: [{ key: '/library/parts/1/a.m4a', file: '/data/music/a.m4a', size: 10 }] }] },
+      { ratingKey: '602', title: 'B', Media: [{ container: 'mp4', Part: [{ key: '/library/parts/2/file', size: 10 }] }] },
+      { ratingKey: '603', title: 'Clip', grandparentTitle: 'Band', Media: [{ container: 'mkv', Part: [{ key: '/library/parts/3/file', file: '/data/music/clip.mkv', size: 10 }] }] },
+      { ratingKey: '604', title: 'Stream', grandparentTitle: 'Band', Media: [{ container: 'mp3' }] },
+    ] } };
+    const { fetcher } = fake((url) => (url.pathname === '/library/sections/3/all' ? new Response(JSON.stringify(tracks), { status: 200 }) : plexAnswer(url)));
+    const library = await new PlexServer(fetcher, choice, connection).read(() => {});
+    expect(library.tracks.map((t) => [t.sourceId, t.file.kind === 'remote' ? t.file.extension : ''])).toEqual([['601', '.m4a'], ['602', '.m4a']]);
+    expect(library.skipped).toEqual([{ what: 'Band - Clip', reasonKey: 'Migration_SkipNotMusic' }, { what: 'Band - Stream', reasonKey: 'Migration_SkipNotAFile' }]);
   });
 
   it('gets the account token once the code is approved', async () => {
@@ -204,6 +229,13 @@ describe('Navidrome and Subsonic', () => {
     const { fetcher, seen } = fake(subsonicAnswer);
     await new SubsonicServer(fetcher, login, 2).read(() => {});
     expect(seen.filter((s) => s.url.pathname === '/rest/search3').map((s) => s.url.searchParams.get('songOffset'))).toEqual(['0', '2']);
+  });
+
+  it('takes the file type from the path before the suffix', async () => {
+    const page = { 'subsonic-response': { status: 'ok', searchResult3: { song: [{ id: 'n1', title: 'A', suffix: 'mp4', path: 'Band/Record/01 A.m4a', size: 10 }] } } };
+    const { fetcher } = fake((url) => (url.pathname === '/rest/search3' ? new Response(JSON.stringify(page), { status: 200 }) : subsonicAnswer(url)));
+    const library = await new SubsonicServer(fetcher, login, 2).read(() => {});
+    expect(library.tracks.map((t) => (t.file.kind === 'remote' ? t.file.extension : ''))).toEqual(['.m4a']);
   });
 
   it('turns a download refused with error 40 into SignInExpired, not a file', async () => {

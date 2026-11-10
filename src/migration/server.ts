@@ -1,6 +1,7 @@
 // What the web app's media server readers share: the contract, the sign-in errors, and the requests.
 // It is RPM.Core/Migration/MediaServer.cs of the desktop app.
 
+import { AUDIO_EXTENSIONS } from '../import/queue';
 import type { RemoteFile, SourceKind, SourceLibrary } from './model';
 
 export type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -80,6 +81,26 @@ export class HttpStatus extends Error {
   constructor(readonly status: number) {
     super(`The media server answered ${status}.`);
   }
+}
+
+// The file type of a server's track, as the extension rpm reads ('.m4a'), or '' when it is not audio rpm reads.
+// The extension of the file's own name comes first, because it is what the file is. Without a name, the
+// server's container name is mapped: Plex says "mp4" for .m4a files, and Jellyfin may give ffprobe's list
+// ("mov,mp4,m4a,3gp,3g2,mj2"). It is RPM.Core/Migration/MediaServer.cs ExtensionOf of the desktop app.
+export function extensionOf(path: string, container: string): string {
+  const named = /\.[^./\\]+$/.exec(path)?.[0]?.toLowerCase() ?? '';
+  if (named.length > 1 && AUDIO_EXTENSIONS.has(named)) return named;
+  for (const name of container.split(',').map((n) => n.trim().toLowerCase()).filter((n) => n.length > 0)) {
+    const mapped =
+      name === 'mp4' || name === 'm4a' || name === 'm4b' || name === 'mov' || name === 'alac' ? '.m4a'
+      : name === 'mpeg' || name === 'mp3' ? '.mp3'
+      : name === 'aif' || name === 'aiff' ? '.aiff'
+      : name === 'asf' || name === 'wma' ? '.wma'
+      : name === 'ogg' || name === 'oga' || name === 'vorbis' ? '.ogg'
+      : '.' + name;
+    if (AUDIO_EXTENSIONS.has(mapped)) return mapped;
+  }
+  return '';
 }
 
 // Reading the loose JSON the servers answer with.

@@ -33,7 +33,8 @@ describe.skipIf(!live)('against real servers', () => {
     await subsonicCheck(fetcher, login);
     const server = new SubsonicServer(fetcher, login);
     const lib = await server.read(() => {});
-    expect(lib.tracks).toHaveLength(5);
+    // The server may hold more than the five test tones (a larger library to watch the progress with).
+    expect(lib.tracks.length).toBeGreaterThanOrEqual(5);
     expect(lib.tracks.find((t) => t.title === 'Opening')!.plays).toBe(3);
     expect(lib.tracks.find((t) => t.title === 'Middle')!.rating).toBe(8);
     expect(lib.playlists.find((p) => p.name === 'Weekend')!.trackIds.map((id) => titleOf(lib, id))).toEqual(['Tide', 'Opening', 'Tide']);

@@ -2,8 +2,8 @@
 // account's servers, and reading a server's music. It is RPM.Core/Migration/Plex.cs of the desktop app.
 // Plex rates out of 10, the same scale as rpm, and has no favourites.
 
-import type { RemoteFile, SourceLibrary, SourcePlaylist, SourceTrack } from './model';
-import { arr, base, blob, type Fetch, json, type MediaServer, num, obj, str } from './server';
+import { type RemoteFile, SkipReason, type SourceLibrary, type SourcePlaylist, type SourceSkip, type SourceTrack } from './model';
+import { arr, base, blob, extensionOf, type Fetch, json, type MediaServer, num, obj, str } from './server';
 
 export interface PlexPin {
   id: number;
@@ -96,10 +96,12 @@ export class PlexServer implements MediaServer {
   async read(found: (count: number) => void, signal?: AbortSignal): Promise<SourceLibrary> {
     const sections = arr(obj(obj(await this.get('library/sections', signal))['MediaContainer'])['Directory']).map(obj);
     const tracks: SourceTrack[] = [];
+    const skipped: SourceSkip[] = [];
     for (const section of sections.filter((d) => str(d['type']) === 'artist')) {
       for await (const item of this.pages(`library/sections/${encodeURIComponent(str(section['key']))}/all?type=10`, signal)) {
         const track = trackOf(item);
-        if (track) tracks.push(track);
+        if ('what' in track) skipped.push(track);
+        else tracks.push(track);
       }
       found(tracks.length);
     }
@@ -117,7 +119,7 @@ export class PlexServer implements MediaServer {
       }
       playlists.push({ sourceId: key, name: str(playlist['title']), folder: [], smart: playlist['smart'] === true, trackIds, unresolved });
     }
-    return { kind: 'plex', libraryId: this.server.machineId, name: this.server.name, tracks, playlists, skipped: [] };
+    return { kind: 'plex', libraryId: this.server.machineId, name: this.server.name, tracks, playlists, skipped };
   }
 
   open(file: RemoteFile, signal?: AbortSignal): Promise<Blob> {
@@ -126,21 +128,26 @@ export class PlexServer implements MediaServer {
   }
 }
 
-function trackOf(item: Record<string, unknown>): SourceTrack | null {
+// The track, or why it is not imported: no file part (a stream from an online service), or a file that is not
+// audio rpm reads.
+function trackOf(item: Record<string, unknown>): SourceTrack | SourceSkip {
   const media = obj(arr(item['Media'])[0]);
   const part = obj(arr(media['Part'])[0]);
   const key = str(part['key']);
-  if (!key) return null;
-  const container = str(part['container']) || str(media['container']);
-  const size = num(part['size']);
   const albumArtist = str(item['grandparentTitle']);
+  const artist = str(item['originalTitle']) || albumArtist;
+  const what = artist ? `${artist} - ${str(item['title'])}` : str(item['title']);
+  if (!key) return { what, reasonKey: SkipReason.NotAFile };
+  const extension = extensionOf(str(part['file']), str(part['container']) || str(media['container']));
+  if (!extension) return { what, reasonKey: SkipReason.NotMusic };
+  const size = num(part['size']);
   const lastViewed = num(item['lastViewedAt']);
   const added = num(item['addedAt']);
   return {
     sourceId: str(item['ratingKey']),
-    file: { kind: 'remote', key, extension: container ? '.' + container.toLowerCase() : '', size },
+    file: { kind: 'remote', key, extension, size },
     title: str(item['title']),
-    artist: str(item['originalTitle']) || albumArtist,
+    artist,
     album: str(item['parentTitle']),
     albumArtist,
     trackNumber: num(item['index']),
