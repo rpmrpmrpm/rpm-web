@@ -245,7 +245,10 @@ export class Importer {
     }
   }
 
-  private async importRow(row: ImportRow) {
+  // Uploads one row, or finds the account already holds its audio. Returns the track's id either way.
+  // addedAt is when the track joined the library (unix seconds): now for a normal import, the date the
+  // other app recorded for an import from another app.
+  private async importRow(row: ImportRow, addedAt: number): Promise<string> {
     this.note(row, 'working', 'Web_ImportStagePreparing');
     const { bytes, sha256 } = await this.media.canonical(row.file, row.extension);
 
@@ -263,7 +266,7 @@ export class Importer {
         if (row.cover) await this.uploadCover(row, row.cover);
         await this.uploadDisc(row);
         this.note(row, 'known', 'Web_ImportAlreadyThere');
-        return;
+        return known;
       }
     }
 
@@ -303,6 +306,7 @@ export class Importer {
       artist: row.tags.Artist ?? null,
       album: row.tags.Album ?? null,
       tags: catalogueTags(row),
+      addedAt,
     }, readQuota);
 
     // From here the track is in the cloud, and nothing below can undo that.
@@ -311,13 +315,13 @@ export class Importer {
     await this.uploadDisc(row);
     await this.makeRenditions(row, rpmId);
     await this.measureLoudness(row, rpmId);
+    return rpmId;
   }
 
-  private async withTries(row: ImportRow) {
+  private async withTries(row: ImportRow, addedAt: number): Promise<string | null> {
     for (let attempt = 1; ; attempt++) {
       try {
-        await this.importRow(row);
-        return;
+        return await this.importRow(row, addedAt);
       } catch (error) {
         if (error instanceof QuotaFull) throw error;
         if (error instanceof ApiError && (error.status === 402 || error.status === 413 || error.status === 507)) throw new QuotaFull();
@@ -325,7 +329,7 @@ export class Importer {
         const { key, permanent } = classify(error instanceof Error ? error.message : String(error));
         if (permanent || attempt >= TRIES) {
           this.note(row, 'failed', key);
-          return;
+          return null;
         }
       }
     }
@@ -354,7 +358,7 @@ export class Importer {
       while (pending.length > 0 && !full && !this.stopped) {
         const row = pending.shift()!;
         try {
-          await this.withTries(row);
+          await this.withTries(row, Math.floor(Date.now() / 1000));
         } catch {
           full = true;
           this.note(row, 'failed', 'Rpm_Error_StorageFull');
@@ -371,5 +375,19 @@ export class Importer {
 
   stop() {
     this.stopped = true;
+  }
+
+  // One row on its own, for an import from another app: uploaded (or found already held) with the given
+  // date added. Returns the track's id, or null when the row failed for good. A full store throws
+  // QuotaFull, so the caller can stop the whole import.
+  async importOne(row: ImportRow, addedAt: number): Promise<string | null> {
+    if (this.quota === null) {
+      try {
+        this.quota = await this.api.json('cloud/quota', readQuota);
+      } catch {
+        this.quota = null;
+      }
+    }
+    return this.withTries(row, addedAt);
   }
 }

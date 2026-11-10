@@ -231,6 +231,42 @@ describe('the upload sequence', () => {
     expect(calls.filter((call) => call === 'PUT rendition')).toHaveLength(2);
   });
 
+  it('sends the date added with complete: now for a normal import', async () => {
+    const spy = vi.spyOn(JSON, 'stringify');
+    const { queue, rows } = queueOf('A/1.flac');
+    const before = Math.floor(Date.now() / 1000);
+    await importer(queue).run(rows, 1, () => {});
+    const sent = spy.mock.calls.map(([value]) => value as { addedAt?: number }).find((value) => value && typeof value === 'object' && 'addedAt' in value);
+    spy.mockRestore();
+    expect(sent?.addedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it('imports one row with a given date and returns the new id', async () => {
+    const spy = vi.spyOn(JSON, 'stringify');
+    const { queue, rows } = queueOf('A/1.flac');
+    const id = await importer(queue).importOne(rows[0]!, 1_262_304_000);
+    const sent = spy.mock.calls.map(([value]) => value as { addedAt?: number }).find((value) => value && typeof value === 'object' && 'addedAt' in value);
+    spy.mockRestore();
+    expect(id).toBe('new-id');
+    expect(sent?.addedAt).toBe(1_262_304_000);
+    expect(rows[0]!.state).toBe('done');
+  });
+
+  it('imports one row the account already holds and returns that id', async () => {
+    held.set('a'.repeat(64), 'known-id');
+    answers['cloud/verify'] = () => json({ files: [{ rpmId: 'known-id', ok: true }] });
+    const { queue, rows } = queueOf('A/1.flac');
+    expect(await importer(queue).importOne(rows[0]!, 1_262_304_000)).toBe('known-id');
+    expect(rows[0]!.state).toBe('known');
+  });
+
+  it('returns null for a row that failed for good', async () => {
+    answers['cloud/upload/init'] = () => new Response('Invalid data found when processing input', { status: 400 });
+    const { queue, rows } = queueOf('A/1.flac');
+    expect(await importer(queue).importOne(rows[0]!, 1)).toBeNull();
+    expect(rows[0]!.state).toBe('failed');
+  });
+
   it('counts each row that is through, in every lane', async () => {
     const { queue, rows } = queueOf('A/1.flac', 'A/2.flac', 'A/3.flac');
     const finished = vi.fn();

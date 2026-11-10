@@ -23,6 +23,8 @@ export interface CloudTrackTags {
   truePeak?: number | null;
   favorite?: boolean;
   favoritedAt?: number;
+  // The song's star rating, 0 to 10 (half stars), 0 = not rated. Set only through PUT cloud/track-ratings.
+  rating?: number;
   advisory?: number;
   composer?: string | null;
   work?: string | null;

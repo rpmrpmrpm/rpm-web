@@ -41,6 +41,16 @@ export class CloudClient {
     await this.api.call('cloud/track-plays', { method: 'PUT', body: { deviceId, tracks } });
   }
 
+  // Song ratings (0 to 10) for tracks the account holds, at most 200 per call.
+  async putTrackRatings(tracks: { rpmId: string; rating: number }[]): Promise<void> {
+    await this.api.call('cloud/track-ratings', { method: 'PUT', body: { tracks } });
+  }
+
+  // Moves the date added of tracks the account holds earlier (unix seconds), at most 200 per call.
+  async putTrackAdded(tracks: { rpmId: string; addedAt: number }[]): Promise<void> {
+    await this.api.call('cloud/track-added', { method: 'PUT', body: { tracks } });
+  }
+
   async remove(rpmId: string): Promise<void> {
     await this.api.call(`cloud/file/${encodeURIComponent(rpmId)}`, { method: 'DELETE' });
   }
