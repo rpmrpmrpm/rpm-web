@@ -150,10 +150,17 @@ export class Playlists {
     });
   }
 
-  // Every track given goes on the end, repeats included. An import from another app writes a playlist out as
-  // the other app had it.
-  append(id: string, trackIds: readonly string[]): Promise<void> {
-    return this.change(id, (playlist) => ({ name: playlist.name, trackIds: [...playlist.trackIds, ...trackIds] }));
+  // An import from another app adding to a playlist it made. While the list is still exactly what the import
+  // made, it becomes the whole list in the other app's order, repeats included; once the person has changed it,
+  // the new tracks go on the end. Returns whether it became the whole list. The check runs on the list as it is
+  // when it is written, so a change made on another device meanwhile is kept.
+  async fillIn(id: string, made: readonly string[], whole: readonly string[], fresh: readonly string[]): Promise<boolean> {
+    let untouched = false;
+    await this.change(id, (playlist) => {
+      untouched = playlist.trackIds.length === made.length && playlist.trackIds.every((rpmId, i) => rpmId === made[i]);
+      return { name: playlist.name, trackIds: untouched ? [...whole] : [...playlist.trackIds, ...fresh] };
+    });
+    return untouched;
   }
 
   // One copy, the one at this place. A track can be on a playlist twice.

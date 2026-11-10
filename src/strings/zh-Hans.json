@@ -429,6 +429,7 @@
 "Migration_StageFinishing": "正在完成",
 "Migration_StagePlaylists": "正在添加播放列表",
 "Migration_StageTracks": "正在导入曲目",
+"Migration_StageWaiting": "正在等待连接",
 "Migration_Start": "开始导入",
 "Migration_Status": "正在从 {0} 导入：{2} 首中的第 {1} 首",
 "Migration_StoppedCloudFull": "已停止：你的云存储已满。",

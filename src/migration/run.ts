@@ -8,7 +8,7 @@ import { QuotaFull } from '../import/importer';
 import { albumBatches, LENGTH_TOLERANCE, lossless, mergeDetails, songKey } from './merge';
 import { deviceId, type SourceLibrary, type SourceTrack } from './model';
 import type { MigrationRecord, PlaylistOutcome } from './record';
-import { type MediaServer, SignInExpired } from './server';
+import { type MediaServer, ServerBlocked, SignInExpired } from './server';
 
 // A track the account holds, as the matching reads it. Times are unix seconds.
 export interface CatalogueTrack {
@@ -24,7 +24,8 @@ export interface CatalogueTrack {
 }
 
 export interface MigrationCloud {
-  quota(): Promise<{ used: number; quota: number; unlimited: boolean }>;
+  // Null when the quota could not be read (no connection, or the service failed). Null is not "full".
+  quota(): Promise<{ used: number; quota: number; unlimited: boolean } | null>;
   catalogue(): readonly CatalogueTrack[];
   mark(rpmId: string, favoritedAt: number): Promise<void>;
   putRatings(rows: { rpmId: string; rating: number }[]): Promise<void>;
@@ -32,17 +33,23 @@ export interface MigrationCloud {
   putAdded(rows: { rpmId: string; addedAt: number }[]): Promise<void>;
   playlists(): Promise<{ playlistId: string; name: string; folder: string[] }[]>;
   createPlaylist(name: string, trackIds: string[], folder: string[]): Promise<string>;
-  appendToPlaylist(id: string, trackIds: string[]): Promise<void>;
+  // Adds to a playlist this import made. When the list is still exactly `made`, it becomes `whole`, in the other
+  // app's order; when the person changed it, `fresh` goes on the end. Returns whether it became `whole`.
+  fillIn(id: string, made: string[], whole: string[], fresh: string[]): Promise<boolean>;
 }
 
-// One file into the account: its id, and whether the account held the audio already. Null when it failed
-// for good. A full store throws QuotaFull.
+// What one file into the account gives: its id and whether the account held the audio already; a failure,
+// final when the same file would fail again; or no answer at all from the service.
+export type ImportOutcome = { rpmId: string; known: boolean } | { failed: string; final: boolean } | { noAnswer: true };
+
+// One file into the account. A full store throws QuotaFull.
 export interface TrackImporter {
-  importOne(file: File, path: string, addedAt: number): Promise<{ rpmId: string; known: boolean } | null>;
+  importOne(file: File, path: string, addedAt: number): Promise<ImportOutcome>;
 }
 
 export type RunEnd = 'finished' | 'paused' | 'signin' | 'cloudfull';
-export type Stage = 'tracks' | 'playlists' | 'finishing';
+// 'waiting': the media server or the cloud gives no answer, and the run tries again by itself.
+export type Stage = 'tracks' | 'playlists' | 'finishing' | 'waiting';
 
 export interface RunProgress {
   stage: Stage;
@@ -63,6 +70,9 @@ export interface RunOptions {
   label: string; // shown in brackets on a renamed playlist
   progress: (progress: RunProgress) => void;
   signal: AbortSignal;
+  // The clock and the wait, replaced in tests so a backoff of minutes takes no time.
+  now?: () => number;
+  delay?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
 
 class Stop {
@@ -71,19 +81,32 @@ class Stop {
 
 const BATCH = 200;
 const seconds = (at: Date | null) => (at ? Math.floor(at.getTime() / 1000) : 0);
+// How long to wait for a server or the cloud that gives no answer: 5 seconds, doubling to at most a minute.
+const connectionWait = (waits: number) => Math.min(60_000, 5_000 * 2 ** Math.min(waits, 4));
+// The file a track is: the same file listed under two ids is uploaded once.
+const fileKey = (track: SourceTrack) => (track.file.kind === 'local' ? `local:${track.file.path}` : `remote:${track.file.key}`);
 const extensionOf = (track: SourceTrack) =>
   track.file.kind === 'remote' ? track.file.extension : (/\.[^./\\]+$/.exec(track.file.path)?.[0] ?? '').toLowerCase();
 
 export async function runMigration(options: RunOptions): Promise<RunEnd> {
   const { library, record, cloud, signal } = options;
+  const now = options.now ?? Date.now;
+  const delay = options.delay ?? wait;
+  const nowSeconds = () => Math.floor(now() / 1000);
+  // A date the server takes: after 1970 and not after now. A source date outside that is not a real one.
+  const sane = (at: number) => (at > 0 && at <= nowSeconds() ? at : 0);
   const bySource = new Map(library.tracks.map((t) => [t.sourceId, t]));
+  // The account's songs, and the ones this run puts there, so a song listed twice is uploaded once.
   const catalogue = new Map<string, CatalogueTrack[]>();
-  for (const track of cloud.catalogue()) {
+  const learn = (track: CatalogueTrack) => {
     const key = songKey(track.artist, track.album, track.title);
     catalogue.set(key, [...(catalogue.get(key) ?? []), track]);
-  }
+  };
+  for (const track of cloud.catalogue()) learn(track);
+  const byFile = new Map<string, string>();
 
   record.addFound(library.tracks.map((t) => t.sourceId));
+  record.reopenFailed();
 
   // A second run sends the source's current play totals for the tracks an earlier run brought in. They
   // replace the old ones on the source's device, so nothing is counted twice.
@@ -97,11 +120,13 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
   const albums: { at: number; bytes: number }[] = [];
   let current: string | null = null;
   let uploaded = 0;
-  const space = await cloud.quota();
+  // The bytes of the tracks that are through, kept as tracks finish rather than summed from every row.
+  let done = library.tracks.reduce((sum, t) => sum + (record.through(t.sourceId) ? t.sizeBytes : 0), 0);
+  const through = (track: SourceTrack, wasThrough: boolean) => {
+    if (!wasThrough && record.through(track.sourceId)) done += track.sizeBytes;
+  };
 
   const report = (stage: Stage) => {
-    const finished = [...record.rows('imported'), ...record.rows('already'), ...record.rows('notimported').filter((r) => r.attempts >= 5)];
-    const done = finished.reduce((sum, r) => sum + (bySource.get(r.sourceId)?.sizeBytes ?? 0), 0);
     let timeLeft: number | null = null;
     if (albums.length >= 3) {
       const recent = albums.slice(-10);
@@ -113,12 +138,20 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
   };
 
   try {
+    // An unreadable quota is not a full one: wait and read it again.
+    let space = await cloud.quota();
+    for (let waits = 0; space === null; waits++) {
+      report('waiting');
+      await delay(connectionWait(waits), signal);
+      space = await cloud.quota();
+    }
+
     for (;;) {
-      const due = new Set(record.due(Date.now()).map((r) => r.sourceId));
+      const due = new Set(record.due(now()).map((r) => r.sourceId));
       if (due.size === 0) {
         const next = record.nextTry();
         if (next === null) break;
-        await wait(Math.max(0, next - Date.now()), signal);
+        await delay(Math.max(0, next - now()), signal);
         continue;
       }
 
@@ -129,7 +162,7 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
         current = work[0]!.album || work[0]!.title;
         const sent = await albumRun(work);
         uploaded += sent;
-        albums.push({ at: Date.now(), bytes: work.reduce((sum, t) => sum + t.sizeBytes, 0) });
+        albums.push({ at: now(), bytes: work.reduce((sum, t) => sum + t.sizeBytes, 0) });
         await record.flush();
         report('tracks');
       }
@@ -159,9 +192,21 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
     let sent = 0;
     try {
       for (const track of work) {
-        if (signal.aborted) throw new Stop('paused');
-        sent += await trackRun(track, ratings, plays, added);
-        report('tracks');
+        // A server or a cloud that gives no answer is waited for, and the same track tried again. It costs the
+        // track no attempt: the network being down says nothing about the file.
+        for (let waits = 0; ; waits++) {
+          if (signal.aborted) throw new Stop('paused');
+          const wasThrough = record.through(track.sourceId);
+          const step = await trackRun(track, ratings, plays, added);
+          through(track, wasThrough);
+          report('tracks');
+          if (step !== 'again') {
+            sent += step;
+            break;
+          }
+          report('waiting');
+          await delay(connectionWait(waits), signal);
+        }
       }
     } finally {
       for (let i = 0; i < ratings.length; i += BATCH) await best(() => cloud.putRatings(ratings.slice(i, i + BATCH)));
@@ -176,7 +221,15 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
     ratings: { rpmId: string; rating: number }[],
     plays: { rpmId: string; plays: number; lastPlayedAt: number }[],
     added: { rpmId: string; addedAt: number }[],
-  ): Promise<number> {
+  ): Promise<number | 'again'> {
+    // A file this run put in the account already, listed again under another id: the same track.
+    const sameFile = byFile.get(fileKey(track));
+    if (sameFile) {
+      details(sameFile, { rating: 0, favorite: false, favoritedAt: 0, added: 0, lastPlayed: 0 }, track, ratings, plays, []);
+      record.note(track.sourceId, 'already', sameFile);
+      return 0;
+    }
+
     // A song the account holds already, by its tags and length: merged, not uploaded.
     const same = catalogue.get(songKey(track.artist, track.album, track.title))?.find((c) => Math.abs(c.durationSeconds - track.durationSeconds) <= LENGTH_TOLERANCE);
     if (same) {
@@ -206,24 +259,32 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
       } catch (error) {
         if (error instanceof SignInExpired) throw new Stop('signin');
         if (signal.aborted) throw new Stop('paused');
-        record.noteFailure(track.sourceId, 'Migration_ReasonReadFailed', Date.now());
+        if (error instanceof ServerBlocked) return 'again';
+        record.noteFailure(track.sourceId, 'Migration_ReasonReadFailed', now());
         return 0;
       }
     }
 
-    let result: { rpmId: string; known: boolean } | null;
+    let result: ImportOutcome;
     try {
-      result = await options.importer.importOne(file, path, seconds(track.added) || Math.floor(Date.now() / 1000));
+      result = await options.importer.importOne(file, path, sane(seconds(track.added)) || nowSeconds());
     } catch (error) {
       if (error instanceof QuotaFull) throw new Stop('cloudfull');
       throw error;
     }
-    if (!result) {
-      record.note(track.sourceId, 'notimported', null, 'Migration_ReasonReadFailed', null);
+    if ('noAnswer' in result) return 'again';
+    if ('failed' in result) {
+      if (result.final) record.note(track.sourceId, 'notimported', null, result.failed, null);
+      else record.noteFailure(track.sourceId, result.failed, now());
       return 0;
     }
 
-    const account = { rating: 0, favorite: false, favoritedAt: 0, added: result.known ? 0 : seconds(track.added), lastPlayed: 0 };
+    byFile.set(fileKey(track), result.rpmId);
+    learn({
+      rpmId: result.rpmId, artist: track.artist, album: track.album, title: track.title, durationSeconds: track.durationSeconds,
+      extension: extensionOf(track), favorite: false, rating: 0, addedAt: 0,
+    });
+    const account = { rating: 0, favorite: false, favoritedAt: 0, added: result.known ? 0 : sane(seconds(track.added)), lastPlayed: 0 };
     details(result.rpmId, account, track, ratings, plays, result.known ? added : []);
     record.note(track.sourceId, result.known ? 'already' : 'imported', result.rpmId);
     return result.known ? 0 : track.sizeBytes;
@@ -239,14 +300,18 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
   ) {
     const merged = mergeDetails(account, track);
     if (account.rating === 0 && merged.rating > 0) ratings.push({ rpmId, rating: merged.rating });
-    if (merged.favorite && !account.favorite) void best(() => cloud.mark(rpmId, merged.favoritedAt));
-    if (track.plays > 0 || track.lastPlayed) plays.push({ rpmId, plays: track.plays, lastPlayedAt: seconds(track.lastPlayed) });
-    if (merged.added > 0 && (account.added === 0 || merged.added < account.added)) added.push({ rpmId, addedAt: merged.added });
+    if (merged.favorite && !account.favorite) void best(() => cloud.mark(rpmId, sane(merged.favoritedAt) || nowSeconds()));
+    if (track.plays > 0 || track.lastPlayed) plays.push({ rpmId, plays: track.plays, lastPlayedAt: sane(seconds(track.lastPlayed)) });
+    // One date the server refuses would make it refuse the whole batch.
+    const addedAt = sane(merged.added);
+    if (addedAt > 0 && (account.added === 0 || addedAt < account.added)) added.push({ rpmId, addedAt });
   }
 
   // The source's playlists with the tracks that are in the account. The first time a playlist is created
-  // (a name taken by one the person made gets the source's name in brackets); after that only the new
-  // entries are added to the end. Nothing is removed or reordered.
+  // (a name taken by one the person made gets the source's name in brackets). After that the new entries are
+  // put in their places while the playlist is still exactly what the import made (a run that stopped at
+  // "cloud full" and was continued), and added to the end once the person has changed it. Nothing the person
+  // did is undone.
   async function playlistStep() {
     report('playlists');
     const trackIds = record.trackIds();
@@ -269,8 +334,12 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
           if (n > 0) left.set(id, n - 1);
           return n === 0;
         });
-        if (fresh.length > 0) await cloud.appendToPlaylist(node.playlistId, fresh.map((id) => trackIds.get(id)!));
-        const entries = [...before.entries, ...fresh];
+        let whole = false;
+        if (fresh.length > 0) {
+          const made = before.entries.filter((id) => trackIds.has(id)).map((id) => trackIds.get(id)!);
+          whole = await cloud.fillIn(node.playlistId, made, resolved.map((id) => trackIds.get(id)!), fresh.map((id) => trackIds.get(id)!));
+        }
+        const entries = whole ? resolved : [...before.entries, ...fresh];
         record.notePlaylist(playlist.sourceId, node.playlistId, entries);
         outcomes.push({ name: node.name, entries: entries.length, unmatched, wasSmart: playlist.smart, renamed: false });
         continue;

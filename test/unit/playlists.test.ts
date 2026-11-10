@@ -46,10 +46,22 @@ describe('playlists', () => {
     expect(puts[0]!.body).toMatchObject({ trackIds: ['a', 'b', 'c'], ifUnchangedSince: 7, folder: ['Folder'], name: 'Mine' });
   });
 
-  it('appends every track given, repeats included', async () => {
+  it('writes the whole list in order while it is what the import made', async () => {
     const { playlists, puts } = fake([list()]);
-    await playlists.append('p', ['b', 'c', 'b']);
-    expect(puts[0]!.body).toMatchObject({ trackIds: ['a', 'b', 'b', 'c', 'b'], ifUnchangedSince: 7 });
+    expect(await playlists.fillIn('p', ['a', 'b'], ['c', 'a', 'b', 'c'], ['c', 'c'])).toBe(true);
+    expect(puts[0]!.body).toMatchObject({ trackIds: ['c', 'a', 'b', 'c'], ifUnchangedSince: 7 });
+  });
+
+  it('adds the new tracks to the end, repeats included, once the person changed the list', async () => {
+    const { playlists, puts } = fake([list({ trackIds: ['b'] })]);
+    expect(await playlists.fillIn('p', ['a', 'b'], ['c', 'a', 'b', 'c'], ['c', 'c'])).toBe(false);
+    expect(puts[0]!.body).toMatchObject({ trackIds: ['b', 'c', 'c'] });
+  });
+
+  it('checks the list as the store holds it after a conflict', async () => {
+    const { playlists, puts } = fake([list()], 1);
+    expect(await playlists.fillIn('p', ['a', 'b'], ['c', 'a', 'b'], ['c'])).toBe(false);
+    expect(puts[0]!.body).toMatchObject({ trackIds: ['a', 'b', 'theirs', 'c'], ifUnchangedSince: 8 });
   });
 
   it('makes the same change to what the store holds after a conflict', async () => {

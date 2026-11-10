@@ -240,7 +240,10 @@
   const progress = $derived(migrating.progress);
   const done = $derived(progress ? progress.counts.imported + progress.counts.alreadyInRpm + progress.counts.notImported : 0);
   const stage = $derived(
-    progress?.stage === 'playlists' ? text('Migration_StagePlaylists') : progress?.stage === 'finishing' ? text('Migration_StageFinishing') : text('Migration_StageTracks'),
+    progress?.stage === 'playlists' ? text('Migration_StagePlaylists')
+      : progress?.stage === 'finishing' ? text('Migration_StageFinishing')
+      : progress?.stage === 'waiting' ? text('Migration_StageWaiting')
+      : text('Migration_StageTracks'),
   );
   const timeLeft = (secondsLeft: number) => {
     const minutes = Math.max(1, Math.round(secondsLeft / 60));

@@ -49,10 +49,35 @@ const MAX_ATTEMPTS = 5;
 // The same wait as a failed upload on the desktop: 1, 2, 4, 8, 16 minutes, then 16.
 const backoff = (attempts: number) => Math.min(2 ** Math.max(0, attempts), 16) * 60_000;
 
+type Tally = { found: number; imported: number; alreadyInRpm: number; notImported: number };
+
+// Which count a row is in: a not-imported row counts only once it has no attempts left.
+const counted = (row: TrackRow): keyof Tally | null =>
+  row.state === 'imported' ? 'imported' : row.state === 'already' ? 'alreadyInRpm' : row.state === 'notimported' && row.attempts >= MAX_ATTEMPTS ? 'notImported' : null;
+
 export class MigrationRecord {
   playlistOutcomes: PlaylistOutcome[] = [];
 
-  private constructor(private readonly store: RecordStore, private readonly state: RecordState) {}
+  // The counts, kept as rows change, so the progress after each track does not read every row. A library of
+  // tens of thousands of tracks would otherwise cost the square of its size.
+  private readonly tally: Tally = { found: 0, imported: 0, alreadyInRpm: 0, notImported: 0 };
+
+  private constructor(private readonly store: RecordStore, private readonly state: RecordState) {
+    for (const row of Object.values(state.tracks)) this.count(row, 1);
+  }
+
+  private count(row: TrackRow, by: 1 | -1) {
+    this.tally.found += by;
+    const key = counted(row);
+    if (key) this.tally[key] += by;
+  }
+
+  // Every change of a row goes through here, so the counts stay right.
+  private change(row: TrackRow, values: Partial<TrackRow>) {
+    this.count(row, -1);
+    Object.assign(row, values);
+    this.count(row, 1);
+  }
 
   static async open(store: RecordStore, userId: string, library: SourceLibrary): Promise<MigrationRecord> {
     // Playlist files have no library id; the sorted paths of the playlists stand in.
@@ -72,8 +97,18 @@ export class MigrationRecord {
   addFound(sourceIds: readonly string[]) {
     for (const id of sourceIds) {
       if (this.state.tracks[id]) continue;
-      this.state.tracks[id] = { state: 'found', attempts: 0, nextTry: 0, reason: null, detail: null, rpmId: null };
+      const row: TrackRow = { state: 'found', attempts: 0, nextTry: 0, reason: null, detail: null, rpmId: null };
+      this.state.tracks[id] = row;
       this.state.order.push(id);
+      this.count(row, 1);
+    }
+  }
+
+  // At the start of each run, the tracks that were not imported go back to waiting, with no attempts counted,
+  // so a run after the server was asleep or a file was missing tries them again.
+  reopenFailed() {
+    for (const row of Object.values(this.state.tracks)) {
+      if (row.state === 'notimported') this.change(row, { state: 'found', attempts: 0, nextTry: 0, reason: null, detail: null });
     }
   }
 
@@ -86,8 +121,11 @@ export class MigrationRecord {
 
   // When the next track waiting to be tried again is due, or null when none waits.
   nextTry(): number | null {
-    const waits = Object.values(this.state.tracks).filter((r) => r.state === 'notimported' && r.attempts < MAX_ATTEMPTS).map((r) => r.nextTry);
-    return waits.length > 0 ? Math.min(...waits) : null;
+    let next: number | null = null;
+    for (const row of Object.values(this.state.tracks)) {
+      if (row.state === 'notimported' && row.attempts < MAX_ATTEMPTS && (next === null || row.nextTry < next)) next = row.nextTry;
+    }
+    return next;
   }
 
   rows(state: TrackState): (TrackRow & { sourceId: string })[] {
@@ -98,29 +136,31 @@ export class MigrationRecord {
   note(sourceId: string, state: TrackState, rpmId: string | null = null, reason: string | null = null, detail: string | null = null) {
     const row = this.state.tracks[sourceId];
     if (!row) return;
-    Object.assign(row, { state, rpmId: rpmId ?? row.rpmId, reason, detail, attempts: state === 'notimported' ? MAX_ATTEMPTS : row.attempts });
+    this.change(row, { state, rpmId: rpmId ?? row.rpmId, reason, detail, attempts: state === 'notimported' ? MAX_ATTEMPTS : row.attempts });
   }
 
   noteFailure(sourceId: string, reason: string, now: number) {
     const row = this.state.tracks[sourceId];
     if (!row) return;
-    row.attempts += 1;
-    Object.assign(row, { state: 'notimported', reason, nextTry: now + backoff(row.attempts - 1) });
+    this.change(row, { state: 'notimported', reason, attempts: row.attempts + 1, nextTry: now + backoff(row.attempts) });
   }
 
   retry(sourceIds: readonly string[]) {
     for (const id of sourceIds) {
       const row = this.state.tracks[id];
-      if (row?.state === 'notimported') Object.assign(row, { state: 'found', attempts: 0, nextTry: 0, reason: null, detail: null });
+      if (row?.state === 'notimported') this.change(row, { state: 'found', attempts: 0, nextTry: 0, reason: null, detail: null });
     }
   }
 
   counts() {
-    const rows = Object.values(this.state.tracks);
-    const imported = rows.filter((r) => r.state === 'imported').length;
-    const alreadyInRpm = rows.filter((r) => r.state === 'already').length;
-    const notImported = rows.filter((r) => r.state === 'notimported' && r.attempts >= MAX_ATTEMPTS).length;
-    return { found: rows.length, imported, alreadyInRpm, notImported, waiting: rows.length - imported - alreadyInRpm - notImported };
+    const { found, imported, alreadyInRpm, notImported } = this.tally;
+    return { found, imported, alreadyInRpm, notImported, waiting: found - imported - alreadyInRpm - notImported };
+  }
+
+  // Whether a track is through: in the account, or not imported with no attempts left.
+  through(sourceId: string): boolean {
+    const row = this.state.tracks[sourceId];
+    return row !== undefined && counted(row) !== null;
   }
 
   // The track id of every source track that is in the account, by source id.
@@ -158,31 +198,36 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
+// One connection per call, closed when the call is done. The record is saved after every album, and a long
+// import would otherwise leave thousands of connections open. close() waits for the transaction to finish.
+async function using<T>(work: (db: IDBDatabase) => Promise<T>): Promise<T> {
+  const db = await openDatabase();
+  try {
+    return await work(db);
+  } finally {
+    db.close();
+  }
+}
+
 // The browser's store: one IndexedDB object per import, keyed by account, kind and library.
 export const browserRecords: RecordStore = {
-  async load(key) {
-    const db = await openDatabase();
-    return new Promise((done, fail) => {
+  load: (key) =>
+    using((db) => new Promise((done, fail) => {
       const request = db.transaction(RECORDS).objectStore(RECORDS).get(key);
       request.onsuccess = () => done((request.result as RecordState | undefined) ?? null);
       request.onerror = () => fail(request.error);
-    });
-  },
-  async save(state) {
-    const db = await openDatabase();
-    await new Promise<void>((done, fail) => {
+    })),
+  save: (state) =>
+    using((db) => new Promise<void>((done, fail) => {
       const tx = db.transaction(RECORDS, 'readwrite');
       tx.objectStore(RECORDS).put(state, state.key);
       tx.oncomplete = () => done();
       tx.onerror = () => fail(tx.error);
-    });
-  },
-  async list(prefix) {
-    const db = await openDatabase();
-    return new Promise((done, fail) => {
+    })),
+  list: (prefix) =>
+    using((db) => new Promise((done, fail) => {
       const request = db.transaction(RECORDS).objectStore(RECORDS).getAll();
       request.onsuccess = () => done((request.result as RecordState[]).filter((r) => r.key.startsWith(prefix)));
       request.onerror = () => fail(request.error);
-    });
-  },
+    })),
 };

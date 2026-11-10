@@ -429,6 +429,7 @@
 "Migration_StageFinishing": "Terminando",
 "Migration_StagePlaylists": "Añadiendo listas",
 "Migration_StageTracks": "Importando pistas",
+"Migration_StageWaiting": "Esperando la conexión",
 "Migration_Start": "Iniciar importación",
 "Migration_Status": "Importando desde {0}: {1} de {2}",
 "Migration_StoppedCloudFull": "Detenido: tu almacenamiento en la nube está lleno.",

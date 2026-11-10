@@ -4,8 +4,8 @@ import { QuotaFull } from '../../src/import/importer';
 import { albumBatches, estimate, mergeDetails } from '../../src/migration/merge';
 import { deviceId, type RemoteFile, type SourceLibrary, type SourceTrack } from '../../src/migration/model';
 import { MemoryRecordStore, MigrationRecord } from '../../src/migration/record';
-import { runMigration, type CatalogueTrack, type MigrationCloud, type TrackImporter } from '../../src/migration/run';
-import { SignInExpired, type MediaServer } from '../../src/migration/server';
+import { runMigration, type CatalogueTrack, type MigrationCloud, type RunProgress, type TrackImporter } from '../../src/migration/run';
+import { ServerBlocked, SignInExpired, type MediaServer } from '../../src/migration/server';
 
 const Y2015 = new Date('2015-03-04T05:06:07Z');
 const Y2021 = new Date('2021-01-02T03:04:05Z');
@@ -30,23 +30,29 @@ class FakeImporter implements TrackImporter {
   known = new Set<string>();
   failing = new Set<string>();
   full = new Set<string>();
+  // Answers to give before the real one, per path: no answer at all, or a failure to try again later.
+  first = new Map<string, ('noanswer' | 'again')[]>();
   async importOne(file: File, path: string, addedAt: number) {
     this.calls.push({ path, addedAt });
     if (this.full.has(path)) throw new QuotaFull();
-    if (this.failing.has(path)) return null;
+    const next = this.first.get(path)?.shift();
+    if (next === 'noanswer') return { noAnswer: true as const };
+    if (next === 'again') return { failed: 'Cloud_FailUnknown', final: false };
+    if (this.failing.has(path)) return { failed: 'Cloud_FailUnreadable', final: true };
     return { rpmId: (this.known.has(path) ? 'held-' : 'id-') + file.name, known: this.known.has(path) };
   }
 }
 
 class FakeCloud implements MigrationCloud {
   space = { used: 0, quota: 0, unlimited: true };
+  quotaFailures = 0;
   tracks: CatalogueTrack[] = [];
   marks: { rpmId: string; at: number }[] = [];
   ratings: { rpmId: string; rating: number }[] = [];
   plays: { device: string; rows: { rpmId: string; plays: number; lastPlayedAt: number }[] }[] = [];
   added: { rpmId: string; addedAt: number }[] = [];
   lists: { playlistId: string; name: string; folder: string[]; trackIds: string[] }[] = [];
-  async quota() { return this.space; }
+  async quota() { return this.quotaFailures-- > 0 ? null : this.space; }
   catalogue() { return this.tracks; }
   async mark(rpmId: string, at: number) { this.marks.push({ rpmId, at }); }
   async putRatings(rows: { rpmId: string; rating: number }[]) { this.ratings.push(...rows); }
@@ -59,14 +65,24 @@ class FakeCloud implements MigrationCloud {
     return playlistId;
   }
   async appendToPlaylist(id: string, trackIds: string[]) { this.lists.find((l) => l.playlistId === id)!.trackIds.push(...trackIds); }
+  async fillIn(id: string, made: string[], whole: string[], fresh: string[]) {
+    const list = this.lists.find((l) => l.playlistId === id)!;
+    const untouched = list.trackIds.length === made.length && list.trackIds.every((t, i) => t === made[i]);
+    list.trackIds = untouched ? [...whole] : [...list.trackIds, ...fresh];
+    return untouched;
+  }
 }
 
 class FakeServer implements MediaServer {
   readonly kind = 'jellyfin' as const;
   expired = false;
+  unreachable = 0;
+  opens = 0;
   async read(): Promise<SourceLibrary> { throw new Error('not used'); }
   async open(file: RemoteFile) {
+    this.opens++;
     if (this.expired) throw new SignInExpired();
+    if (this.unreachable-- > 0) throw new ServerBlocked();
     return new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/flac' });
   }
 }
@@ -77,16 +93,21 @@ const picked = (lib: SourceLibrary, skip: string[] = []) =>
     return [t.sourceId, { file: new File([new Uint8Array(4)], path.split('/').pop()!), path: path.slice(1) }];
   }));
 
-async function run(lib: SourceLibrary, options: { store?: MemoryRecordStore; importer?: FakeImporter; cloud?: FakeCloud; server?: MediaServer | null; skip?: string[]; signal?: AbortSignal; onProgress?: () => void } = {}) {
+async function run(lib: SourceLibrary, options: { store?: MemoryRecordStore; importer?: FakeImporter; cloud?: FakeCloud; server?: MediaServer | null; skip?: string[]; signal?: AbortSignal; onProgress?: (p: RunProgress) => void } = {}) {
   const store = options.store ?? new MemoryRecordStore();
   const record = await MigrationRecord.open(store, 'user-1', lib);
   const importer = options.importer ?? new FakeImporter();
   const cloud = options.cloud ?? new FakeCloud();
+  // A clock the waits move on, so a backoff of minutes takes no time.
+  let clock = Date.parse('2026-01-01T00:00:00Z');
+  const stages: string[] = [];
   const end = await runMigration({
     library: lib, record, importer, cloud, server: options.server ?? null, picked: picked(lib, options.skip),
-    label: lib.name, progress: () => options.onProgress?.(), signal: options.signal ?? new AbortController().signal,
+    label: lib.name, progress: (p) => { stages.push(p.stage); options.onProgress?.(p); }, signal: options.signal ?? new AbortController().signal,
+    now: () => clock,
+    delay: async (ms) => { clock += ms; },
   });
-  return { end, record, importer, cloud, store };
+  return { end, record, importer, cloud, store, stages };
 }
 
 describe('the web import run', () => {
@@ -232,6 +253,98 @@ describe('the web import run', () => {
       { name: 'Mix (MusicBee)', entries: 3, unmatched: 0, wasSmart: false, renamed: true },
       { name: 'Late', entries: 1, unmatched: 2, wasSmart: true, renamed: false },
     ]);
+  });
+
+  it('waits for the connection and tries the same track again, without counting a failure', async () => {
+    const importer = new FakeImporter();
+    importer.first.set('Users/test/Music/Band/Record/One.flac', ['noanswer', 'noanswer', 'noanswer', 'noanswer', 'noanswer', 'noanswer']);
+
+    const { end, record, stages } = await run(library([local('s1', 'Record', 'One')]), { importer });
+
+    expect(end).toBe('finished');
+    expect(record.counts().imported).toBe(1);
+    expect(importer.calls).toHaveLength(7);
+    expect(stages).toContain('waiting');
+  });
+
+  it('tries an upload that failed again later, and notes one the cloud cannot take', async () => {
+    const importer = new FakeImporter();
+    importer.first.set('Users/test/Music/Band/Record/One.flac', ['again', 'again']);
+    importer.failing.add('Users/test/Music/Band/Record/Two.flac');
+
+    const { end, record } = await run(library([local('s1', 'Record', 'One'), local('s2', 'Record', 'Two')]), { importer });
+
+    expect(end).toBe('finished');
+    expect(record.rows('imported').map((r) => r.sourceId)).toEqual(['s1']);
+    expect(record.rows('notimported')).toEqual([expect.objectContaining({ sourceId: 's2', reason: 'Cloud_FailUnreadable' })]);
+  });
+
+  it('waits for a quota that could not be read instead of stopping', async () => {
+    const cloud = new FakeCloud();
+    cloud.space = { used: 0, quota: 1_000_000, unlimited: false };
+    cloud.quotaFailures = 3;
+
+    const { end, record, stages } = await run(library([local('s1', 'Record', 'One')]), { cloud });
+
+    expect(end).toBe('finished');
+    expect(record.counts().imported).toBe(1);
+    expect(stages).toContain('waiting');
+  });
+
+  it('waits for a media server that gives no answer, without counting a failure', async () => {
+    const server = new FakeServer();
+    server.unreachable = 8;
+
+    const { end, record } = await run(library([remote('j1', 'Record', 'One')], { kind: 'jellyfin' }), { server });
+
+    expect(end).toBe('finished');
+    expect(record.counts().imported).toBe(1);
+    expect(server.opens).toBe(9);
+  });
+
+  it('tries the tracks that failed before on a new run', async () => {
+    const store = new MemoryRecordStore();
+    const lib = library([local('s1', 'Record', 'One')]);
+    await run(lib, { store, skip: ['s1'] });
+
+    const { end, record } = await run(lib, { store });
+
+    expect(end).toBe('finished');
+    expect(record.counts()).toEqual({ found: 1, imported: 1, alreadyInRpm: 0, notImported: 0, waiting: 0 });
+  });
+
+  it('uploads one file listed under two ids once', async () => {
+    const lib = library([local('i1', 'Record', 'One'), { ...local('i2', 'Record', 'One (live)'), file: { kind: 'local', path: '/Users/test/Music/Band/Record/One.flac' } }]);
+    const importer = new FakeImporter();
+
+    const { record } = await run(lib, { importer });
+
+    expect(importer.calls).toHaveLength(1);
+    expect(record.rows('already')).toEqual([expect.objectContaining({ sourceId: 'i2', rpmId: 'id-One.flac' })]);
+  });
+
+  it('uploads one song listed twice with the same tags once', async () => {
+    const lib = library([local('i1', 'Record', 'One'), { ...local('i2', 'Record', 'One'), file: { kind: 'local', path: '/Users/test/Music/Copy/One.flac' } }]);
+    const importer = new FakeImporter();
+
+    await run(lib, { importer });
+
+    expect(importer.calls).toHaveLength(1);
+  });
+
+  it('puts the tracks that arrive after a stop in their playlist places', async () => {
+    const store = new MemoryRecordStore();
+    const cloud = new FakeCloud();
+    cloud.space = { used: 0, quota: 150, unlimited: false };
+    const tracks = [local('a1', 'First', 'Alpha'), local('b1', 'Second', 'Beta'), local('b2', 'Second', 'Gamma')];
+    const lib = library(tracks, { playlists: [{ sourceId: 'p1', name: 'Mix', folder: [], smart: false, trackIds: ['b1', 'a1', 'b2'], unresolved: [] }] });
+
+    const first = await run(lib, { store, cloud });
+    cloud.space = { used: 100, quota: 1000, unlimited: false };
+    await run(lib, { store, cloud });
+
+    expect(first.end).toBe('cloudfull');
+    expect(cloud.lists[0]!.trackIds).toEqual(['id-Beta.flac', 'id-Alpha.flac', 'id-Gamma.flac']);
   });
 
   it('appends only new playlist entries on a second run', async () => {

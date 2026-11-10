@@ -70,6 +70,8 @@ export function classify(said: string): { key: string; permanent: boolean } {
 
 export class QuotaFull extends Error {}
 
+export type RowOutcome = { rpmId: string } | { failed: string; final: boolean; noAnswer: boolean };
+
 function hex(bytes: ArrayBuffer): string {
   return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
@@ -318,10 +320,12 @@ export class Importer {
     return rpmId;
   }
 
-  private async withTries(row: ImportRow, addedAt: number): Promise<string | null> {
+  // The row's id once it is in the account; or why it failed, and whether that failure is final (the same bytes
+  // would fail again) or the service gave no answer at all (status 0: the network is down).
+  private async withTries(row: ImportRow, addedAt: number): Promise<RowOutcome> {
     for (let attempt = 1; ; attempt++) {
       try {
-        return await this.importRow(row, addedAt);
+        return { rpmId: await this.importRow(row, addedAt) };
       } catch (error) {
         if (error instanceof QuotaFull) throw error;
         if (error instanceof ApiError && (error.status === 402 || error.status === 413 || error.status === 507)) throw new QuotaFull();
@@ -329,7 +333,7 @@ export class Importer {
         const { key, permanent } = classify(error instanceof Error ? error.message : String(error));
         if (permanent || attempt >= TRIES) {
           this.note(row, 'failed', key);
-          return null;
+          return { failed: key, final: permanent, noAnswer: error instanceof ApiError && error.status === 0 };
         }
       }
     }
@@ -378,9 +382,9 @@ export class Importer {
   }
 
   // One row on its own, for an import from another app: uploaded (or found already held) with the given
-  // date added. Returns the track's id, or null when the row failed for good. A full store throws
-  // QuotaFull, so the caller can stop the whole import.
-  async importOne(row: ImportRow, addedAt: number): Promise<string | null> {
+  // date added. Returns the track's id, or why it failed. A full store throws QuotaFull, so the caller can
+  // stop the whole import.
+  async importOne(row: ImportRow, addedAt: number): Promise<RowOutcome> {
     if (this.quota === null) {
       try {
         this.quota = await this.api.json('cloud/quota', readQuota);

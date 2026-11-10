@@ -247,7 +247,7 @@ describe('the upload sequence', () => {
     const id = await importer(queue).importOne(rows[0]!, 1_262_304_000);
     const sent = spy.mock.calls.map(([value]) => value as { addedAt?: number }).find((value) => value && typeof value === 'object' && 'addedAt' in value);
     spy.mockRestore();
-    expect(id).toBe('new-id');
+    expect(id).toEqual({ rpmId: 'new-id' });
     expect(sent?.addedAt).toBe(1_262_304_000);
     expect(rows[0]!.state).toBe('done');
   });
@@ -256,15 +256,25 @@ describe('the upload sequence', () => {
     held.set('a'.repeat(64), 'known-id');
     answers['cloud/verify'] = () => json({ files: [{ rpmId: 'known-id', ok: true }] });
     const { queue, rows } = queueOf('A/1.flac');
-    expect(await importer(queue).importOne(rows[0]!, 1_262_304_000)).toBe('known-id');
+    expect(await importer(queue).importOne(rows[0]!, 1_262_304_000)).toEqual({ rpmId: 'known-id' });
     expect(rows[0]!.state).toBe('known');
   });
 
-  it('returns null for a row that failed for good', async () => {
-    answers['cloud/upload/init'] = () => new Response('Invalid data found when processing input', { status: 400 });
+  it('says why a row failed for good', async () => {
     const { queue, rows } = queueOf('A/1.flac');
-    expect(await importer(queue).importOne(rows[0]!, 1)).toBeNull();
+    const broken = { canonical: async () => { throw new Error('Invalid data found when processing input'); } };
+    expect(await importer(queue, broken).importOne(rows[0]!, 1)).toEqual({ failed: 'Cloud_FailUnreadable', final: true, noAnswer: false });
     expect(rows[0]!.state).toBe('failed');
+  });
+
+  it('says when a failure may pass, and when the service gave no answer at all', async () => {
+    answers['cloud/upload/init'] = () => new Response('busy', { status: 503 });
+    const busy = queueOf('A/1.flac');
+    expect(await importer(busy.queue).importOne(busy.rows[0]!, 1)).toEqual({ failed: 'Cloud_FailUnknown', final: false, noAnswer: false });
+
+    answers['cloud/upload/init'] = () => { throw new TypeError('Failed to fetch'); };
+    const offline = queueOf('A/1.flac');
+    expect(await importer(offline.queue).importOne(offline.rows[0]!, 1)).toEqual({ failed: 'Cloud_FailUnknown', final: false, noAnswer: true });
   });
 
   it('counts each row that is through, in every lane', async () => {

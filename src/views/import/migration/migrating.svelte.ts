@@ -107,15 +107,21 @@ function trackImporter(): TrackImporter {
   const importer = new Importer(api, importMedia, browserTransfers, catalogue, queue);
   return {
     async importOne(file, path, addedAt) {
+      const unreadable = { failed: 'Migration_ReasonReadFailed', final: true };
       const [row] = queue.add([{ file, path }]);
-      if (!row) return null;
+      if (!row) return unreadable;
       try {
-        if (row.state !== 'reading') return null;
-        const { tags, hasArt } = await importMedia.tags(file);
-        queue.read(row, tags, hasArt);
-        const rpmId = await importer.importOne(row, addedAt);
+        if (row.state !== 'reading') return unreadable;
+        try {
+          const { tags, hasArt } = await importMedia.tags(file);
+          queue.read(row, tags, hasArt);
+        } catch {
+          return unreadable;
+        }
+        const outcome = await importer.importOne(row, addedAt);
+        if ('failed' in outcome) return outcome.noAnswer ? { noAnswer: true } : { failed: outcome.failed, final: outcome.final };
         // The importer moved the row on; it is read again rather than through the narrowed check above.
-        return rpmId ? { rpmId, known: (row as ImportRow).state === 'known' } : null;
+        return { rpmId: outcome.rpmId, known: (row as ImportRow).state === 'known' };
       } finally {
         queue.remove([row]);
       }
@@ -124,9 +130,7 @@ function trackImporter(): TrackImporter {
 }
 
 const migrationCloud: MigrationCloud = {
-  async quota() {
-    return (await cloudSpace()) ?? { used: 0, quota: 0, unlimited: true };
-  },
+  quota: cloudSpace,
   catalogue(): CatalogueTrack[] {
     return catalogue.tracks.map((t) => ({
       rpmId: t.rpmId,
@@ -152,7 +156,7 @@ const migrationCloud: MigrationCloud = {
   async createPlaylist(name, trackIds, folder) {
     return (await playlists.create(name, trackIds, folder)).playlistId;
   },
-  appendToPlaylist: (id, trackIds) => playlists.append(id, trackIds),
+  fillIn: (id, made, whole, fresh) => playlists.fillIn(id, made, whole, fresh),
 };
 
 const what = (artist: string, title: string) => (artist ? `${artist} - ${title}` : title);
