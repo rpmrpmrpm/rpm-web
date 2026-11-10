@@ -456,7 +456,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     padding: 14px 8px;
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.13);
@@ -467,8 +467,18 @@
   .tile:hover {
     background: rgba(255, 255, 255, 0.12);
   }
+  /* The same sizes as the tiles in the desktop's import window. */
+  .tile .icon {
+    font-size: 19px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 6px;
+  }
+  .tile strong {
+    font-size: 12.5px;
+    font-weight: 600;
+  }
   .tile span {
-    font-size: 11px;
+    font-size: 10.5px;
     color: rgba(255, 255, 255, 0.55);
     text-align: center;
   }
