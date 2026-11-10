@@ -427,6 +427,26 @@ describe('the record of an import', () => {
   });
 });
 
+describe('other imports', () => {
+  it('names the other libraries that brought tracks in, for the summary', async () => {
+    const store = new MemoryRecordStore();
+    const musicbee = library([local('s1', 'Record', 'One')]);
+    const itunes = library([local('s1', 'Record', 'One')], { kind: 'itunes', libraryId: 'it-1', name: 'iTunes' });
+    expect(await MigrationRecord.others(store, 'user-1', musicbee)).toEqual([]);
+
+    const record = await MigrationRecord.open(store, 'user-1', itunes);
+    record.addFound(['s1']);
+    await record.flush();
+    expect(await MigrationRecord.others(store, 'user-1', musicbee)).toEqual([]);
+
+    record.note('s1', 'imported', 'id-1');
+    await record.flush();
+    expect(await MigrationRecord.others(store, 'user-1', musicbee)).toEqual(['iTunes']);
+    expect(await MigrationRecord.others(store, 'user-1', itunes)).toEqual([]);
+    expect(await MigrationRecord.others(store, 'user-2', musicbee)).toEqual([]);
+  });
+});
+
 describe('the rules shared with the desktop', () => {
   it('merges details as the desktop does', () => {
     const source = local('s', 'R', 'T', { rating: 9, favorite: true, added: Y2015, lastPlayed: Y2021 });

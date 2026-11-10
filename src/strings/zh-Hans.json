@@ -443,6 +443,7 @@
 "Migration_StoppedSignIn": "已停止：服务器要求重新登录。",
 "Migration_SummaryAlready": "约 {0} 首已在 rpm 中",
 "Migration_SummaryKicker": "找到的内容",
+"Migration_SummaryOtherImports": "你之前导入过 {0}。两个资料库中都有的播放次数会被计算两次。",
 "Migration_SummaryPlaylists": "{0} 个播放列表",
 "Migration_SummaryPlaylistsOne": "1 个播放列表",
 "Migration_SummarySkipped": "{0} 个项目不会导入（流媒体、视频、播客，或不在这台电脑上的文件）",

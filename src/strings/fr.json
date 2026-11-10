@@ -443,6 +443,7 @@
 "Migration_StoppedSignIn": "Arrêté : le serveur demande de vous reconnecter.",
 "Migration_SummaryAlready": "Environ {0} déjà dans rpm",
 "Migration_SummaryKicker": "Ce qui a été trouvé",
+"Migration_SummaryOtherImports": "Vous avez déjà importé {0}. Les écoutes présentes dans les deux bibliothèques sont comptées deux fois.",
 "Migration_SummaryPlaylists": "{0} playlists",
 "Migration_SummaryPlaylistsOne": "1 playlist",
 "Migration_SummarySkipped": "{0} éléments ne sont pas importés (flux, vidéos, podcasts, ou fichiers absents de cet ordinateur)",

@@ -93,6 +93,16 @@ export class MigrationRecord {
     return state && state.finishedAt === 0 ? new MigrationRecord(store, state).counts() : null;
   }
 
+  // The names of the other source libraries that brought tracks into this account. Each one counts its plays
+  // on a device of its own, so two that hold the same history count those plays twice; the summary says so.
+  static async others(store: RecordStore, userId: string, library: SourceLibrary): Promise<string[]> {
+    const { key } = await MigrationRecord.keys(userId, library);
+    return (await store.list(`${userId}:`))
+      .filter((r) => r.key !== key && Object.values(r.tracks).some((t) => t.state === 'imported' || t.state === 'already'))
+      .sort((a, b) => a.startedAt - b.startedAt)
+      .map((r) => r.name);
+  }
+
   static async open(store: RecordStore, userId: string, library: SourceLibrary): Promise<MigrationRecord> {
     const { libraryKey, key } = await MigrationRecord.keys(userId, library);
     const state = (await store.load(key)) ?? {

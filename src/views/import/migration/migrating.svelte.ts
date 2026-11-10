@@ -173,6 +173,17 @@ export async function unfinishedImport(library: SourceLibrary): Promise<ReturnTy
   }
 }
 
+// The other libraries imported into this account before, for the summary's note on plays counted twice.
+export async function otherImports(library: SourceLibrary): Promise<string[]> {
+  const user = session.user?.userId;
+  if (!user) return [];
+  try {
+    return await MigrationRecord.others(browserRecords, user, library);
+  } catch {
+    return [];
+  }
+}
+
 // how: continue where an earlier import of this library stopped (or start fresh when there was none), or start
 // over and check every track again. retry: the tracks the report's "Try again" starts over.
 export async function startMigration(library: SourceLibrary, connection: Connection, label: string, how: 'continue' | 'startover', retry: string[]): Promise<void> {

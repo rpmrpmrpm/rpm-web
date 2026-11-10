@@ -16,7 +16,7 @@
   import { text } from '../../../strings/loc';
   import Window from '../Window.svelte';
   import {
-    cloudSpace, fetcher, jellyfinDevice, migrating, pauseMigration, plexClient, serverFor, size, startMigration, summaryOf, unfinished, unfinishedImport,
+    cloudSpace, fetcher, jellyfinDevice, migrating, pauseMigration, plexClient, serverFor, size, startMigration, summaryOf, unfinished, unfinishedImport, otherImports,
     type Connection,
   } from './migrating.svelte';
 
@@ -43,6 +43,8 @@
   let space = $state<{ used: number; quota: number; unlimited: boolean } | null>(null);
   // An earlier import of the library on the summary that did not finish, or null.
   let pastRun = $state<{ found: number; imported: number; alreadyInRpm: number; notImported: number } | null>(null);
+  // Other libraries imported before: plays they share with this one are counted twice.
+  let others = $state<string[]>([]);
   let open = $state<{ kind: SourceKind; name: string }[]>([]);
   let work: AbortController | null = null;
 
@@ -122,6 +124,7 @@
       connection = next ?? { kind: lib.kind as 'musicbee' | 'itunes' | 'playlistfiles', picked: lib.kind === 'playlistfiles' ? pickedForPlaylists(lib) : matchPicked(lib, musicFolder) };
       space = await cloudSpace();
       pastRun = await unfinishedImport(lib);
+      others = await otherImports(lib);
       face = 'summary';
     } catch (caught) {
       face = 'connect';
@@ -328,6 +331,7 @@
     {#if library.playlists.length}<p class="line">{library.playlists.length === 1 ? text('Migration_SummaryPlaylistsOne') : text('Migration_SummaryPlaylists', count(library.playlists.length))}</p>{/if}
     {#if summary.aboutAlreadyInRpm > 0}<p class="line">{text('Migration_SummaryAlready', count(summary.aboutAlreadyInRpm))}</p>{/if}
     {#if library.skipped.length}<p class="quiet">{text('Migration_SummarySkipped', count(library.skipped.length))}</p>{/if}
+    {#if others.length}<p class="quiet">{text('Migration_SummaryOtherImports', others.join(', '))}</p>{/if}
     {#if space && !space.unlimited}
       {@const free = Math.max(0, space.quota - space.used)}
       <p class="quiet">{text(free >= summary.aboutBytesNeeded ? 'Migration_SpaceCloud' : 'Migration_SpaceCloudShort', size(summary.aboutBytesNeeded), size(free))}</p>

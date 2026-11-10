@@ -443,6 +443,7 @@
 "Migration_StoppedSignIn": "Detenido: el servidor pide que inicies sesión de nuevo.",
 "Migration_SummaryAlready": "Unas {0} ya están en rpm",
 "Migration_SummaryKicker": "Lo que se encontró",
+"Migration_SummaryOtherImports": "Ya importaste {0}. Las reproducciones que tienen ambas bibliotecas se cuentan dos veces.",
 "Migration_SummaryPlaylists": "{0} listas",
 "Migration_SummaryPlaylistsOne": "1 lista",
 "Migration_SummarySkipped": "{0} elementos no se importan (streams, vídeos, podcasts o archivos que no están en este ordenador)",

@@ -443,6 +443,7 @@
 "Migration_StoppedSignIn": "Angehalten: Der Server verlangt eine erneute Anmeldung.",
 "Migration_SummaryAlready": "Etwa {0} bereits in rpm",
 "Migration_SummaryKicker": "Gefunden",
+"Migration_SummaryOtherImports": "Sie haben {0} bereits importiert. Wiedergaben, die beide Mediatheken enthalten, werden doppelt gezählt.",
 "Migration_SummaryPlaylists": "{0} Playlists",
 "Migration_SummaryPlaylistsOne": "1 Playlist",
 "Migration_SummarySkipped": "{0} Elemente werden nicht importiert (Streams, Videos, Podcasts oder Dateien, die nicht auf diesem Computer liegen)",

@@ -443,6 +443,7 @@
 "Migration_StoppedSignIn": "Stopped: the server asks you to sign in again.",
 "Migration_SummaryAlready": "About {0} already in rpm",
 "Migration_SummaryKicker": "What was found",
+"Migration_SummaryOtherImports": "You imported {0} before. Plays that both libraries hold are counted twice.",
 "Migration_SummaryPlaylists": "{0} playlists",
 "Migration_SummaryPlaylistsOne": "1 playlist",
 "Migration_SummarySkipped": "{0} items are not imported (streams, videos, podcasts, or files that are not on this computer)",
