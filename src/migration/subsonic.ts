@@ -88,9 +88,20 @@ export class SubsonicServer implements MediaServer {
     return { kind: 'navidrome', libraryId: await shortHash(`${server}|${this.login.user}`), name: new URL(server).host, tracks, playlists, skipped: [] };
   }
 
-  // "download" gives the original file; "stream" could transcode and count as a play.
-  open(file: RemoteFile, signal?: AbortSignal): Promise<Blob> {
-    return blob(this.fetcher, subsonicUrl(this.login, 'download', 'id=' + encodeURIComponent(file.key)), { signal });
+  // "download" gives the original file; "stream" could transcode and count as a play. A refused download still
+  // has status 200: the body is a subsonic-response error, not the file.
+  async open(file: RemoteFile, signal?: AbortSignal): Promise<Blob> {
+    const body = await blob(this.fetcher, subsonicUrl(this.login, 'download', 'id=' + encodeURIComponent(file.key)), { signal });
+    if (!/^(application\/json|text\/xml|application\/xml)\b/.test(body.type)) return body;
+    let error: Record<string, unknown> = {};
+    try {
+      error = obj(obj(obj(JSON.parse(await body.text()))['subsonic-response'])['error']);
+    } catch {
+      throw new Error('The server answered the download with text instead of the file.');
+    }
+    const code = num(error['code']);
+    if (code === 40 || code === 41) throw new SignInExpired();
+    throw new Error(`The server refused the download: ${code} ${str(error['message'])}`.trim());
   }
 }
 

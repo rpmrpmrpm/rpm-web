@@ -206,6 +206,18 @@ describe('Navidrome and Subsonic', () => {
     expect(seen.filter((s) => s.url.pathname === '/rest/search3').map((s) => s.url.searchParams.get('songOffset'))).toEqual(['0', '2']);
   });
 
+  it('turns a download refused with error 40 into SignInExpired, not a file', async () => {
+    // Subsonic servers answer a refused download with status 200 and an error as the body.
+    const { fetcher } = fake(() => sample('subsonic/error-40.json'));
+    await expect(new SubsonicServer(fetcher, login, 2).open({ kind: 'remote', key: 's1', extension: '.flac', size: 3 })).rejects.toBeInstanceOf(SignInExpired);
+  });
+
+  it('turns a download refused with another error into a failure, not a file', async () => {
+    const refusal = { 'subsonic-response': { status: 'failed', error: { code: 70, message: 'Song not found' } } };
+    const { fetcher } = fake(() => new Response(JSON.stringify(refusal), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
+    await expect(new SubsonicServer(fetcher, login, 2).open({ kind: 'remote', key: 's1', extension: '.flac', size: 3 })).rejects.toThrow('Song not found');
+  });
+
   it('turns error 40 into SignInExpired during a read and SignInFailed at the check', async () => {
     const { fetcher } = fake(() => sample('subsonic/error-40.json'));
     await expect(new SubsonicServer(fetcher, login, 2).read(() => {})).rejects.toBeInstanceOf(SignInExpired);
