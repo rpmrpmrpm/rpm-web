@@ -347,6 +347,21 @@ describe('the web import run', () => {
     expect(cloud.lists[0]!.trackIds).toEqual(['id-Beta.flac', 'id-Alpha.flac', 'id-Gamma.flac']);
   });
 
+  it('sends no date before 1970 or after now', async () => {
+    const future = new Date('2099-01-01T00:00:00Z');
+    const old = new Date('1950-01-01T00:00:00Z');
+    const cloud = new FakeCloud();
+    cloud.tracks = [{ rpmId: 'cloud-1', artist: 'Band', album: 'Record', title: 'Two', durationSeconds: 200, extension: '.flac', favorite: false, rating: 0, addedAt: seconds(Y2021) }];
+    const lib = library([local('s1', 'Record', 'One', { added: future, lastPlayed: future, plays: 1 }), local('s2', 'Record', 'Two', { added: old })]);
+
+    const { importer } = await run(lib, { cloud });
+
+    const now = Date.parse('2026-01-01T00:00:00Z') / 1000;
+    expect(importer.calls[0]!.addedAt).toBe(now);
+    expect(cloud.added).toEqual([]);
+    expect(cloud.plays.flatMap((p) => p.rows.map((r) => r.lastPlayedAt))).toEqual([0]);
+  });
+
   it('appends only new playlist entries on a second run', async () => {
     const store = new MemoryRecordStore();
     const cloud = new FakeCloud();
