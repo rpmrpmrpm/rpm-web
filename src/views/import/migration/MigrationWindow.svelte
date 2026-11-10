@@ -50,13 +50,15 @@
   const fileKind = $derived(kind === 'musicbee' || kind === 'itunes');
   const serverKind = $derived(kind === 'jellyfin' || kind === 'navidrome');
 
-  const SOURCES: { kind: SourceKind; name: string; hint: string; glyph: string }[] = [
-    { kind: 'musicbee', name: 'Migration_SourceMusicBee', hint: 'Migration_HintFile', glyph: icons.music },
-    { kind: 'itunes', name: 'Migration_SourceITunes', hint: 'Migration_HintFile', glyph: icons.music },
-    { kind: 'playlistfiles', name: 'Migration_SourcePlaylistFiles', hint: 'Migration_HintPlaylistFiles', glyph: icons.file },
-    { kind: 'jellyfin', name: 'Migration_SourceJellyfin', hint: 'Migration_HintServer', glyph: icons.import },
-    { kind: 'plex', name: 'Migration_SourcePlex', hint: 'Migration_HintServer', glyph: icons.import },
-    { kind: 'navidrome', name: 'Migration_SourceNavidrome', hint: 'Migration_HintServer', glyph: icons.import },
+  // The apps' own marks come from the rpm Brands font (rpm/scripts/gen_brand_font.py lists the code points);
+  // playlist files have no app, so they get the file icon.
+  const SOURCES: { kind: SourceKind; name: string; hint: string; glyph: string; brand: boolean }[] = [
+    { kind: 'musicbee', name: 'Migration_SourceMusicBee', hint: 'Migration_HintFile', glyph: '\ue001', brand: true },
+    { kind: 'itunes', name: 'Migration_SourceITunes', hint: 'Migration_HintFile', glyph: '\ue002', brand: true },
+    { kind: 'playlistfiles', name: 'Migration_SourcePlaylistFiles', hint: 'Migration_HintPlaylistFiles', glyph: icons.file, brand: false },
+    { kind: 'jellyfin', name: 'Migration_SourceJellyfin', hint: 'Migration_HintServer', glyph: '\ue003', brand: true },
+    { kind: 'plex', name: 'Migration_SourcePlex', hint: 'Migration_HintServer', glyph: '\ue004', brand: true },
+    { kind: 'navidrome', name: 'Migration_SourceNavidrome', hint: 'Migration_HintServer', glyph: '\ue005', brand: true },
   ];
   const sourceName = (k: SourceKind) => text(SOURCES.find((s) => s.kind === k)!.name);
   const labelOf = (lib: SourceLibrary) => (lib.kind !== 'playlistfiles' && lib.name ? lib.name : sourceName(lib.kind));
@@ -266,7 +268,7 @@
     <div class="tiles">
       {#each SOURCES as source (source.kind)}
         <button class="tile" onclick={() => choose(source.kind)}>
-          <i class="icon">{source.glyph}</i>
+          <i class="icon" class:brand={source.brand}>{source.glyph}</i>
           <strong>{text(source.name)}</strong>
           <span>{text(source.hint)}</span>
         </button>

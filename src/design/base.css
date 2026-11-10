@@ -394,6 +394,19 @@ input[type='radio']:checked::after {
   font-weight: 400;
 }
 
+/* The marks of the music apps rpm imports from (the import window). Written by
+   rpm/scripts/gen_brand_font.py, which lists the code points. */
+@font-face {
+  font-family: 'rpm Brands';
+  font-display: block;
+  src: url('./fonts/rpm-brands.woff') format('woff');
+}
+
+.icon.brand {
+  font-family: 'rpm Brands';
+  font-weight: 400;
+}
+
 /* A key with a flat glyph and no chrome, as on the deck. */
 .key {
   display: inline-grid;
