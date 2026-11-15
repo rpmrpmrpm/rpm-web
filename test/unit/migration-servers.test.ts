@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { finishQuickConnect, jellyfinWithPassword, JellyfinServer, startQuickConnect, type JellyfinSession } from '../../src/migration/jellyfin';
+import { ibroadcastAccount, IBROADCAST_CLIENT_ID, ibroadcastPoll, ibroadcastRevoke, IBroadcastServer, IBroadcastSession, ibroadcastStart,
+  type IBroadcastAccount, type IBroadcastCode, type IBroadcastGrant } from '../../src/migration/ibroadcast';
 import { md5 } from '../../src/migration/md5';
+import { tagRule, type RemoteFile } from '../../src/migration/model';
 import { plexFinish, plexPickConnection, PlexServer, plexServers, plexStart, type PlexServerChoice } from '../../src/migration/plex';
 import { reachable, SignInExpired, SignInFailed, type Fetch } from '../../src/migration/server';
 import { subsonicCheck, SubsonicServer } from '../../src/migration/subsonic';
@@ -290,5 +293,194 @@ describe('reaching a server from the page', () => {
     expect(reachable('https://music.example.com', 'https:')).toBe('ok');
     expect(reachable('http://localhost:8096', 'https:')).toBe('ok');
     expect(reachable('http://192.168.1.20:8096', 'http:')).toBe('ok');
+  });
+});
+
+describe('iBroadcast', () => {
+  const premium: IBroadcastAccount = { userId: '7654321', userName: 'testlistener', premium: true };
+  const free: IBroadcastAccount = { ...premium, premium: false };
+  const noon = Date.parse('2026-01-01T12:00:00Z');
+  const opening: RemoteFile = { kind: 'remote', key: '101|/orig/a1b/c2d/101', extension: '.flac', size: 0 };
+  const json200 = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const jsonStatus = (code: number, body: unknown) => new Response(JSON.stringify(body), { status: code, headers: { 'Content-Type': 'application/json' } });
+  const form = (init: RequestInit | undefined) => new URLSearchParams(String(init?.body ?? ''));
+  const code = (intervalMs = 1000): IBroadcastCode => ({ deviceCode: 'd-code', userCode: 'TESTCODE', page: 'https://oauth.ibroadcast.com/device?user_code=testcode', intervalMs, expiresAt: noon + 180_000 });
+
+  function answer(url: URL): Response {
+    if (url.host === 'library.ibroadcast.com') return sample('ibroadcast/library.json');
+    if (url.host === 'oauth.ibroadcast.com') return sample('ibroadcast/token-refreshed.json');
+    if (url.host === 'streaming.ibroadcast.com') return bytes([1, 2, 3]);
+    return status(404);
+  }
+
+  function server(fetcher: Fetch, account: IBroadcastAccount, renewed: (grant: IBroadcastGrant) => void = () => {}) {
+    const session = new IBroadcastSession(fetcher, { accessToken: 'access-token-0001', refreshToken: 'refresh-token-0001', expiresAt: Date.now() + 3_600_000 }, renewed);
+    const waits: number[] = [];
+    return { server: new IBroadcastServer(fetcher, session, account, 'Tags', async (ms) => { waits.push(ms); }), waits, session };
+  }
+
+  it('asks for a code with both scopes and the client id', async () => {
+    const { fetcher, seen } = fake((url) => (url.pathname === '/device/code' ? sample('ibroadcast/device-code.json') : status(404)));
+    const before = Date.now();
+    const started = await ibroadcastStart(fetcher);
+    expect(seen[0]!.url.searchParams.get('client_id')).toBe(IBROADCAST_CLIENT_ID);
+    expect(seen[0]!.url.searchParams.get('scope')).toBe('user.library:read user.account:read');
+    expect(started).toMatchObject({ userCode: 'TESTCODE', page: 'https://oauth.ibroadcast.com/device?user_code=testcode', intervalMs: 1000 });
+    expect(started.expiresAt).toBeGreaterThanOrEqual(before + 179_000);
+    expect(IBROADCAST_CLIENT_ID).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('gives the code to ask with next while it waits, with 5 seconds more after slow down', async () => {
+    let error = 'authorization_pending';
+    const { fetcher, seen } = fake(() => jsonStatus(error === 'slow_down' ? 429 : 400, { error }));
+    expect(await ibroadcastPoll(fetcher, code())).toEqual({ kind: 'pending', code: code() });
+    error = 'slow_down';
+    expect(await ibroadcastPoll(fetcher, code())).toEqual({ kind: 'pending', code: code(6000) });
+    expect(Object.fromEntries(form(seen[0]!.init))).toEqual({ grant_type: 'device_code', device_code: 'd-code', client_id: IBROADCAST_CLIENT_ID });
+  });
+
+  it('says when the code ran out, gives the grant once approved, and refuses a declined code', async () => {
+    expect(await ibroadcastPoll(fake(() => jsonStatus(400, { error: 'expired_token' })).fetcher, code())).toEqual({ kind: 'expired' });
+    const before = Date.now();
+    const approved = await ibroadcastPoll(fake(() => sample('ibroadcast/token.json')).fetcher, code());
+    expect(approved.kind === 'approved' && approved.grant).toMatchObject({ accessToken: 'access-token-0001', refreshToken: 'refresh-token-0001' });
+    expect(approved.kind === 'approved' && approved.grant.expiresAt).toBeGreaterThanOrEqual(before + 3_599_000);
+    await expect(ibroadcastPoll(fake(() => jsonStatus(400, { error: 'access_denied', error_description: 'The user denied the request' })).fetcher, code()))
+      .rejects.toThrowError(SignInFailed);
+  });
+
+  it('reads the account id, name and premium', async () => {
+    for (const [file, isPremium] of [['ibroadcast/status.json', true], ['ibroadcast/status-free.json', false]] as const) {
+      const { fetcher, seen } = fake((url) => (url.href === 'https://api.ibroadcast.com/status' ? sample(file) : status(404)));
+      const { session } = server(fetcher, premium);
+      expect(await ibroadcastAccount(fetcher, session)).toEqual({ userId: '7654321', userName: 'testlistener', premium: isPremium });
+      expect(header(seen[0]!.init, 'Authorization')).toBe('Bearer access-token-0001');
+    }
+  });
+
+  it('renews once for two callers and hands the new grant to the keeper', async () => {
+    const kept: IBroadcastGrant[] = [];
+    const { fetcher, seen } = fake(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+      return sample('ibroadcast/token-refreshed.json');
+    });
+    const session = new IBroadcastSession(fetcher, { accessToken: 'access-token-0001', refreshToken: 'refresh-token-0001', expiresAt: noon + 3_600_000 }, (g) => kept.push(g), () => noon);
+    expect(await Promise.all([session.renew('access-token-0001'), session.renew('access-token-0001')])).toEqual(['access-token-0002', 'access-token-0002']);
+    expect(seen).toHaveLength(1);
+    expect(Object.fromEntries(form(seen[0]!.init))).toEqual({ grant_type: 'refresh_token', refresh_token: 'refresh-token-0001', client_id: IBROADCAST_CLIENT_ID });
+    expect(kept).toEqual([{ accessToken: 'access-token-0002', refreshToken: 'refresh-token-0002', expiresAt: noon + 3_599_000 }]);
+    expect(session.grant).toEqual(kept[0]);
+  });
+
+  it('keeps the refresh token when a renewal sends none, renews a minute early, and stops on a refused renewal', async () => {
+    const quiet = fake(() => json200({ access_token: 'access-token-0002', expires_in: 3599 }));
+    const kept = new IBroadcastSession(quiet.fetcher, { accessToken: 'access-token-0001', refreshToken: 'refresh-token-0001', expiresAt: noon + 59_000 }, () => {}, () => noon);
+    expect(await kept.token()).toBe('access-token-0002');
+    expect(kept.grant.refreshToken).toBe('refresh-token-0001');
+    const fresh = new IBroadcastSession(quiet.fetcher, { accessToken: 'access-token-0001', refreshToken: 'refresh-token-0001', expiresAt: noon + 61_000 }, () => {}, () => noon);
+    expect(await fresh.token()).toBe('access-token-0001');
+    for (const error of ['invalid_grant', 'invalid_token']) {
+      const refused = new IBroadcastSession(fake(() => jsonStatus(400, { error })).fetcher, { accessToken: 'a', refreshToken: 'r', expiresAt: noon }, () => {}, () => noon);
+      await expect(refused.renew('a')).rejects.toThrowError(SignInExpired);
+    }
+    const broken = new IBroadcastSession(fake(() => status(502)).fetcher, { accessToken: 'a', refreshToken: 'r', expiresAt: noon }, () => {}, () => noon);
+    await expect(broken.renew('a')).rejects.not.toThrowError(SignInExpired);
+  });
+
+  it('revokes with the refresh token', async () => {
+    const { fetcher, seen } = fake(() => new Response('OK'));
+    await ibroadcastRevoke(fetcher, 'refresh-token-0002');
+    expect(seen[0]!.url.pathname).toBe('/revoke');
+    expect(Object.fromEntries(form(seen[0]!.init))).toEqual({ refresh_token: 'refresh-token-0002', client_id: IBROADCAST_CLIENT_ID });
+  });
+
+  it('matches the expected result for the sample', async () => {
+    const { fetcher } = fake(answer);
+    expect(shape(await server(fetcher, premium).server.read(() => {}))).toEqual(expected('ibroadcast'));
+  });
+
+  it('asks the library server with the client named in the body', async () => {
+    const { fetcher, seen } = fake(answer);
+    const library = await server(fetcher, premium).server.read(() => {});
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.url.href).toBe('https://library.ibroadcast.com/');
+    expect(seen[0]!.init?.method).toBe('POST');
+    expect(header(seen[0]!.init, 'Authorization')).toBe('Bearer access-token-0001');
+    const body = JSON.parse(String(seen[0]!.init?.body)) as Record<string, string>;
+    expect(body).toMatchObject({ mode: 'library', client: 'rpm', device_name: 'rpm' });
+    expect(body['version']).toBeTruthy();
+    expect(body['user_agent']).toBeTruthy();
+    expect([library.kind, tagRule(library.kind)]).toEqual(['ibroadcast', 'source']);
+  });
+
+  it('reads a free account as 128 kbps MP3 copies of unknown size', async () => {
+    const library = await server(fake(answer).fetcher, free).server.read(() => {});
+    for (const track of library.tracks) {
+      expect(track.file.kind === 'remote' && track.file.key).toContain('|/128/');
+      expect(track.file).toMatchObject({ extension: '.mp3', size: 0 });
+      expect(track.sizeBytes).toBe(Math.round(track.durationSeconds * 16_000));
+    }
+    expect(library.tracks[0]!.sizeBytes).toBe(3_856_000);
+  });
+
+  it('opens a file with the signature, file and user in the address only', async () => {
+    const { fetcher, seen } = fake(answer);
+    const file = await server(fetcher, premium).server.open(opening);
+    expect(seen).toHaveLength(1);
+    const url = seen[0]!.url;
+    expect([url.origin, url.pathname]).toEqual(['https://streaming.ibroadcast.com', '/orig/a1b/c2d/101']);
+    expect(['Signature', 'file_id', 'user_id', 'platform'].map((n) => url.searchParams.get(n))).toEqual(['access-token-0001', '101', '7654321', 'rpm']);
+    expect(url.searchParams.get('version')).toBeTruthy();
+    expect(seen[0]!.init?.headers).toBeUndefined();
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('renews once when a file is refused, then stops', async () => {
+    for (const refusal of [401, 403]) {
+      const { fetcher, seen } = fake((url) => (url.host === 'streaming.ibroadcast.com' ? status(refusal) : answer(url)));
+      await expect(server(fetcher, premium).server.open(opening)).rejects.toThrowError(SignInExpired);
+      expect(seen.filter((s) => s.url.host === 'oauth.ibroadcast.com')).toHaveLength(1);
+      expect(seen.filter((s) => s.url.host === 'streaming.ibroadcast.com').map((s) => s.url.searchParams.get('Signature'))).toEqual(['access-token-0001', 'access-token-0002']);
+    }
+  });
+
+  it('waits when the streaming server is busy, then fails for later', async () => {
+    const busy = fake(() => new Response('', { status: 429, headers: { 'Retry-After': '7' } }));
+    const first = server(busy.fetcher, premium);
+    await expect(first.server.open(opening)).rejects.toMatchObject({ status: 429 });
+    expect(busy.seen).toHaveLength(3);
+    expect(first.waits).toEqual([7000, 7000]);
+
+    let once = true;
+    const later = fake((url) => {
+      if (!once) return answer(url);
+      once = false;
+      return status(429);
+    });
+    const second = server(later.fetcher, premium);
+    await second.server.open(opening);
+    expect(second.waits).toEqual([30_000]);
+  });
+
+  it('renews when the library answers unauthenticated, then stops', async () => {
+    const { fetcher, seen } = fake((url) => (url.host === 'library.ibroadcast.com' ? json200({ message: 'Error, user authentication failed', result: false, authenticated: false }) : answer(url)));
+    await expect(server(fetcher, premium).server.read(() => {})).rejects.toThrowError(SignInExpired);
+    expect(seen.filter((s) => s.url.host === 'oauth.ibroadcast.com')).toHaveLength(1);
+    expect(seen.filter((s) => s.url.host === 'library.ibroadcast.com')).toHaveLength(2);
+  });
+
+  it('reads rows written as objects the same as rows read through the map', async () => {
+    const { fetcher } = fake(() => json200({ result: true, library: {
+      tracks: { 5: { title: 'Song', album_id: 7, artist_id: 8, track: 2, year: 1990, genre: 'Pop', length: 100, type: 'audio/flac', file: '/128/x/5', size: 1000, plays: 4, rating: 5, trashed: false, uploaded_on: '2020-02-03', uploaded_time: '04:05:06' } },
+      albums: { 7: { name: 'Album', artist_id: 8, disc: 1, year: 1990, trashed: false, tracks: [5] } },
+      artists: { 8: { name: 'Singer', tracks: [5], trashed: false } },
+      playlists: { map: null }, tags: { map: null },
+    } }));
+    const [track] = (await server(fetcher, premium).server.read(() => {})).tracks;
+    expect(track).toEqual({
+      sourceId: '5', file: { kind: 'remote', key: '5|/orig/x/5', extension: '.flac', size: 0 }, title: 'Song', artist: 'Singer', album: 'Album', albumArtist: 'Singer',
+      trackNumber: 2, discNumber: 1, year: 1990, genre: 'Pop', durationSeconds: 100, sizeBytes: 1000, rating: 0, favorite: true, plays: 4, lastPlayed: null,
+      added: new Date('2020-02-03T04:05:06Z'),
+    });
   });
 });
