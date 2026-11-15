@@ -3,10 +3,10 @@
 // playlists. It is RPM.Core/Migration/MigrationRun.cs of the desktop app, without the cloud-only staging
 // (the web app always imports to the cloud, one file in memory at a time).
 
-import type { PickedFile } from '../import/queue';
+import type { PickedFile, TrackTags } from '../import/queue';
 import { QuotaFull } from '../import/importer';
 import { albumBatches, LENGTH_TOLERANCE, lossless, loose, mergeDetails, songKey } from './merge';
-import { deviceId, type SourceLibrary, type SourceTrack } from './model';
+import { deviceId, tagRule, type SourceLibrary, type SourceTrack } from './model';
 import type { MigrationRecord, PlaylistOutcome } from './record';
 import { type MediaServer, ServerBlocked, SignInExpired } from './server';
 
@@ -42,9 +42,27 @@ export interface MigrationCloud {
 // final when the same file would fail again; or no answer at all from the service.
 export type ImportOutcome = { rpmId: string; known: boolean } | { failed: string; final: boolean } | { noAnswer: true };
 
-// One file into the account. A full store throws QuotaFull.
+// One file into the account. `replace` holds the tags that replace the ones read from the file ({} keeps
+// the file's). A full store throws QuotaFull.
 export interface TrackImporter {
-  importOne(file: File, path: string, addedAt: number): Promise<ImportOutcome>;
+  importOne(file: File, path: string, addedAt: number, replace: Partial<TrackTags>): Promise<ImportOutcome>;
+}
+
+// The tags of the other app that replace the file's, by the library's tag rule: every tag the other app
+// gives when its tags win, none when the file's tags win. A tag the other app leaves blank is not sent, so
+// the file's value stays.
+export function replacedTags(library: SourceLibrary, track: SourceTrack): Partial<TrackTags> {
+  if (tagRule(library.kind) === 'file') return {};
+  const tags: Partial<TrackTags> = {};
+  if (track.title.trim()) tags.Title = track.title;
+  if (track.artist.trim()) tags.Artist = track.artist;
+  if (track.album.trim()) tags.Album = track.album;
+  if (track.albumArtist.trim()) tags.AlbumArtist = track.albumArtist;
+  if (track.trackNumber > 0) tags.TrackNumber = track.trackNumber;
+  if (track.discNumber > 0) tags.DiscNumber = track.discNumber;
+  if (track.year > 0) tags.Year = track.year;
+  if (track.genre.trim()) tags.Genre = track.genre;
+  return tags;
 }
 
 // 'failed' is never returned by the run: the window sets it when the run throws an error nothing expected.
@@ -282,7 +300,7 @@ export async function runMigration(options: RunOptions): Promise<RunEnd> {
 
     let result: ImportOutcome;
     try {
-      result = await options.importer.importOne(file, path, sane(seconds(track.added)) || nowSeconds());
+      result = await options.importer.importOne(file, path, sane(seconds(track.added)) || nowSeconds(), replacedTags(library, track));
     } catch (error) {
       if (error instanceof QuotaFull) throw new Stop('cloudfull');
       throw error;

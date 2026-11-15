@@ -144,6 +144,8 @@ export function readPlaylistFiles(files: readonly { path: string; bytes: Uint8Ar
         albumArtist: '',
         trackNumber: 0,
         discNumber: 0,
+        year: 0,
+        genre: '',
         durationSeconds: entry.seconds,
         sizeBytes: 0,
         rating: 0,

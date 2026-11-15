@@ -106,7 +106,7 @@ function trackImporter(): TrackImporter {
   const queue = new ImportQueue();
   const importer = new Importer(api, importMedia, browserTransfers, catalogue, queue);
   return {
-    async importOne(file, path, addedAt) {
+    async importOne(file, path, addedAt, replace) {
       const unreadable = { failed: 'Migration_ReasonReadFailed', final: true };
       const [row] = queue.add([{ file, path }]);
       if (!row) return unreadable;
@@ -114,7 +114,7 @@ function trackImporter(): TrackImporter {
         if (row.state !== 'reading') return unreadable;
         try {
           const { tags, hasArt } = await importMedia.tags(file);
-          queue.read(row, tags, hasArt);
+          queue.read(row, { ...tags, ...replace }, hasArt);
         } catch {
           return unreadable;
         }

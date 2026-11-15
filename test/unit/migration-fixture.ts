@@ -53,6 +53,8 @@ export function shape(library: SourceLibrary): unknown {
       albumArtist: t.albumArtist,
       trackNumber: t.trackNumber,
       discNumber: t.discNumber,
+      year: t.year,
+      genre: t.genre,
       durationSeconds: t.durationSeconds,
       sizeBytes: t.sizeBytes,
       rating: t.rating,

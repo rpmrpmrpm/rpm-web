@@ -131,6 +131,8 @@ function trackOf(song: Record<string, unknown>): SourceTrack | SourceSkip {
     albumArtist: str(song['displayAlbumArtist']),
     trackNumber: num(song['track']),
     discNumber: num(song['discNumber']),
+    year: 0,
+    genre: '',
     durationSeconds: num(song['duration']),
     sizeBytes: size,
     rating: Math.min(10, Math.max(0, num(song['userRating']) * 2)),

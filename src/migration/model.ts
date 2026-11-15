@@ -1,7 +1,7 @@
 // What a reader finds in another music app's library. The same shapes as RPM.Core/Migration on the
 // desktop, field by field, so both apps import a library the same way.
 
-export type SourceKind = 'musicbee' | 'itunes' | 'jellyfin' | 'plex' | 'navidrome' | 'playlistfiles';
+export type SourceKind = 'musicbee' | 'itunes' | 'jellyfin' | 'plex' | 'navidrome' | 'playlistfiles' | 'ibroadcast';
 
 // Where a track's audio is: a file on the person's computer, or a file on a media server.
 export type LocalFile = { kind: 'local'; path: string };
@@ -17,6 +17,8 @@ export interface SourceTrack {
   albumArtist: string;
   trackNumber: number;
   discNumber: number;
+  year: number; // 0 when the app does not say
+  genre: string; // '' when the app does not say
   durationSeconds: number;
   sizeBytes: number;
   rating: number; // 0 to 10 (half stars), 0 = not rated
@@ -47,6 +49,30 @@ export interface SourceLibrary {
   tracks: SourceTrack[];
   playlists: SourcePlaylist[];
   skipped: SourceSkip[];
+}
+
+// Whose tags a track gets when the file's tags and the other app's tags differ. 'file': the file's tags stay
+// and the other app only fills tags the file does not have, for apps that read their tags from the file.
+// 'source': the other app's tags replace the file's wherever it gives a value, for an app that keeps edited
+// tags apart from the file it stores (iBroadcast). It is SourceLibrary.Tags of the desktop app.
+export type TagRule = 'file' | 'source';
+
+export function tagRule(kind: SourceKind): TagRule {
+  switch (kind) {
+    case 'ibroadcast':
+      return 'source';
+    case 'musicbee':
+    case 'itunes':
+    case 'jellyfin':
+    case 'plex':
+    case 'navidrome':
+    case 'playlistfiles':
+      return 'file';
+    default: {
+      const unknown: never = kind;
+      throw new Error(`A source kind with no tag rule: ${String(unknown)}`);
+    }
+  }
 }
 
 // The device a source library's plays are stored under: one per library, so a second import replaces

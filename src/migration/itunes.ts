@@ -136,6 +136,8 @@ function readTrack(t: Dict, trackId: string): SourceTrack | SourceSkip {
     albumArtist: str(t, 'Album Artist') ?? '',
     trackNumber: num(t, 'Track Number'),
     discNumber: num(t, 'Disc Number'),
+    year: 0,
+    genre: '',
     durationSeconds: num(t, 'Total Time') / 1000,
     sizeBytes: num(t, 'Size'),
     rating: flag(t, 'Rating Computed') ? 0 : Math.min(10, Math.max(0, Math.round(num(t, 'Rating') / 10))),

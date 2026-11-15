@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { QuotaFull } from '../../src/import/importer';
 import { albumBatches, estimate, mergeDetails } from '../../src/migration/merge';
-import { deviceId, type RemoteFile, type SourceLibrary, type SourceTrack } from '../../src/migration/model';
+import { deviceId, tagRule, type RemoteFile, type SourceKind, type SourceLibrary, type SourceTrack } from '../../src/migration/model';
+import type { TrackTags } from '../../src/import/queue';
 import { MemoryRecordStore, MigrationRecord } from '../../src/migration/record';
 import { runMigration, type CatalogueTrack, type MigrationCloud, type RunProgress, type TrackImporter } from '../../src/migration/run';
 import { ServerBlocked, SignInExpired, type MediaServer } from '../../src/migration/server';
@@ -14,7 +15,7 @@ const seconds = (at: Date) => Math.floor(at.getTime() / 1000);
 function local(id: string, album: string, title: string, extra: Partial<SourceTrack> = {}): SourceTrack {
   return {
     sourceId: id, file: { kind: 'local', path: `/Users/test/Music/Band/${album}/${title}.flac` }, title, artist: 'Band', album, albumArtist: 'Band',
-    trackNumber: 1, discNumber: 1, durationSeconds: 200, sizeBytes: 100, rating: 0, favorite: false, plays: 0, lastPlayed: null, added: null, ...extra,
+    trackNumber: 1, discNumber: 1, year: 0, genre: '', durationSeconds: 200, sizeBytes: 100, rating: 0, favorite: false, plays: 0, lastPlayed: null, added: null, ...extra,
   };
 }
 
@@ -26,14 +27,14 @@ const library = (tracks: SourceTrack[], extra: Partial<SourceLibrary> = {}): Sou
   ({ kind: 'musicbee', libraryId: 'lib-1', name: 'MusicBee', tracks, playlists: [], skipped: [], ...extra });
 
 class FakeImporter implements TrackImporter {
-  calls: { path: string; addedAt: number }[] = [];
+  calls: { path: string; addedAt: number; replace: Partial<TrackTags> }[] = [];
   known = new Set<string>();
   failing = new Set<string>();
   full = new Set<string>();
   // Answers to give before the real one, per path: no answer at all, or a failure to try again later.
   first = new Map<string, ('noanswer' | 'again')[]>();
-  async importOne(file: File, path: string, addedAt: number) {
-    this.calls.push({ path, addedAt });
+  async importOne(file: File, path: string, addedAt: number, replace: Partial<TrackTags>) {
+    this.calls.push({ path, addedAt, replace });
     if (this.full.has(path)) throw new QuotaFull();
     const next = this.first.get(path)?.shift();
     if (next === 'noanswer') return { noAnswer: true as const };
@@ -109,6 +110,40 @@ async function run(lib: SourceLibrary, options: { store?: MemoryRecordStore; imp
   });
   return { end, record, importer, cloud, store, stages };
 }
+
+describe('whose tags win', () => {
+  const tagged = (kind: SourceKind, extra: Partial<SourceTrack>) =>
+    library([{ ...remote('s1', 'Record', 'One'), ...extra }], { kind });
+
+  it('uploads with the source tags when the source tags win', async () => {
+    const lib = tagged('ibroadcast', { title: 'New title', artist: 'Guest', album: 'New album', albumArtist: 'Band', trackNumber: 4, discNumber: 2, year: 2004, genre: 'Jazz' });
+
+    const { importer } = await run(lib, { server: new FakeServer() });
+
+    expect(importer.calls[0]!.replace).toEqual({ Title: 'New title', Artist: 'Guest', Album: 'New album', AlbumArtist: 'Band', TrackNumber: 4, DiscNumber: 2, Year: 2004, Genre: 'Jazz' });
+  });
+
+  it('leaves out what the source does not give', async () => {
+    const lib = tagged('ibroadcast', { title: 'New title', artist: '', album: '', albumArtist: '', trackNumber: 0, discNumber: 0, year: 0, genre: '' });
+
+    const { importer } = await run(lib, { server: new FakeServer() });
+
+    expect(importer.calls[0]!.replace).toEqual({ Title: 'New title' });
+  });
+
+  it('uploads with the file tags for an app that reads its tags from the file', async () => {
+    const lib = tagged('jellyfin', { title: 'New title', year: 2004, genre: 'Jazz' });
+
+    const { importer } = await run(lib, { server: new FakeServer() });
+
+    expect(importer.calls[0]!.replace).toEqual({});
+  });
+
+  it('makes only iBroadcast tags win', () => {
+    const kinds: SourceKind[] = ['musicbee', 'itunes', 'jellyfin', 'plex', 'navidrome', 'playlistfiles', 'ibroadcast'];
+    expect(kinds.map(tagRule)).toEqual(['file', 'file', 'file', 'file', 'file', 'file', 'source']);
+  });
+});
 
 describe('the web import run', () => {
   it('imports local files and sends their details', async () => {
