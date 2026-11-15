@@ -397,7 +397,7 @@
     <p class="big">{library.tracks.length === 1 ? text('Migration_SummaryTracksOne', size(summary.totalBytes)) : text('Migration_SummaryTracks', count(library.tracks.length), size(summary.totalBytes))}</p>
     {#if library.playlists.length}<p class="line">{library.playlists.length === 1 ? text('Migration_SummaryPlaylistsOne') : text('Migration_SummaryPlaylists', count(library.playlists.length))}</p>{/if}
     {#if summary.aboutAlreadyInRpm > 0}<p class="line">{text('Migration_SummaryAlready', count(summary.aboutAlreadyInRpm))}</p>{/if}
-    {#if library.skipped.length}<p class="quiet">{text('Migration_SummarySkipped', count(library.skipped.length))}</p>{/if}
+    {#if library.skipped.length}<p class="quiet">{text(library.kind === 'ibroadcast' ? 'Migration_SummarySkippedIBroadcast' : 'Migration_SummarySkipped', count(library.skipped.length))}</p>{/if}
     {#if others.length}<p class="quiet">{text('Migration_SummaryOtherImports', others.join(', '))}</p>{/if}
     {#if connection?.kind === 'ibroadcast' && !connection.account.premium}<p class="error">{text('Migration_IBroadcastFree')}</p>{/if}
     {#if library.kind === 'ibroadcast'}<p class="quiet">{text('Migration_IBroadcastNotCarried')}</p>{/if}

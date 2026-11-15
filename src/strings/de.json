@@ -459,6 +459,7 @@
 "Migration_SummaryPlaylists": "{0} Playlists",
 "Migration_SummaryPlaylistsOne": "1 Playlist",
 "Migration_SummarySkipped": "{0} Elemente werden nicht importiert (Streams, Videos, Podcasts oder Dateien, die nicht auf diesem Computer liegen)",
+"Migration_SummarySkippedIBroadcast": "{0} Titel werden nicht importiert (im iBroadcast-Papierkorb oder keine Datei, die rpm lesen kann)",
 "Migration_SummaryTracks": "{0} Titel ({1})",
 "Migration_SummaryTracksOne": "1 Titel ({0})",
 "Migration_Title": "Aus einer anderen App importieren",

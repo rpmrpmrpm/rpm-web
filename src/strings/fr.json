@@ -459,6 +459,7 @@
 "Migration_SummaryPlaylists": "{0} playlists",
 "Migration_SummaryPlaylistsOne": "1 playlist",
 "Migration_SummarySkipped": "{0} éléments ne sont pas importés (flux, vidéos, podcasts, ou fichiers absents de cet ordinateur)",
+"Migration_SummarySkippedIBroadcast": "{0} morceaux ne sont pas importés (dans la corbeille d'iBroadcast, ou pas un fichier que rpm sait lire)",
 "Migration_SummaryTracks": "{0} titres ({1})",
 "Migration_SummaryTracksOne": "1 titre ({0})",
 "Migration_Title": "Importer depuis une autre app",

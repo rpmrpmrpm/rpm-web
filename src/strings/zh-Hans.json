@@ -459,6 +459,7 @@
 "Migration_SummaryPlaylists": "{0} 个播放列表",
 "Migration_SummaryPlaylistsOne": "1 个播放列表",
 "Migration_SummarySkipped": "{0} 个项目不会导入（流媒体、视频、播客，或不在这台电脑上的文件）",
+"Migration_SummarySkippedIBroadcast": "{0} 首曲目不会导入（在 iBroadcast 回收站中，或不是 rpm 能读取的文件）",
 "Migration_SummaryTracks": "{0} 首曲目（{1}）",
 "Migration_SummaryTracksOne": "1 首曲目（{0}）",
 "Migration_Title": "从其他应用导入",
