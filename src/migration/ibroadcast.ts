@@ -227,7 +227,7 @@ class Row {
     return obj(this.row)[name];
   }
 
-  text(name: string): string {
+  string(name: string): string {
     return str(this.field(name));
   }
 
@@ -294,20 +294,20 @@ export class IBroadcastServer implements MediaServer {
     const albums = table(library['albums']);
     const artists = table(library['artists']);
     const inTrash = new Set(table(library['trash']).rows.flatMap((row) => row.ids('tracks')));
-    const artistName = (id: number) => artists.find(id)?.text('name') ?? '';
+    const artistName = (id: number) => artists.find(id)?.string('name') ?? '';
 
     const read: SourceTrack[] = [];
     const skipped: SourceSkip[] = [];
     const names = new Map<number, string>();
     for (const row of tracks.rows) {
       const album = albums.find(row.number('album_id'));
-      const title = row.text('title');
+      const title = row.string('title');
       const artist = artistName(row.number('artist_id'));
       const what = artist ? `${artist} - ${title}` : title;
       names.set(row.id, what);
 
-      const file = row.text('file');
-      const extension = this.account.premium ? extensionOf('', containerOf(row.text('type'))) : '.mp3';
+      const file = row.string('file');
+      const extension = this.account.premium ? extensionOf('', containerOf(row.string('type'))) : '.mp3';
       if (row.flag('trashed') || album?.flag('trashed') || inTrash.has(row.id)) skipped.push({ what, reasonKey: SkipReason.InTrash });
       else if (!file.startsWith('/')) skipped.push({ what, reasonKey: SkipReason.NotAFile });
       else if (!extension) skipped.push({ what, reasonKey: SkipReason.NotMusic });
@@ -327,8 +327,8 @@ export class IBroadcastServer implements MediaServer {
     // A list iBroadcast fills itself ("Most Recent Uploads", "Thumbs Up") has a type, or is marked as made by the
     // system. Only the lists the person made come along.
     const playlists = [
-      ...table(library['playlists']).rows.filter((r) => !r.flag('system_created') && !r.text('type')).map((r) => listOf(String(r.id), r.text('name'), [], r)),
-      ...table(library['tags']).rows.filter((r) => !r.flag('archived')).map((r) => listOf(`tag:${r.id}`, r.text('name'), [this.tagsFolder], r)),
+      ...table(library['playlists']).rows.filter((r) => !r.flag('system_created') && !r.string('type')).map((r) => listOf(String(r.id), r.string('name'), [], r)),
+      ...table(library['tags']).rows.filter((r) => !r.flag('archived')).map((r) => listOf(`tag:${r.id}`, r.string('name'), [this.tagsFolder], r)),
     ];
     return { kind: 'ibroadcast', libraryId: this.account.userId, name: this.account.userName, tracks: read, playlists, skipped };
   }
@@ -370,19 +370,19 @@ export class IBroadcastServer implements MediaServer {
       file: { kind: 'remote', key: `${row.id}|${QUALITY.test(file) ? file.replace(QUALITY, this.account.premium ? '/orig/' : '/128/') : file}`, extension, size: 0 },
       title,
       artist,
-      album: album?.text('name') ?? '',
+      album: album?.string('name') ?? '',
       albumArtist,
       trackNumber: row.number('track'),
       discNumber: album?.number('disc') ?? 0,
       year: year > 0 ? year : album?.number('year') ?? 0,
-      genre: row.text('genre'),
+      genre: row.string('genre'),
       durationSeconds: seconds,
       sizeBytes: this.account.premium ? row.number('size') : Math.round(seconds * FREE_BYTES_PER_SECOND),
       rating: 0,
       favorite: row.number('rating') === 5,
       plays: row.number('plays'),
       lastPlayed: null,
-      added: uploaded(row.text('uploaded_on'), row.text('uploaded_time')),
+      added: uploaded(row.string('uploaded_on'), row.string('uploaded_time')),
     };
   }
 }

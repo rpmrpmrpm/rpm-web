@@ -6,6 +6,7 @@
   import { icons } from '../../../design/icons';
   import { pickedFromHandles, pickedFromInput } from '../../../import/pick';
   import type { PickedFile } from '../../../import/queue';
+  import { ibroadcastAccount, ibroadcastPoll, IBroadcastSession, ibroadcastStart, type IBroadcastCode } from '../../../migration/ibroadcast';
   import { finishQuickConnect, jellyfinWithPassword, startQuickConnect } from '../../../migration/jellyfin';
   import { matchPicked, readITunesLibrary } from '../../../migration/itunes';
   import type { SourceKind, SourceLibrary } from '../../../migration/model';
@@ -39,6 +40,8 @@
   let musicFolder = $state<PickedFile[]>([]);
   let plexChoices = $state<PlexServerChoice[]>([]);
   let plexPick = $state(0);
+  // The iBroadcast sign-in code that waits for approval, or null.
+  let ibroadcastCode = $state<IBroadcastCode | null>(null);
   let library = $state.raw<SourceLibrary | null>(null);
   let connection = $state.raw<Connection | null>(null);
   let space = $state<{ used: number; quota: number; unlimited: boolean } | null>(null);
@@ -73,11 +76,15 @@
     { kind: 'jellyfin', name: 'Migration_SourceJellyfin', hint: 'Migration_HintServer', glyph: '\ue003', brand: true },
     { kind: 'plex', name: 'Migration_SourcePlex', hint: 'Migration_HintServer', glyph: '\ue004', brand: true },
     { kind: 'navidrome', name: 'Migration_SourceNavidrome', hint: 'Migration_HintServer', glyph: '\ue005', brand: true },
+    { kind: 'ibroadcast', name: 'Migration_SourceIBroadcast', hint: 'Migration_HintOnline', glyph: '\ue006', brand: true },
   ];
   const sourceName = (k: SourceKind) => text(SOURCES.find((s) => s.kind === k)!.name);
-  const labelOf = (lib: SourceLibrary) => (lib.kind !== 'playlistfiles' && lib.name ? lib.name : sourceName(lib.kind));
+  // An iBroadcast library is named by its user name, which reads as nothing in brackets after a playlist, so it
+  // gets the app's name, as playlist files do.
+  const labelOf = (lib: SourceLibrary) => (lib.kind !== 'playlistfiles' && lib.kind !== 'ibroadcast' && lib.name ? lib.name : sourceName(lib.kind));
   const keeps = (lib: SourceLibrary) =>
     lib.kind === 'playlistfiles' ? text('Migration_KeepsOriginalsPlaylists')
+    : lib.kind === 'ibroadcast' ? text('Migration_KeepsOriginalsIBroadcast')
     : lib.kind === 'musicbee' || lib.kind === 'itunes' ? text('Migration_KeepsOriginalsFile', labelOf(lib))
     : text('Migration_KeepsOriginalsServer', labelOf(lib));
 
@@ -88,6 +95,7 @@
     playlistFiles = [];
     musicFolder = [];
     plexChoices = [];
+    ibroadcastCode = null;
     face = 'connect';
   }
 
@@ -213,6 +221,49 @@
     }
   }
 
+  // Signs in to iBroadcast with a device code: opens iBroadcast's page with the code filled in, shows the code, and
+  // asks at the server's interval whether it was approved. A code that runs out is replaced by a new one without
+  // opening another tab; while a code waits, the button opens its page again.
+  async function ibroadcastSignIn() {
+    if (ibroadcastCode && ibroadcastCode.expiresAt > Date.now()) {
+      window.open(ibroadcastCode.page, '_blank', 'noopener');
+      return;
+    }
+    work?.abort();
+    const stop = (work = new AbortController());
+    const show = (code: IBroadcastCode) => {
+      ibroadcastCode = code;
+      note = text('Migration_IBroadcastWaiting', code.userCode);
+    };
+    try {
+      let code = await ibroadcastStart(fetcher);
+      show(code);
+      window.open(code.page, '_blank', 'noopener');
+      while (!stop.signal.aborted) {
+        await new Promise((done) => setTimeout(done, code.intervalMs));
+        if (stop.signal.aborted) return;
+        const poll = await ibroadcastPoll(fetcher, code);
+        if (poll.kind === 'pending') {
+          code = poll.code;
+        } else if (poll.kind === 'expired') {
+          code = await ibroadcastStart(fetcher);
+          show(code);
+        } else {
+          ibroadcastCode = null;
+          note = '';
+          const session = new IBroadcastSession(fetcher, poll.grant);
+          const next: Connection = { kind: 'ibroadcast', session, account: await ibroadcastAccount(fetcher, session) };
+          await read(next, () => serverFor(next)!.read((n) => (found = n)));
+          return;
+        }
+      }
+    } catch (caught) {
+      ibroadcastCode = null;
+      note = '';
+      fail(caught);
+    }
+  }
+
   async function plexConnect(server: PlexServerChoice) {
     // A web page can only reach an https connection.
     const at = await plexPickConnection(fetcher, { ...server, connections: server.connections.filter((c) => c.startsWith('https:')) });
@@ -326,6 +377,8 @@
       <label class="labelled">{text('Migration_UserName')}<input class="field" type="text" bind:value={user} autocomplete="username" /></label>
       <label class="labelled">{text('Migration_Password')}<input class="field" type="password" bind:value={password} autocomplete="current-password" /></label>
       {#if kind === 'jellyfin'}<div><button class="glass-button" onclick={quickConnect}>{text('Migration_QuickConnect')}</button></div>{/if}
+    {:else if kind === 'ibroadcast'}
+      <div><button class="glass-button" onclick={ibroadcastSignIn}>{text(ibroadcastCode ? 'Migration_IBroadcastOpenAgain' : 'Migration_IBroadcastSignIn')}</button></div>
     {:else}
       <button class="glass-button" onclick={plexSignIn}>{text('Migration_PlexSignIn')}</button>
       {#if plexChoices.length > 1}
@@ -346,6 +399,8 @@
     {#if summary.aboutAlreadyInRpm > 0}<p class="line">{text('Migration_SummaryAlready', count(summary.aboutAlreadyInRpm))}</p>{/if}
     {#if library.skipped.length}<p class="quiet">{text('Migration_SummarySkipped', count(library.skipped.length))}</p>{/if}
     {#if others.length}<p class="quiet">{text('Migration_SummaryOtherImports', others.join(', '))}</p>{/if}
+    {#if connection?.kind === 'ibroadcast' && !connection.account.premium}<p class="error">{text('Migration_IBroadcastFree')}</p>{/if}
+    {#if library.kind === 'ibroadcast'}<p class="quiet">{text('Migration_IBroadcastNotCarried')}</p>{/if}
     {#if space && !space.unlimited}
       {@const free = Math.max(0, space.quota - space.used)}
       <p class="quiet">{text(free >= summary.aboutBytesNeeded ? 'Migration_SpaceCloud' : 'Migration_SpaceCloudShort', size(summary.aboutBytesNeeded), size(free))}</p>
@@ -416,7 +471,7 @@
       <button class="glass-button primary" onclick={signIn}>{text('Migration_SignIn')}</button>
     {:else if face === 'connect' && kind === 'plex' && plexChoices.length > 1}
       <button class="glass-button primary" onclick={() => plexConnect(plexChoices[plexPick]!)}>{text('Migration_Continue')}</button>
-    {:else if face === 'connect' && !serverKind && kind !== 'plex'}
+    {:else if face === 'connect' && (fileKind || kind === 'playlistfiles')}
       <button class="glass-button primary" disabled={musicFolder.length === 0 || (fileKind ? !libraryFile : playlistFiles.length === 0)} onclick={readFile}>{text('Migration_Continue')}</button>
     {:else if face === 'summary' && pastRun}
       <button class="glass-button" title={text('Migration_StartOverHint')} onclick={() => start('startover')}>{text('Migration_StartOver')}</button>

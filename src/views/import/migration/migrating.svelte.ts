@@ -7,6 +7,7 @@ import { readQuota } from '../../../api/wire';
 import { browserTransfers, Importer } from '../../../import/importer';
 import { ImportQueue, type ImportRow, type PickedFile } from '../../../import/queue';
 import { utcTicks } from '../../../library/favorites';
+import { ibroadcastRevoke, IBroadcastServer, type IBroadcastAccount, type IBroadcastSession } from '../../../migration/ibroadcast';
 import { JellyfinServer, type JellyfinSession } from '../../../migration/jellyfin';
 import { estimate } from '../../../migration/merge';
 import type { SourceLibrary } from '../../../migration/model';
@@ -15,12 +16,16 @@ import { browserRecords, MigrationRecord, type PlaylistOutcome, type RecordState
 import { runMigration, type CatalogueTrack, type MigrationCloud, type RunEnd, type RunProgress, type TrackImporter } from '../../../migration/run';
 import type { MediaServer } from '../../../migration/server';
 import { SubsonicServer, type SubsonicLogin } from '../../../migration/subsonic';
+import { text } from '../../../strings/loc';
 
 export type Connection =
   | { kind: 'musicbee' | 'itunes' | 'playlistfiles'; picked: Map<string, PickedFile> }
   | { kind: 'jellyfin'; session: JellyfinSession }
   | { kind: 'plex'; server: PlexServerChoice; connection: string }
-  | { kind: 'navidrome'; login: SubsonicLogin };
+  | { kind: 'navidrome'; login: SubsonicLogin }
+  // The session is one object, shared by every server serverFor makes for this connection, so the window's read
+  // and the run renew one set of tokens.
+  | { kind: 'ibroadcast'; session: IBroadcastSession; account: IBroadcastAccount };
 
 export const fetcher = (url: string, init?: RequestInit) => fetch(url, init);
 
@@ -45,6 +50,7 @@ export function serverFor(connection: Connection): MediaServer | null {
     case 'jellyfin': return new JellyfinServer(fetcher, connection.session, jellyfinDevice());
     case 'plex': return new PlexServer(fetcher, connection.server, connection.connection);
     case 'navidrome': return new SubsonicServer(fetcher, connection.login);
+    case 'ibroadcast': return new IBroadcastServer(fetcher, connection.session, connection.account, text('Migration_IBroadcastTagsFolder'));
     default: return null;
   }
 }
@@ -243,6 +249,12 @@ export async function startMigration(library: SourceLibrary, connection: Connect
       skipped: library.skipped,
     };
     migrating.end = end;
+    // The iBroadcast sign-in ends on iBroadcast's side once nothing is left that "Try again" could import.
+    if (end === 'finished' && connection.kind === 'ibroadcast' && migrating.report.notImported.length === 0) {
+      void ibroadcastRevoke(fetcher, connection.session.grant.refreshToken).catch(() => {
+        // Best effort: a token that is not revoked expires by itself.
+      });
+    }
   } catch (error) {
     // Not "paused": the person did not pause it, and must see that something went wrong.
     console.warn('The import from another app failed', error);
