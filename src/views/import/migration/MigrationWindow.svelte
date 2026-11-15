@@ -6,7 +6,7 @@
   import { icons } from '../../../design/icons';
   import { pickedFromHandles, pickedFromInput } from '../../../import/pick';
   import type { PickedFile } from '../../../import/queue';
-  import { ibroadcastAccount, ibroadcastPoll, IBroadcastSession, ibroadcastStart, type IBroadcastCode } from '../../../migration/ibroadcast';
+  import { ibroadcastAccount, ibroadcastApproval, IBroadcastSession, type IBroadcastCode } from '../../../migration/ibroadcast';
   import { finishQuickConnect, jellyfinWithPassword, startQuickConnect } from '../../../migration/jellyfin';
   import { matchPicked, readITunesLibrary } from '../../../migration/itunes';
   import type { SourceKind, SourceLibrary } from '../../../migration/model';
@@ -79,16 +79,29 @@
     { kind: 'ibroadcast', name: 'Migration_SourceIBroadcast', hint: 'Migration_HintOnline', glyph: '\ue006', brand: true },
   ];
   const sourceName = (k: SourceKind) => text(SOURCES.find((s) => s.kind === k)!.name);
-  // An iBroadcast library is named by its user name, which reads as nothing in brackets after a playlist, so it
-  // gets the app's name, as playlist files do.
-  const labelOf = (lib: SourceLibrary) => (lib.kind !== 'playlistfiles' && lib.kind !== 'ibroadcast' && lib.name ? lib.name : sourceName(lib.kind));
+  const labelOf = (lib: SourceLibrary) => (lib.kind !== 'playlistfiles' && lib.name ? lib.name : sourceName(lib.kind));
   const keeps = (lib: SourceLibrary) =>
     lib.kind === 'playlistfiles' ? text('Migration_KeepsOriginalsPlaylists')
     : lib.kind === 'ibroadcast' ? text('Migration_KeepsOriginalsIBroadcast')
     : lib.kind === 'musicbee' || lib.kind === 'itunes' ? text('Migration_KeepsOriginalsFile', labelOf(lib))
     : text('Migration_KeepsOriginalsServer', labelOf(lib));
 
+  // Stops a sign-in that waits (Plex, Quick Connect, iBroadcast), so it cannot write on another face.
+  function stopWaiting() {
+    work?.abort();
+    work = null;
+  }
+
+  // A tab opened inside the click itself, which browsers allow; it is pointed at the sign-in page once that is
+  // known. A tab opened after a wait for the server can be blocked. Null when the browser refused it.
+  function blankTab(): WindowProxy | null {
+    const tab = window.open('', '_blank');
+    if (tab) tab.opener = null;
+    return tab;
+  }
+
   function choose(k: SourceKind) {
+    stopWaiting();
     kind = k;
     error = note = '';
     libraryFile = null;
@@ -180,84 +193,83 @@
   async function quickConnect() {
     const server = serverAddress();
     if (!server) return;
-    work?.abort();
+    stopWaiting();
     const stop = (work = new AbortController());
     try {
       const { code, secret } = await startQuickConnect(fetcher, server, jellyfinDevice());
+      if (stop.signal.aborted) return;
       note = text('Migration_QuickConnectCode', code);
       while (!stop.signal.aborted) {
         await new Promise((done) => setTimeout(done, 3000));
         const session = await finishQuickConnect(fetcher, server, jellyfinDevice(), secret);
-        if (session) {
+        if (session && !stop.signal.aborted) {
           const next: Connection = { kind: 'jellyfin', session };
           await read(next, () => serverFor(next)!.read((n) => (found = n)));
           return;
         }
       }
     } catch (caught) {
-      fail(caught);
+      if (!stop.signal.aborted) fail(caught);
     }
   }
 
   async function plexSignIn() {
-    work?.abort();
+    stopWaiting();
     const stop = (work = new AbortController());
+    const tab = blankTab();
     try {
       const pin = await plexStart(fetcher, plexClient());
-      window.open(pin.authPage, '_blank', 'noopener');
+      if (stop.signal.aborted) {
+        tab?.close();
+        return;
+      }
+      if (tab) tab.location.href = pin.authPage;
       note = text('Migration_PlexWaiting');
       let token: string | null = null;
       while (!token && !stop.signal.aborted) {
         await new Promise((done) => setTimeout(done, 2000));
         token = await plexFinish(fetcher, plexClient(), pin);
       }
-      if (!token) return;
+      if (!token || stop.signal.aborted) return;
       note = '';
       plexChoices = await plexServers(fetcher, plexClient(), token);
       if (plexChoices.length === 0) error = text('Migration_PlexNoServer');
       else if (plexChoices.length === 1) await plexConnect(plexChoices[0]!);
     } catch (caught) {
-      fail(caught);
+      tab?.close();
+      if (!stop.signal.aborted) fail(caught);
     }
   }
 
   // Signs in to iBroadcast with a device code: opens iBroadcast's page with the code filled in, shows the code, and
-  // asks at the server's interval whether it was approved. A code that runs out is replaced by a new one without
-  // opening another tab; while a code waits, the button opens its page again.
+  // waits for the approval (ibroadcastApproval). A code that runs out is replaced by a new one without opening
+  // another tab; while a code waits, the button opens its page again. Back and choosing another app stop it.
   async function ibroadcastSignIn() {
     if (ibroadcastCode && ibroadcastCode.expiresAt > Date.now()) {
       window.open(ibroadcastCode.page, '_blank', 'noopener');
       return;
     }
-    work?.abort();
+    stopWaiting();
     const stop = (work = new AbortController());
-    const show = (code: IBroadcastCode) => {
-      ibroadcastCode = code;
-      note = text('Migration_IBroadcastWaiting', code.userCode);
-    };
+    const tab = blankTab();
+    let first = true;
     try {
-      let code = await ibroadcastStart(fetcher);
-      show(code);
-      window.open(code.page, '_blank', 'noopener');
-      while (!stop.signal.aborted) {
-        await new Promise((done) => setTimeout(done, code.intervalMs));
-        if (stop.signal.aborted) return;
-        const poll = await ibroadcastPoll(fetcher, code);
-        if (poll.kind === 'pending') {
-          code = poll.code;
-        } else if (poll.kind === 'expired') {
-          code = await ibroadcastStart(fetcher);
-          show(code);
-        } else {
-          ibroadcastCode = null;
-          note = '';
-          const session = new IBroadcastSession(fetcher, poll.grant);
-          const next: Connection = { kind: 'ibroadcast', session, account: await ibroadcastAccount(fetcher, session) };
-          await read(next, () => serverFor(next)!.read((n) => (found = n)));
-          return;
-        }
-      }
+      const grant = await ibroadcastApproval(fetcher, stop.signal, (code) => {
+        ibroadcastCode = code;
+        note = text('Migration_IBroadcastWaiting', code.userCode);
+        if (first && tab) tab.location.href = code.page;
+        first = false;
+      });
+      if (!grant || stop.signal.aborted) return;
+      ibroadcastCode = null;
+      note = '';
+      const session = new IBroadcastSession(fetcher, grant);
+      const next: Connection = { kind: 'ibroadcast', session, account: await ibroadcastAccount(fetcher, session) };
+      if (stop.signal.aborted) return;
+      await read(next, () => serverFor(next)!.read((n) => (found = n)));
     } catch (caught) {
+      tab?.close();
+      if (stop.signal.aborted) return;
       ibroadcastCode = null;
       note = '';
       fail(caught);
@@ -456,7 +468,7 @@
 
   {#snippet leading()}
     {#if face === 'connect' || face === 'summary'}
-      <button class="glass-button" onclick={() => (face = face === 'summary' ? 'connect' : 'apps')}>{text('Migration_Back')}</button>
+      <button class="glass-button" onclick={() => { stopWaiting(); face = face === 'summary' ? 'connect' : 'apps'; }}>{text('Migration_Back')}</button>
     {/if}
   {/snippet}
 

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { finishQuickConnect, jellyfinWithPassword, JellyfinServer, startQuickConnect, type JellyfinSession } from '../../src/migration/jellyfin';
-import { ibroadcastAccount, IBROADCAST_CLIENT_ID, ibroadcastPoll, ibroadcastRevoke, IBroadcastServer, IBroadcastSession, ibroadcastStart,
+import { ibroadcastAccount, ibroadcastApproval, IBROADCAST_CLIENT_ID, ibroadcastPoll, ibroadcastRevoke, IBroadcastServer, IBroadcastSession, ibroadcastStart,
   type IBroadcastAccount, type IBroadcastCode, type IBroadcastGrant } from '../../src/migration/ibroadcast';
 import { md5 } from '../../src/migration/md5';
 import { tagRule, type RemoteFile } from '../../src/migration/model';
@@ -460,6 +460,80 @@ describe('iBroadcast', () => {
     const second = server(later.fetcher, premium);
     await second.server.open(opening);
     expect(second.waits).toEqual([30_000]);
+  });
+
+  it('waits until the date a busy answer gives, and on a 503 that says when to come back', async () => {
+    const at = new Date(Date.now() + 40_000).toUTCString();
+    let first = true;
+    const dated = fake((url) => {
+      if (!first) return answer(url);
+      first = false;
+      return new Response('', { status: 429, headers: { 'Retry-After': at } });
+    });
+    const one = server(dated.fetcher, premium);
+    await one.server.open(opening);
+    expect(one.waits).toHaveLength(1);
+    expect(one.waits[0]).toBeGreaterThanOrEqual(35_000);
+    expect(one.waits[0]).toBeLessThanOrEqual(41_000);
+
+    let down = true;
+    const unavailable = fake((url) => {
+      if (!down) return answer(url);
+      down = false;
+      return new Response('', { status: 503, headers: { 'Retry-After': '12' } });
+    });
+    const two = server(unavailable.fetcher, premium);
+    await two.server.open(opening);
+    expect(two.waits).toEqual([12_000]);
+  });
+
+  it('finishes a renewal that was sent when the caller aborts', async () => {
+    const kept: IBroadcastGrant[] = [];
+    let sent!: () => void;
+    const sending = new Promise<void>((done) => (sent = done));
+    const fetcher: Fetch = async (_url, init) => {
+      sent();
+      await new Promise((done) => setTimeout(done, 50));
+      if (init?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return sample('ibroadcast/token-refreshed.json');
+    };
+    const session = new IBroadcastSession(fetcher, { accessToken: 'access-token-0001', refreshToken: 'refresh-token-0001', expiresAt: noon }, (g) => kept.push(g), () => noon);
+    const stop = new AbortController();
+    const renewing = session.renew('access-token-0001', stop.signal).catch(() => null);
+    await sending;
+    stop.abort();
+    await renewing;
+    expect(kept.map((g) => g.refreshToken)).toEqual(['refresh-token-0002']);
+    expect(session.grant.refreshToken).toBe('refresh-token-0002');
+  });
+
+  it('waits for approval, shows each new code, and gives the grant', async () => {
+    let polls = 0;
+    let codes = 0;
+    const { fetcher } = fake((url) => {
+      if (url.pathname === '/device/code') {
+        codes++;
+        return sample('ibroadcast/device-code.json');
+      }
+      polls++;
+      return polls === 1 ? jsonStatus(400, { error: 'expired_token' }) : polls === 2 ? jsonStatus(400, { error: 'authorization_pending' }) : sample('ibroadcast/token.json');
+    });
+    const shown: string[] = [];
+    const grant = await ibroadcastApproval(fetcher, new AbortController().signal, (c) => shown.push(c.userCode), async () => {});
+    expect(grant?.accessToken).toBe('access-token-0001');
+    expect([codes, shown]).toEqual([2, ['TESTCODE', 'TESTCODE']]);
+  });
+
+  it('stops waiting for approval when aborted, and asks for nothing more', async () => {
+    const stop = new AbortController();
+    const { fetcher, seen } = fake((url) => (url.pathname === '/device/code' ? sample('ibroadcast/device-code.json') : jsonStatus(400, { error: 'expired_token' })));
+    const shown: string[] = [];
+    const grant = await ibroadcastApproval(fetcher, stop.signal, (c) => shown.push(c.userCode), async () => {
+      stop.abort();
+    });
+    expect(grant).toBeNull();
+    expect(shown).toEqual(['TESTCODE']);
+    expect(seen.map((s) => s.url.pathname)).toEqual(['/device/code']);
   });
 
   it('renews when the library answers unauthenticated, then stops', async () => {

@@ -2,6 +2,10 @@
 // password), the token holder, and reading the library and its files. It is RPM.Core/Migration/IBroadcast.cs
 // and IBroadcastSignIn.cs of the desktop app. Thumbs up is a favourite; iBroadcast has no star ratings for
 // songs and does not keep when a song was last played. Every request only reads.
+//
+// iBroadcast's tags replace the file's (tagRule 'source'). It keeps featured artists and extra genres in lists
+// of their own, which this reader does not join into one tag, so a track with such a list gives no artist or no
+// genre, and the file's own tag, which still has them, stays.
 
 import { type RemoteFile, SkipReason, type SourceLibrary, type SourcePlaylist, type SourceSkip, type SourceTrack } from './model';
 import { arr, extensionOf, type Fetch, HttpStatus, type MediaServer, num, obj, ServerBlocked, SignInExpired, SignInFailed, str } from './server';
@@ -18,6 +22,15 @@ const VERSION: string = import.meta.env.VITE_RPM_VERSION ?? '0.0.0';
 // A 128 kbps MP3 is 16,000 bytes a second, the size of a free account's copy.
 const FREE_BYTES_PER_SECOND = 16_000;
 const MOST_BUSY_ANSWERS = 3;
+// The library's name, the same for every account: the user name would read as nothing in brackets after a
+// playlist or in the list of earlier imports.
+const LIBRARY_NAME = 'iBroadcast';
+
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+  });
 
 // A sign-in code. The person opens `page` (the code is filled in) and approves rpm there. `intervalMs` is how
 // long to wait before asking again.
@@ -108,6 +121,34 @@ export async function ibroadcastPoll(fetcher: Fetch, code: IBroadcastCode): Prom
   }
 }
 
+// Asks for a code, shows it, and asks at the server's interval whether it was approved. A code that runs out is
+// replaced by a new one, which is shown too. Returns the grant once approved, or null once `signal` is aborted:
+// after that it asks for nothing more and shows nothing more.
+export async function ibroadcastApproval(
+  fetcher: Fetch,
+  signal: AbortSignal,
+  show: (code: IBroadcastCode) => void,
+  delay: (ms: number, signal: AbortSignal) => Promise<void> = sleep,
+): Promise<IBroadcastGrant | null> {
+  let code = await ibroadcastStart(fetcher);
+  if (signal.aborted) return null;
+  show(code);
+  for (;;) {
+    await delay(code.intervalMs, signal);
+    if (signal.aborted) return null;
+    const poll = await ibroadcastPoll(fetcher, code);
+    if (signal.aborted) return null;
+    if (poll.kind === 'approved') return poll.grant;
+    if (poll.kind === 'pending') {
+      code = poll.code;
+    } else {
+      code = await ibroadcastStart(fetcher);
+      if (signal.aborted) return null;
+      show(code);
+    }
+  }
+}
+
 // The account the session belongs to: its id, its name, and whether it is Premium.
 export async function ibroadcastAccount(fetcher: Fetch, session: IBroadcastSession, signal?: AbortSignal): Promise<IBroadcastAccount> {
   const user = obj((await post(fetcher, session, API + 'status', 'status', signal))['user']);
@@ -151,17 +192,20 @@ export class IBroadcastSession {
   // Renews the tokens after iBroadcast refused `stale`. When another request renewed them meanwhile, or is
   // renewing them now, its token is used: a second renewal would send a refresh token the first one spent.
   async renew(stale: string, signal?: AbortSignal): Promise<string> {
+    signal?.throwIfAborted();
     if (this.current.accessToken !== stale) return this.current.accessToken;
     if (!this.renewing) {
-      this.renewing = this.refresh(signal).finally(() => {
+      this.renewing = this.refresh().finally(() => {
         this.renewing = null;
       });
     }
     return this.renewing;
   }
 
-  private async refresh(signal?: AbortSignal): Promise<string> {
-    const { status, answer } = await form(this.fetcher, 'token', { grant_type: 'refresh_token', refresh_token: this.current.refreshToken, client_id: IBROADCAST_CLIENT_ID }, signal);
+  // Not aborted by the caller once it is sent: iBroadcast may already have spent the old refresh token, and an
+  // answer dropped half-way would lose the new one. Every caller waiting on this renewal gets its token.
+  private async refresh(): Promise<string> {
+    const { status, answer } = await form(this.fetcher, 'token', { grant_type: 'refresh_token', refresh_token: this.current.refreshToken, client_id: IBROADCAST_CLIENT_ID });
     if (status === 200 && str(answer['access_token'])) {
       this.current = grantOf(answer, this.current.refreshToken, this.now());
       this.renewed(this.current);
@@ -241,6 +285,11 @@ class Row {
     return value === true || value === 1;
   }
 
+  // The number of items in a list field, 0 when it is not a list.
+  count(name: string): number {
+    return arr(this.field(name)).length;
+  }
+
   ids(name: string): number[] {
     return arr(this.field(name)).filter((v): v is number => typeof v === 'number' && Number.isInteger(v));
   }
@@ -281,11 +330,7 @@ export class IBroadcastServer implements MediaServer {
     private readonly session: IBroadcastSession,
     private readonly account: IBroadcastAccount,
     private readonly tagsFolder: string,
-    private readonly delay: (ms: number, signal?: AbortSignal) => Promise<void> = (ms, signal) =>
-      new Promise((resolve) => {
-        const timer = setTimeout(resolve, ms);
-        signal?.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
-      }),
+    private readonly delay: (ms: number, signal?: AbortSignal) => Promise<void> = sleep,
   ) {}
 
   async read(found: (count: number) => void, signal?: AbortSignal): Promise<SourceLibrary> {
@@ -307,11 +352,9 @@ export class IBroadcastServer implements MediaServer {
       names.set(row.id, what);
 
       const file = row.string('file');
-      const extension = this.account.premium ? extensionOf('', containerOf(row.string('type'))) : '.mp3';
       if (row.flag('trashed') || album?.flag('trashed') || inTrash.has(row.id)) skipped.push({ what, reasonKey: SkipReason.InTrash });
       else if (!file.startsWith('/')) skipped.push({ what, reasonKey: SkipReason.NotAFile });
-      else if (!extension) skipped.push({ what, reasonKey: SkipReason.NotMusic });
-      else read.push(this.trackOf(row, album, title, artist, album ? artistName(album.number('artist_id')) : '', file, extension));
+      else read.push(this.trackOf(row, album, title, row.count('artists_additional') > 0 ? '' : artist, album ? artistName(album.number('artist_id')) : '', file));
     }
     found(read.length);
 
@@ -325,12 +368,14 @@ export class IBroadcastServer implements MediaServer {
       };
     };
     // A list iBroadcast fills itself ("Most Recent Uploads", "Thumbs Up") has a type, or is marked as made by the
-    // system. Only the lists the person made come along.
-    const playlists = [
-      ...table(library['playlists']).rows.filter((r) => !r.flag('system_created') && !r.string('type')).map((r) => listOf(String(r.id), r.string('name'), [], r)),
-      ...table(library['tags']).rows.filter((r) => !r.flag('archived')).map((r) => listOf(`tag:${r.id}`, r.string('name'), [this.tagsFolder], r)),
-    ];
-    return { kind: 'ibroadcast', libraryId: this.account.userId, name: this.account.userName, tracks: read, playlists, skipped };
+    // system. Only the lists the person made come along; the others are listed as skipped.
+    const playlists: SourcePlaylist[] = [];
+    for (const r of table(library['playlists']).rows) {
+      if (r.flag('system_created') || r.string('type')) skipped.push({ what: r.string('name'), reasonKey: SkipReason.IBroadcastList });
+      else playlists.push(listOf(String(r.id), r.string('name'), [], r));
+    }
+    for (const r of table(library['tags']).rows.filter((r) => !r.flag('archived'))) playlists.push(listOf(`tag:${r.id}`, r.string('name'), [this.tagsFolder], r));
+    return { kind: 'ibroadcast', libraryId: this.account.userId, name: LIBRARY_NAME, tracks: read, playlists, skipped };
   }
 
   async open(file: RemoteFile, signal?: AbortSignal): Promise<Blob> {
@@ -350,10 +395,12 @@ export class IBroadcastServer implements MediaServer {
         renewed = true;
         continue;
       }
-      if (response.status === 429) {
-        const seconds = Number(response.headers.get('Retry-After'));
-        if (busy++ >= MOST_BUSY_ANSWERS) throw new HttpStatus(429);
-        await this.delay(Math.min(300, Math.max(1, Number.isFinite(seconds) && seconds > 0 ? seconds : 30)) * 1000, signal);
+      // Busy: 429, or 503 with a time to come back. Retry-After is seconds or a date.
+      const retryAfter = response.headers.get('Retry-After');
+      if (response.status === 429 || (response.status === 503 && retryAfter)) {
+        if (busy++ >= MOST_BUSY_ANSWERS) throw new HttpStatus(response.status);
+        const seconds = !retryAfter ? 30 : /^\d+$/.test(retryAfter.trim()) ? Number(retryAfter) : (Date.parse(retryAfter) - Date.now()) / 1000;
+        await this.delay(Math.min(300, Math.max(1, Number.isFinite(seconds) ? seconds : 30)) * 1000, signal);
         continue;
       }
       if (!response.ok) throw new HttpStatus(response.status);
@@ -361,13 +408,16 @@ export class IBroadcastServer implements MediaServer {
     }
   }
 
-  private trackOf(row: Row, album: Row | undefined, title: string, artist: string, albumArtist: string, file: string, extension: string): SourceTrack {
+  private trackOf(row: Row, album: Row | undefined, title: string, artist: string, albumArtist: string, file: string): SourceTrack {
     const seconds = row.number('length');
     const year = row.number('year');
+    // The original when the account is Premium and rpm reads its type; else the 128 kbps MP3, which iBroadcast
+    // keeps of every track.
+    const original = this.account.premium ? extensionOf('', containerOf(row.string('type'))) : '';
     return {
       sourceId: String(row.id),
       // The size is not known: the streamed file can differ from the size the library gives.
-      file: { kind: 'remote', key: `${row.id}|${QUALITY.test(file) ? file.replace(QUALITY, this.account.premium ? '/orig/' : '/128/') : file}`, extension, size: 0 },
+      file: { kind: 'remote', key: `${row.id}|${QUALITY.test(file) ? file.replace(QUALITY, original ? '/orig/' : '/128/') : file}`, extension: original || '.mp3', size: 0 },
       title,
       artist,
       album: album?.string('name') ?? '',
@@ -375,9 +425,9 @@ export class IBroadcastServer implements MediaServer {
       trackNumber: row.number('track'),
       discNumber: album?.number('disc') ?? 0,
       year: year > 0 ? year : album?.number('year') ?? 0,
-      genre: row.string('genre'),
+      genre: row.count('genres_additional') > 0 ? '' : row.string('genre'),
       durationSeconds: seconds,
-      sizeBytes: this.account.premium ? row.number('size') : Math.round(seconds * FREE_BYTES_PER_SECOND),
+      sizeBytes: original ? row.number('size') : Math.round(seconds * FREE_BYTES_PER_SECOND),
       rating: 0,
       favorite: row.number('rating') === 5,
       plays: row.number('plays'),

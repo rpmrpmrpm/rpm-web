@@ -85,6 +85,8 @@ export const SkipReason = {
   NotMusic: 'Migration_SkipNotMusic',
   // The track, or its album, is in the other app's trash (iBroadcast).
   InTrash: 'Migration_SkipInTrash',
+  // A playlist iBroadcast fills by itself, such as its most recent uploads.
+  IBroadcastList: 'Migration_SkipIBroadcastList',
 } as const;
 
 // Lower-case hex SHA-256 of the text, the first 16 characters: the id of a library that has none of its
