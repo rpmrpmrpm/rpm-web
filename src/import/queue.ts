@@ -31,6 +31,8 @@ export interface TrackTags {
   BitrateKbps?: number;
   CodecDescription?: string | null;
   RpmId?: string | null;
+  // The advisory flag, as the sidecar stores it: 1 explicit, 2 clean, absent or 0 not known.
+  Advisory?: number;
   [field: string]: unknown;
 }
 

@@ -133,6 +133,8 @@ export function catalogueTags(row: ImportRow) {
     movementName: tags.MovementName ?? null,
     movementNumber: tags.MovementNumber ?? 0,
     composer: tags.Composers ?? null,
+    // 0 is "not known", which the store reads as no answer and not as clean.
+    advisory: tags.Advisory ?? 0,
   };
 }
 

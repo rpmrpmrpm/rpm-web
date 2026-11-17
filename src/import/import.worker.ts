@@ -2,6 +2,7 @@
 // the renditions.
 // It handles one message at a time.
 
+import { ADVISORY_EXPLICIT, splitExplicitMark } from './explicit-mark';
 import { LoudnessMeter, MEASURE_RATE } from './loudness';
 import { parseBlob } from 'music-metadata';
 
@@ -60,10 +61,14 @@ const first = (values: (string | undefined)[] | undefined) => values?.[0] ?? nul
 async function readTags(file: File): Promise<{ tags: TrackTags; hasArt: boolean }> {
   let { common, format, native } = await parseBlob(file, { skipPostHeaders: false });
   if (!format.duration) ({ common, format, native } = await parseBlob(file, { skipPostHeaders: false, duration: true }));
+
+  // A download tool's explicit mark at the end of the title is the advisory flag, not part of the name.
+  const { title, marked } = splitExplicitMark(common.title);
   return {
     hasArt: (common.picture?.length ?? 0) > 0,
     tags: {
-      Title: common.title ?? null,
+      Title: title,
+      ...(marked ? { Advisory: ADVISORY_EXPLICIT } : {}),
       Artist: common.artist ?? null,
       AlbumArtist: common.albumartist ?? null,
       Album: common.album ?? null,
