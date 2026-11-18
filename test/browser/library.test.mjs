@@ -206,7 +206,7 @@ test('Playlists says what is in the desktop app, and can be made and filled here
   assert.equal(playlists.length, 2);
 
   await page.click('strong:text-is("Road trip")');
-  await page.waitForSelector('text=1 track isn');
+  await page.waitForSelector('text=1 song can');
   await page.waitForSelector('.song:has-text("Alpha")');
   await page.click('button[aria-label="Remove from playlist"]');
   await page.waitForFunction(() => document.querySelectorAll('.song').length === 0);
