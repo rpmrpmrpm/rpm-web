@@ -13,6 +13,7 @@
   import Window from '../import/Window.svelte';
   import FeedbackWindow from '../profile/FeedbackWindow.svelte';
   import Settings from '../profile/Settings.svelte';
+  import FeedPane from '../feed/FeedPane.svelte';
   import Library from '../library/Library.svelte';
   import { toWall, type LibraryMode } from '../library/pages.svelte';
   import RecordActions from '../library/RecordActions.svelte';
@@ -28,14 +29,14 @@
   import Setup from '../setup/Setup.svelte';
   import { browserStores, endSetup, openingStep, type SetupStep } from '../setup/setup';
 
-  type Left = 'info' | 'radio' | 'import' | null;
+  type Left = 'info' | 'radio' | 'feed' | 'import' | null;
 
   // The desktop's gesture: the content fades out, the width moves, and the content fades in.
   const FADE_MS = 110;
   const GLIDE_MS = 240;
 
   let width = $state(innerWidth);
-  let tab = $state<'home' | 'library' | 'radio' | 'import' | 'profile'>('home');
+  let tab = $state<'home' | 'library' | 'radio' | 'feed' | 'import' | 'profile'>('home');
 
   // left is where the pane is going. drawer is what stands in it: it stays until the pane has closed.
   // On a computer the window opens as the desktop's does, with Track info out.
@@ -107,7 +108,7 @@
   const closeImport = () => moveLeft(beneath);
 
   // Whether the library is hidden by the left pane. Import lies over the whole row, because a grid of tags needs
-  // every column. Track info and the radio stand beside the library at every width that has two panes.
+  // every column. Track info, the radio and the Feed stand beside the library at every width that has two panes.
   const covered = $derived(left === 'import');
 
   function pickMode(next: LibraryMode) {
@@ -185,6 +186,8 @@
         <Library compact mode={mode === 'home' ? 'albums' : mode} picker onPick={pickMode} onImport={() => (tab = 'import')} />
       {:else if tab === 'radio'}
         <RadioPane />
+      {:else if tab === 'feed'}
+        <FeedPane />
       {:else if tab === 'import'}
         <ImportPane
           onClose={() => {
@@ -226,6 +229,9 @@
       <button class:on={tab === 'radio'} onclick={() => (tab = 'radio')}>
         <i class="icon">{icons.radio}</i>{text('Rpm_Tab_Radio')}
       </button>
+      <button class:on={tab === 'feed'} onclick={() => (tab = 'feed')}>
+        <i class="icon">{icons.feed}</i>{text('Rpm_Tab_Feed')}
+      </button>
       <button class:on={tab === 'import'} onclick={() => (tab = 'import')}>
         <i class="icon">{icons.import}</i>{text('Queue_Title')}
       </button>
@@ -253,6 +259,9 @@
           <button class:on={left === 'radio'} onclick={() => pickLeft('radio')}>
             <i class="icon">{icons.radio}</i>{text('LeftNav_Radio')}
           </button>
+          <button class:on={left === 'feed'} onclick={() => pickLeft('feed')}>
+            <i class="icon">{icons.feed}</i>{text('Rpm_Tab_Feed')}
+          </button>
           <button class:on={left === 'import'} onclick={() => pickLeft('import')}>
             <i class="icon">{icons.import}</i>{text('Queue_Title')}
           </button>
@@ -264,6 +273,8 @@
           <div class="view" class:clear={drawerClear}><TrackInfo /></div>
         {:else if drawer === 'radio'}
           <div class="view" class:clear={drawerClear}><RadioPane /></div>
+        {:else if drawer === 'feed'}
+          <div class="view" class:clear={drawerClear}><FeedPane /></div>
         {:else if drawer === 'import'}
           <div class="view" class:clear={drawerClear}><ImportPane onClose={closeImport} /></div>
         {/if}

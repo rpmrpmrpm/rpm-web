@@ -1,6 +1,11 @@
 // The services of the app, made once.
 
 import { CloudClient } from './api/cloud';
+import { Community, type Song } from './api/community';
+import { BadgeReporter } from './social/badge-report';
+import { Faces } from './social/faces';
+import { FeedCovers } from './social/feed-covers';
+import { ListeningShare, type Playing } from './social/listening';
 import { Api } from './api/http';
 import { Profiles } from './api/profile';
 import { Session } from './api/session';
@@ -168,3 +173,40 @@ export const tuner = new Tuner({
 // Each stops the other. The keys on the lock screen go to whichever is playing.
 player.onStarting = () => tuner.stop();
 tuner.onChange(() => (player.remote = tuner.station ? tuner : null));
+
+export const community = new Community(api);
+export const faces = new Faces(api);
+export const feedCovers = new FeedCovers(api, () => {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+});
+
+// The song playing in this browser, for a post and for the profile's "listening to". A radio station is not a song,
+// so it gives none, and neither does a track without a title.
+export function playingNow(): Playing | null {
+  const track = player.current;
+  if (!track || player.stopped || tuner.station || !track.title) return null;
+  const song: Song = { artist: track.artist ?? track.tags?.albumArtist ?? '', title: track.title, album: track.album ?? '' };
+  return { identity: track.rpmId, song, paused: !player.wantsToPlay };
+}
+
+const listening = new ListeningShare(community, () => session.user !== null);
+const noteListening = () => listening.note(playingNow());
+player.onChange(noteListening);
+tuner.onChange(noteListening);
+
+// The badges are counted once the library is read, and again when its albums change. The count waits a few seconds,
+// so it never stands in front of the first wall being drawn.
+const BADGES_AFTER_MS = 3000;
+export const badgeReporter = new BadgeReporter(community, () => session.user !== null);
+let badgesDue: ReturnType<typeof setTimeout> | undefined;
+catalogue.onChange(() => {
+  if (catalogue.state !== 'ready' || badgesDue !== undefined) return;
+  badgesDue = setTimeout(() => {
+    badgesDue = undefined;
+    badgeReporter.note(catalogue.albums);
+  }, BADGES_AFTER_MS);
+});

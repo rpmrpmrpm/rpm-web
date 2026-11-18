@@ -83,4 +83,12 @@ export const icons = {
   sliders: '\uf1de',
   alignLeft: '\uf036',
   save: '\uf0c7',
+  feed: '\uf1ea',
+  thumbsUp: '\uf164',
+  thumbsDown: '\uf165',
+  comment: '\uf075',
+  bell: '\uf0f3',
+  flag: '\uf024',
+  userMinus: '\uf503',
+  userCheck: '\uf4fc',
 } as const;
