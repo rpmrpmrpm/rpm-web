@@ -6,7 +6,7 @@ import type { CloudClient } from '../api/cloud';
 import type { CloudStream, CloudTrack } from '../api/wire';
 import { gainFor, levelOf, levelOfRecord, type Level, type NormalizeMode } from './level';
 import type { Failure, WorkerTrack } from './playback.worker';
-import { RESTART_AFTER_SECONDS, restored, Retries, shuffled, StartGate, Transport, type Loaded } from './queue';
+import { planMove, RESTART_AFTER_SECONDS, restored, Retries, shuffled, StartGate, Transport, type Loaded } from './queue';
 import { Stream } from './stream';
 import { ORIGINAL } from './ladder';
 import { volumeWorks, type Volume } from './volume';
@@ -539,18 +539,59 @@ export class Player {
     this.changed();
   }
 
-  toggleShuffle() {
-    if (this.beforeShuffle) {
-      this.queue = restored(this.queue, this.index, this.beforeShuffle);
-      this.beforeShuffle = null;
-      this.isShuffled = false;
-    } else {
-      this.beforeShuffle = [...this.queue];
-      this.queue = shuffled(this.queue, this.index);
+  // The rows still to come in another order, and on the next press back in the order they had.
+  async toggleShuffle() {
+    await this.reorder((rows) => {
+      if (this.beforeShuffle) {
+        const back = restored(rows, this.index, this.beforeShuffle);
+        this.beforeShuffle = null;
+        this.isShuffled = false;
+        return back;
+      }
+      this.beforeShuffle = [...rows];
       this.isShuffled = true;
-      this.inAlbumOrder = false;
-    }
+      return shuffled(rows, this.index);
+    });
+  }
+
+  // Starts the row at this position of the queue. The queue stays as it is.
+  playAt(index: number) {
+    if (this.queue[index]) this.moveTo(index);
+  }
+
+  // Moves one row of the queue to another place while it plays, as the Now playing card's rearranging does. The
+  // row is found again by itself after the wait, so a second move made meanwhile is not undone.
+  async move(from: number, to: number) {
+    const row = this.queue[from];
+    if (!row || from === to) return;
+    await this.reorder((rows) => {
+      const at = rows.indexOf(row);
+      if (at < 0) return rows;
+      const plan = planMove(rows.length, this.index, at, to);
+      const [taken] = rows.splice(plan.from, 1);
+      rows.splice(plan.to, 0, taken!);
+      return rows;
+    });
+  }
+
+  // Puts the queue in another order while it plays. The next track, when it is already in the worker's queue, is
+  // taken back first, unless it has started, as playNext does: left there it would play next whatever the new
+  // order says, and the playhead would then jump to wherever that row now stands and pass over the rows before
+  // it. The playing row plays on wherever it lands. A key press during the wait wins, and the change is dropped.
+  private async reorder(change: (rows: QueueRow[]) => QueueRow[]) {
+    const moves = this.moves;
+    const taken = this.tail > this.index ? await this.stream.withdraw() : 0;
+    if (moves !== this.moves) return;
+    if (taken) this.tail = this.index;
+    this.waitingLive = null;
+    const playing = this.queue[this.index];
+    const handed = this.queue[this.tail];
+    this.queue = change([...this.queue]);
+    if (playing) this.index = this.queue.indexOf(playing);
+    if (handed) this.tail = this.queue.indexOf(handed);
+    this.inAlbumOrder = false;
     this.requeue();
+    void this.handAfterTail();
   }
 
   cycleRepeat() {

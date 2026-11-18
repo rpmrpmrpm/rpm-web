@@ -91,4 +91,5 @@ export const icons = {
   flag: '\uf024',
   userMinus: '\uf503',
   userCheck: '\uf4fc',
+  gripLines: '\uf7a4',
 } as const;

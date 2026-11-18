@@ -102,6 +102,41 @@ for (const [name, engine, options] of [
     await browser.close();
   });
 
+  test(`${name}: a shuffle while the next track is cued plays the shuffled order, with nothing passed over`, { timeout: 90_000 }, async () => {
+    const { browser, page, problems } = await open(engine, options);
+    await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac'), 0);");
+    await playing(page, 'flac 1');
+
+    // By now the second track is in the worker's queue. The shuffle takes it back and hands the new next one.
+    await page.waitForFunction(() => window.signs.includes('flac-2'));
+    await page.evaluate(() => window.player.toggleShuffle());
+    const next = await page.evaluate(() => window.player.queue[1].track.title);
+    await page.evaluate(() => window.player.seek(23));
+    await playing(page, next, 40_000);
+    assert.equal((await read(page)).index, 1);
+    assert.deepEqual(problems, []);
+    await browser.close();
+  });
+
+  test(`${name}: a row moved while the queue plays is played in its new place, and a row pressed plays`, { timeout: 90_000 }, async () => {
+    const { browser, page, problems } = await open(engine, options);
+    await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac'), 0);");
+    await playing(page, 'flac 1');
+
+    await page.waitForFunction(() => window.signs.includes('flac-2'));
+    await page.evaluate(() => window.player.move(4, 1));
+    assert.deepEqual(await page.evaluate(() => window.player.queue.map((row) => row.track.title).slice(0, 3)), ['flac 1', 'flac 5', 'flac 2']);
+    await page.evaluate(() => window.player.seek(23));
+    await playing(page, 'flac 5', 40_000);
+    assert.equal((await read(page)).index, 1);
+
+    await page.evaluate(() => window.player.playAt(3));
+    await playing(page, 'flac 3');
+    assert.equal((await read(page)).index, 3);
+    assert.deepEqual(problems, []);
+    await browser.close();
+  });
+
   test(`${name}: Next pressed twice lands on the second press, with nothing of the others`, { timeout: 90_000 }, async () => {
     const { browser, page, problems } = await open(engine, options);
     await start(page, "window.player.setVolume(0.01); window.player.play(window.album('flac'), 0);");

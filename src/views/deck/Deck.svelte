@@ -24,6 +24,7 @@
   const keys = $derived(onAir.station ? tuner : player);
   const playing = $derived(onAir.station ? onAir.wantsToPlay : now.wantsToPlay);
   let queueOpen = $state(false);
+  let queueKey = $state<HTMLElement | null>(null);
   let menuOpen = $state(false);
 </script>
 
@@ -40,7 +41,13 @@
 
   <div class="transport">
     {#if now.track}<Heart track={now.track} />{/if}
-    <button class="key" title={text('Deck_QueueTip')} aria-label={text('Deck_QueueTip')} onclick={() => (queueOpen = !queueOpen)}><i class="icon">{icons.queue}</i></button>
+    <!-- The Now playing card opens upwards from its key, as the desktop's deck flyouts do. -->
+    <span class="anchor" bind:this={queueKey}>
+      <button class="key" class:on={queueOpen} title={text('Deck_QueueTip')} aria-label={text('Deck_QueueTip')} aria-expanded={queueOpen} onclick={() => (queueOpen = !queueOpen)}><i class="icon">{icons.queue}</i></button>
+      {#if queueOpen}
+        <QueueCard anchor={queueKey} onClose={() => (queueOpen = false)} />
+      {/if}
+    </span>
     <button class="key" title={text('Transport_Stop')} onclick={() => keys.stop()}><i class="icon">{icons.stop}</i></button>
     <button class="key" title={text('Transport_Previous')} onclick={() => keys.previous()}><i class="icon">{icons.previous}</i></button>
     <button class="key play" title={text('Transport_PlayPause')} onclick={() => keys.toggle()}>
@@ -79,10 +86,6 @@
   <div class="side end">
     <button class="deck-pill" title={text('Deck_MenuTip')} aria-label={text('Deck_MenuTip')} onclick={() => (menuOpen = !menuOpen)}><i class="icon">{icons.menu}</i></button>
   </div>
-
-  {#if queueOpen}
-    <QueueCard onClose={() => (queueOpen = false)} />
-  {/if}
 
   {#if menuOpen}
     <div class="menu pane">
@@ -168,6 +171,16 @@
   .transport .key.play {
     width: 50px;
     height: 50px;
+  }
+
+  /* What the Now playing card stands over. */
+  .anchor {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .transport .key.on {
+    color: #fff;
   }
 
   @media (hover: hover) {
