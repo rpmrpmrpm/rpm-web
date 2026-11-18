@@ -6,7 +6,6 @@ import { listenCounts, ListenTally } from '../../src/audio/listen';
 import { LoudnessMeter, MEASURE_RATE } from '../../src/import/loudness';
 import { groupAlbums, type CloudAlbum } from '../../src/library/albums';
 import {
-  artistMatches,
   buildArtistWall,
   creditNames,
   creditRows,
@@ -151,11 +150,10 @@ describe('the artist wall', () => {
     expect(initialOf('坂本龍一')).toBe('#');
   });
 
-  it('searches a folded reading of both sides', () => {
-    expect(artistMatches('Sigur Rós', 'sigur ros')).toBe(true);
-    expect(artistMatches('AC/DC', 'acdc')).toBe(true);
-    expect(artistMatches("Guns N' Roses", 'guns n roses')).toBe(true);
-    expect(artistMatches('ABBA', '-')).toBe(true);
+  it('folds a name for the search: accents, case and everything but letters and digits', () => {
+    expect(searchKey('Sigur Rós')).toBe(searchKey('sigur ros'));
+    expect(searchKey('AC/DC')).toBe('acdc');
+    expect(searchKey("Guns N' Roses")).toBe(searchKey('guns n roses'));
     expect(searchKey('Björk')).toBe('bjork');
   });
 

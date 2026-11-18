@@ -60,13 +60,13 @@
     {:else if mode === 'home'}
       <HomeView {onOpen} {onImport} />
     {:else if mode === 'artists'}
-      <ArtistsView {onOpen} />
+      <ArtistsView {onOpen} {onPick} />
     {:else if mode === 'genres'}
-      <GenresView {onOpen} {onArtist} />
+      <GenresView {onOpen} {onArtist} {onPick} />
     {:else if mode === 'playlists'}
-      <PlaylistsView />
+      <PlaylistsView {onPick} />
     {:else}
-      <Collection {compact} {onImport} {onOpen} />
+      <Collection {compact} {onImport} {onOpen} {onPick} />
     {/if}
   </div>
 </div>

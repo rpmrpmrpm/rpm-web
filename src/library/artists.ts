@@ -269,11 +269,6 @@ export function searchKey(text: string | null | undefined): string {
     .toLowerCase();
 }
 
-export function artistMatches(name: string, query: string): boolean {
-  const wanted = searchKey(query);
-  return !wanted || searchKey(name).includes(wanted);
-}
-
 export type ArtistOrdering = 'Name' | 'Albums' | 'Tracks' | 'Added';
 
 const collator = new Intl.Collator(undefined, { sensitivity: 'accent' });

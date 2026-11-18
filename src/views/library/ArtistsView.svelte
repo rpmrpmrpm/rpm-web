@@ -1,29 +1,27 @@
 <script lang="ts">
   // Artists: everyone the collection files a record under, and each one's page.
-  import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
-  import { artistMatches, initialOf, ownAlbums, searchKey, sortArtists, type ArtistWallItem } from '../../library/artists';
+  import { initialOf, ownAlbums, sortArtists, type ArtistWallItem } from '../../library/artists';
   import { albumsByKey, artistWall } from '../../library/walls';
   import { library } from '../../state.svelte';
   import { text } from '../../strings/loc';
   import AlphabetRail from './AlphabetRail.svelte';
   import ArtistPage from './ArtistPage.svelte';
   import ArtistTile from './ArtistTile.svelte';
-  import { pages } from './pages.svelte';
+  import SearchBox from '../search/SearchBox.svelte';
+  import { pages, type LibraryMode } from './pages.svelte';
 
-  let { onOpen }: { onOpen: (album: CloudAlbum) => void } = $props();
+  let { onOpen, onPick }: { onOpen: (album: CloudAlbum) => void; onPick: (mode: LibraryMode) => void } = $props();
 
-  let search = $state('');
+  let keys = $state<HTMLElement | null>(null);
   let scroller = $state<HTMLElement | null>(null);
   let lit = $state('');
 
   const held = $derived(albumsByKey(library.albums));
   const every = $derived(artistWall(library.albums));
   const sorted = $derived(sortArtists(every, 'Name', held));
-  const shown = $derived.by(() => {
-    const wanted = searchKey(search);
-    return wanted ? sorted.filter((artist) => artistMatches(artist.name, search)) : sorted;
-  });
+  // The search answers in its own panel (SearchBox) and does not narrow the wall.
+  const shown = $derived(sorted);
   const open = $derived(pages.artist === null ? null : (every.find((artist) => artist.name === pages.artist) ?? null));
   const first = (artist: ArtistWallItem) => held.get(ownAlbums(artist)[0] ?? '');
 
@@ -60,10 +58,7 @@
         <h2 class="heading">{text('Artists_Title')}</h2>
         <p class="pane-line">{shown.length === 1 ? text('Artists_CountOne') : text('Artists_Count', shown.length)}</p>
       </div>
-      <label class="search">
-        <i class="icon">{icons.search}</i>
-        <input type="search" placeholder={text('Artists_SearchPlaceholder')} bind:value={search} />
-      </label>
+      <div class="keys" bind:this={keys}><SearchBox id="artists" edge={keys} {onPick} /></div>
     </header>
 
     <div class="scroller" bind:this={scroller} onscroll={followScroll}>
@@ -76,7 +71,7 @@
           {/each}
         </div>
       {:else if library.state === 'ready'}
-        <p class="empty">{text(library.albums.length ? 'Artists_NoMatch' : 'Artists_Empty')}</p>
+        <p class="empty">{text('Artists_Empty')}</p>
       {/if}
     </div>
     <AlphabetRail {letters} lit={lit} onPick={jump} />
@@ -101,31 +96,9 @@
     padding-right: 18px;
   }
 
-  .search {
+  .keys {
     display: flex;
-    gap: 8px;
-    align-items: center;
-    width: 180px;
-    height: 28px;
-    padding: 0 9px;
-    border: 1px solid rgb(255 255 255 / 0.133);
-    border-radius: 6px;
-    color: rgb(255 255 255 / 0.6);
-  }
-
-  .search .icon {
-    font-size: 11px;
-  }
-
-  .search input {
-    flex: 1;
-    min-width: 0;
-    border: 0;
-    outline: none;
-    background: none;
-    color: #fff;
-    font: inherit;
-    font-size: 12px;
+    margin-top: 4px;
   }
 
   .scroller {

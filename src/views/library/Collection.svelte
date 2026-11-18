@@ -7,18 +7,24 @@
   import { library } from '../../state.svelte';
   import { albumCount, trackCount } from '../../strings/counts';
   import { text } from '../../strings/loc';
-  import { searchSongs } from '../../library/search';
   import AlbumList, { type AlbumGrouping } from './AlbumList.svelte';
   import AlbumWall from './AlbumWall.svelte';
   import TrackTable from './TrackTable.svelte';
+  import SearchBox from '../search/SearchBox.svelte';
+  import type { LibraryMode } from './pages.svelte';
   import RecordSpinner from './RecordSpinner.svelte';
   import { collection, pickView, type CollectionView } from './view.svelte';
 
-  let { compact = false, onImport, onOpen }: { compact?: boolean; onImport: () => void; onOpen: (album: CloudAlbum) => void } = $props();
+  let {
+    compact = false,
+    onImport,
+    onOpen,
+    onPick,
+  }: { compact?: boolean; onImport: () => void; onOpen: (album: CloudAlbum) => void; onPick: (mode: LibraryMode) => void } = $props();
 
   type View = CollectionView;
 
-  let search = $state('');
+  let tools = $state<HTMLElement | null>(null);
   // The cover size on the wall, kept in this browser like the view and the grouping.
   const SIZE_KEY = 'rpm-library-cover-size';
   const SMALLEST = 120;
@@ -51,7 +57,6 @@
   ];
 
   const allTracks = $derived(library.albums.flatMap((album) => album.tracks));
-  const hits = $derived(search.trim() ? searchSongs(library.albums, search).map((hit) => hit.track) : allTracks);
 
   const ORDERINGS: [AlbumOrdering, string, string][] = [
     ['Artist', 'AlbumSort_Artist', icons.artist],
@@ -133,17 +138,8 @@
     };
   });
 
-  const shown = $derived.by(() => {
-    const words = search.trim().toLowerCase();
-    const albums = lovedOnly ? library.albums.filter((album) => loved.has(album.key)) : library.albums;
-    if (!words) return albums;
-    return albums.filter(
-      (album) =>
-        album.album.toLowerCase().includes(words) ||
-        album.artist.toLowerCase().includes(words) ||
-        album.tracks.some((track) => track.title?.toLowerCase().includes(words)),
-    );
-  });
+  // The search answers in its own panel (SearchBox) and does not narrow the wall.
+  const shown = $derived(lovedOnly ? library.albums.filter((album) => loved.has(album.key)) : library.albums);
 </script>
 
 <div class="collection" class:compact>
@@ -153,11 +149,8 @@
       <p class="pane-line">{library.state === 'ready' ? stats : ''}</p>
     </div>
 
-    <div class="tools">
-      <label class="search">
-        <i class="icon">{icons.search}</i>
-        <input type="search" placeholder={text('Review_SearchPlaceholder')} bind:value={search} />
-      </label>
+    <div class="tools" bind:this={tools}>
+      <SearchBox id="albums" edge={tools} {onPick} openWidth={compact ? 180 : 150} />
       <div class="slot">
         <button class="slot-key" class:lit={lovedOnly} aria-pressed={lovedOnly} title={text('Library_FavoritesOnly')} aria-label={text('Library_FavoritesOnly')} onclick={() => (lovedOnly = !lovedOnly)}><i class="icon" class:outline={!lovedOnly}>{icons.heart}</i></button>
       </div>
@@ -195,7 +188,7 @@
 
   {#if library.state === 'ready' && library.albums.length > 0}
     {#if view === 'table'}
-      <TrackTable tracks={hits} />
+      <TrackTable tracks={allTracks} />
     {:else if view === 'list'}
       <AlbumList albums={shown} {compact} {grouping} {onOpen} />
     {:else}
@@ -239,39 +232,6 @@
     align-items: center;
     height: 28px;
     margin-top: 4px;
-  }
-
-  .search {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    width: 150px;
-    height: 28px;
-    padding: 0 9px;
-    border: 1px solid rgb(255 255 255 / 0.133);
-    border-radius: 6px;
-    color: rgb(255 255 255 / 0.6);
-    font-size: 12px;
-  }
-
-  .search input {
-    width: 100%;
-    min-width: 0;
-    border: 0;
-    background: none;
-    color: #fff;
-    outline: none;
-    font-size: 16px;
-  }
-
-  .search input::placeholder {
-    color: rgb(255 255 255 / 0.47);
-  }
-
-  @media (pointer: fine) {
-    .search input {
-      font-size: 12px;
-    }
   }
 
   /* A key in the library's header: a box 28 high with a hairline, the height of the search beside it. */
@@ -390,11 +350,6 @@
   .compact .tools {
     width: 100%;
     margin-top: 0;
-  }
-
-  .compact .search {
-    flex: 1;
-    width: auto;
   }
 
   .band {

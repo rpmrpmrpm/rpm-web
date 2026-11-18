@@ -150,9 +150,12 @@ test('Artists files each act once, a guest included, and opens a page', async ()
   await page.waitForSelector('.song:has-text("Delta")');
   await page.waitForSelector('.song:has-text("Epsilon")');
 
+  // The search answers in its own panel and leaves the wall whole.
   await page.click('button[aria-label="Back to artists"]');
-  await page.fill('input[type=search]', 'radio');
-  await page.waitForFunction(() => document.querySelectorAll('.tile strong').length === 1);
+  await page.click('.wall-page .box .lens');
+  await page.fill('.wall-page .box input', 'radio');
+  await page.waitForSelector('.panel .answer:has-text("Radiohead")');
+  assert.equal((await page.$$('.tile strong')).length, 4);
   assert.deepEqual(problems, []);
   await page.close();
 });
@@ -186,8 +189,87 @@ test('The album list and the data table show the same collection', async () => {
   await page.click('.head button:text-is("Year")');
   await page.waitForFunction(() => ['Delta', 'Epsilon'].includes(document.querySelector('.table .row .title')?.textContent));
 
-  await page.fill('input[type=search]', 'gamm');
-  await page.waitForFunction(() => document.querySelectorAll('.table .row').length === 1);
+  // The search answers in its own panel and leaves the table whole.
+  await page.click('.box .lens');
+  await page.fill('.box input', 'gamm');
+  await page.waitForSelector('.panel .answer:has-text("Gamma")');
+  assert.equal((await page.$$('.table .row')).length, FILES.length);
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+test('The library search answers by kind, opens what is chosen and keeps the search', async () => {
+  const { page, problems } = await open();
+
+  await rail(page, 'Albums');
+  await page.waitForSelector('.card');
+  await page.click('.box .lens');
+  await page.fill('.box input', 'kid');
+  await page.waitForSelector('.panel h4:text-is("Albums")');
+  assert.match(await page.textContent('.panel'), /Gamma/);
+  await page.click('.panel .answer:has-text("Kid A")');
+  await page.waitForSelector('.sheet');
+  await page.waitForSelector('.panel', { state: 'detached' });
+  await page.waitForSelector('.box input', { state: 'detached' });
+
+  await page.click('.sheet .back-key');
+  await page.click('.box .lens');
+  await page.waitForSelector('.panel h4:text-is("Recent searches")');
+  assert.match(await page.textContent('.panel'), /kid/);
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.panel', { state: 'detached' });
+
+  // The Albums view fades out first: the Artists view's own box is the one to press.
+  await rail(page, 'Artists');
+  await page.click('.wall-page .box .lens');
+  await page.fill('.wall-page .box input', 'portis');
+  await page.click('.panel .answer:has-text("Portishead")');
+  await page.waitForSelector('.page h1:has-text("Portishead"), .page h2:has-text("Portishead")');
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+test('The Now playing card lists the queue with covers and bylines, plays a row pressed, and rearranges', async () => {
+  const { page, problems } = await open();
+  await rail(page, 'Albums');
+  await page.click('.box .lens');
+  await page.fill('.box input', 'dummy');
+  await page.click('.panel .answer:has-text("Dummy")');
+  await page.click('.sheet button:has-text("Play")');
+
+  await page.click('.deck button[aria-label="Now playing queue"]');
+  await page.waitForSelector('.card li >> nth=1');
+  assert.equal(await page.textContent('.card .count'), '2 songs');
+  assert.match(await page.textContent('.card li >> nth=0'), /Alpha.*Portishead · Dummy/s);
+  assert.equal(await page.getAttribute('.card li >> nth=0', 'class').then((name) => name.includes('playing')), true);
+
+  // Shuffle needs two songs still to come.
+  assert.equal(await page.isDisabled('.card button[aria-label="Shuffle"]'), true);
+
+  const streamed = page.waitForRequest((request) => request.url().includes('/api/cloud/stream/a2'));
+  await page.click('.card li >> nth=1 >> .row');
+  await streamed;
+
+  await page.click('.card button[aria-label="Rearrange"]');
+  await page.waitForSelector('.card .grip');
+  await page.click('.card button[aria-label="Done"]');
+  await page.waitForSelector('.card .grip', { state: 'detached' });
+
+  // A press outside the card closes it.
+  await page.mouse.click(700, 300);
+  await page.waitForSelector('.card li', { state: 'detached' });
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+test('A song found plays', async () => {
+  const { page, problems } = await open();
+  await rail(page, 'Albums');
+  await page.click('.box .lens');
+  await page.fill('.box input', 'epsilon');
+  const streamed = page.waitForRequest((request) => request.url().includes('/api/cloud/stream/d1'));
+  await page.click('.panel .answer:has-text("Epsilon")');
+  await streamed;
   assert.deepEqual(problems, []);
   await page.close();
 });
@@ -465,6 +547,35 @@ test('the band above the panes opens when a record starts, and closes when it st
   await page.waitForTimeout(600);
   assert.equal(await height(), 78);
   assert.notEqual(await page.$('.window > aside'), null, 'and back when it stops');
+  await page.close();
+});
+
+test('a press on the sleeve in the band opens the page of the record playing, and not while the band is tucked', async () => {
+  const { page } = await open();
+
+  await page.click('.card >> nth=0');
+  await page.waitForSelector('.drawer .track');
+  await page.click('.drawer .mini-key >> nth=0');
+  await page.waitForFunction(() => document.querySelector('.band').classList.contains('open'));
+  await page.waitForTimeout(600);
+  const playing = (await page.textContent('.band .playing .album')).trim();
+
+  await page.click('.band .to-album');
+  await page.waitForSelector(`.sheet h2:text-is("${playing}")`);
+  await page.click('.sheet .back-key');
+  await page.waitForSelector(`.sheet h2:text-is("${playing}")`, { state: 'detached' });
+
+  // Tucked, the record's layer is faded out. A press where its sleeve was reaches the band, not the sleeve.
+  await page.dblclick('.band .grip');
+  await page.waitForFunction(() => !document.querySelector('.band').classList.contains('open'));
+  await page.waitForTimeout(600);
+  const under = await page.$eval('.band .to-album', (key) => {
+    const box = key.getBoundingClientRect();
+    const band = key.closest('.band').getBoundingClientRect();
+    const y = Math.min(box.top + box.height / 2, band.bottom - 20);
+    return document.elementFromPoint(box.left + box.width / 2, y)?.closest('.to-album') !== null;
+  });
+  assert.equal(under, false);
   await page.close();
 });
 

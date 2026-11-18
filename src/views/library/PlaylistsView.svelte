@@ -18,7 +18,8 @@
   import DesktopGet from '../shell/DesktopGet.svelte';
   import PlaylistCover from './PlaylistCover.svelte';
   import PlaylistDetail from './PlaylistDetail.svelte';
-  import { pages } from './pages.svelte';
+  import SearchBox from '../search/SearchBox.svelte';
+  import { pages, type LibraryMode } from './pages.svelte';
   import RecordSpinner from './RecordSpinner.svelte';
 
   const VIEW_KEY = 'rpm.playlistView';
@@ -42,6 +43,10 @@
     }
   };
 
+  let { onPick }: { onPick: (mode: LibraryMode) => void } = $props();
+
+  // The row of keys at the right of the heading: the search panel's right edge.
+  let keys = $state<HTMLElement | null>(null);
   let held = $state.raw<CloudPlaylist[] | null>(null);
   let generated = $state.raw<GeneratedList[]>([]);
   let failed = $state(false);
@@ -307,7 +312,8 @@
         <h2 class="heading">{text('Playlists_Title')}</h2>
         <p class="pane-line">{subheading}</p>
       </div>
-      <div class="views">
+      <div class="views" bind:this={keys}>
+        <SearchBox id="playlists" edge={keys} {onPick} />
         <div class="toggle">
           <button class:on={view === 'icons'} title={text('Playlists_ViewIcons')} aria-label={text('Playlists_ViewIcons')} aria-pressed={view === 'icons'} onclick={() => setView('icons')}><i class="icon">{icons.grid}</i></button>
           <button class:on={view === 'list'} title={text('Playlists_ViewList')} aria-label={text('Playlists_ViewList')} aria-pressed={view === 'list'} onclick={() => setView('list')}><i class="icon">{icons.list}</i></button>

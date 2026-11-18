@@ -14,9 +14,12 @@
   import GenreMark from './GenreMark.svelte';
   import ArtistTile from './ArtistTile.svelte';
   import Shelf from './Shelf.svelte';
-  import { pages } from './pages.svelte';
+  import SearchBox from '../search/SearchBox.svelte';
+  import { pages, type LibraryMode } from './pages.svelte';
 
-  let { onOpen, onArtist }: { onOpen: (album: CloudAlbum) => void; onArtist: (name: string) => void } = $props();
+  let { onOpen, onArtist, onPick }: { onOpen: (album: CloudAlbum) => void; onArtist: (name: string) => void; onPick: (mode: LibraryMode) => void } = $props();
+
+  let keys = $state<HTMLElement | null>(null);
 
   let table = $state.raw<Record<string, GenreArt>>({});
 
@@ -94,8 +97,11 @@
 {:else}
   <div class="page">
     <header class="wall-head">
-      <h2 class="heading">{text('Genres_Title')}</h2>
-      <p class="pane-line">{wall.length === 1 ? text('Genres_CountOne') : text('Genres_Count', wall.length)}</p>
+      <div>
+        <h2 class="heading">{text('Genres_Title')}</h2>
+        <p class="pane-line">{wall.length === 1 ? text('Genres_CountOne') : text('Genres_Count', wall.length)}</p>
+      </div>
+      <div class="keys" bind:this={keys}><SearchBox id="genres" edge={keys} {onPick} /></div>
     </header>
     {#if wall.length}
       <div class="wall">
@@ -115,6 +121,18 @@
     height: 100%;
     padding: 12px 18px 18px 16px;
     overflow-y: auto;
+  }
+
+  .wall-head {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .wall-head .keys {
+    display: flex;
+    margin-top: 4px;
   }
 
   .empty {
