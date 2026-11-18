@@ -1,11 +1,12 @@
 <script lang="ts">
   // The band above the panes: the wordmark at rest, and the record with its seek bar while one plays.
   import type { CloudTrack } from '../../api/wire';
-  import { catalogue, covers, player } from '../../app';
+  import { covers, player } from '../../app';
   import { displayOf, type RadioStation } from '../../radio/station';
-  import { art, now, onAir, setParked } from '../../state.svelte';
+  import { art, library, now, onAir, setParked } from '../../state.svelte';
   import { text } from '../../strings/loc';
   import SeekBar from '../deck/SeekBar.svelte';
+  import { asked } from '../library/record-menu.svelte';
   import StationLogo from '../radio/StationLogo.svelte';
   import { taglineParts } from './tagline';
   import Mark from './Mark.svelte';
@@ -74,10 +75,11 @@
     }
   });
 
+  // The record the playing song is on, when it is in the collection. Its sleeve stands on the band, and a press on
+  // the sleeve opens its page, as the Album key in the track info pane does.
+  const album = $derived(now.track ? library.albums.find((held) => held.tracks.some((row) => row.rpmId === now.track?.rpmId)) : undefined);
+
   $effect(() => {
-    const track = now.track;
-    if (!track) return;
-    const album = catalogue.albums.find((a) => a.tracks.some((t) => t.rpmId === track.rpmId));
     if (!album) return;
     let current = true;
     void covers.url(album, 512).then((url) => {
@@ -124,7 +126,16 @@
     {:else if shown}
       <Mark strength={0.25} />
       <div class="record">
-        {#if sleeve}<img src={sleeve} alt="" />{:else}<div class="sleeve"></div>{/if}
+        {#snippet face()}
+          {#if sleeve}<img src={sleeve} alt="" />{:else}<div class="sleeve"></div>{/if}
+        {/snippet}
+        {#if album}
+          <button class="to-album" title={text('AlbumMenu_AlbumPage')} aria-label={text('AlbumMenu_AlbumPage')} onclick={() => (asked.opening = album)}>
+            {@render face()}
+          </button>
+        {:else}
+          {@render face()}
+        {/if}
         <div class="words">
           <h2>{shown.title}</h2>
           <p class="artist">{shown.artist}</p>
@@ -181,8 +192,11 @@
     height: 78px;
   }
 
+  /* A layer that is faded out takes no presses. The tucked band is 78 high, and the sleeve of the faded record stands
+     inside it, where a press would open a page nobody can see. */
   .playing {
     opacity: 0;
+    pointer-events: none;
   }
 
   .open .rest {
@@ -191,6 +205,7 @@
 
   .open .playing {
     opacity: 1;
+    pointer-events: auto;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -304,6 +319,21 @@
     gap: 16px;
     align-items: stretch;
     margin-top: 10px;
+  }
+
+  /* The sleeve as a key: the face inside it keeps its own size and corners. */
+  .to-album {
+    flex: none;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+  }
+
+  .to-album img,
+  .to-album .sleeve {
+    display: block;
   }
 
   img,
