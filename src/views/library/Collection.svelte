@@ -10,8 +10,6 @@
   import AlbumList, { type AlbumGrouping } from './AlbumList.svelte';
   import AlbumWall from './AlbumWall.svelte';
   import TrackTable from './TrackTable.svelte';
-  import SearchBox from '../search/SearchBox.svelte';
-  import type { LibraryMode } from './pages.svelte';
   import RecordSpinner from './RecordSpinner.svelte';
   import { collection, pickView, type CollectionView } from './view.svelte';
 
@@ -19,12 +17,10 @@
     compact = false,
     onImport,
     onOpen,
-    onPick,
-  }: { compact?: boolean; onImport: () => void; onOpen: (album: CloudAlbum) => void; onPick: (mode: LibraryMode) => void } = $props();
+  }: { compact?: boolean; onImport: () => void; onOpen: (album: CloudAlbum) => void } = $props();
 
   type View = CollectionView;
 
-  let tools = $state<HTMLElement | null>(null);
   // The cover size on the wall, kept in this browser like the view and the grouping.
   const SIZE_KEY = 'rpm-library-cover-size';
   const SMALLEST = 120;
@@ -138,7 +134,7 @@
     };
   });
 
-  // The search answers in its own panel (SearchBox) and does not narrow the wall.
+  // The search answers in its own bar (SearchOverlay) and does not narrow the wall.
   const shown = $derived(lovedOnly ? library.albums.filter((album) => loved.has(album.key)) : library.albums);
 </script>
 
@@ -149,8 +145,7 @@
       <p class="pane-line">{library.state === 'ready' ? stats : ''}</p>
     </div>
 
-    <div class="tools" bind:this={tools}>
-      <SearchBox id="albums" edge={tools} {onPick} openWidth={compact ? 180 : 150} />
+    <div class="tools">
       <div class="slot">
         <button class="slot-key" class:lit={lovedOnly} aria-pressed={lovedOnly} title={text('Library_FavoritesOnly')} aria-label={text('Library_FavoritesOnly')} onclick={() => (lovedOnly = !lovedOnly)}><i class="icon" class:outline={!lovedOnly}>{icons.heart}</i></button>
       </div>

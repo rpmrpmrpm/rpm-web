@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CloudTrack } from '../../src/api/wire';
 import { groupAlbums } from '../../src/library/albums';
 import { artistWall, genreWall } from '../../src/library/walls';
-import { findAll, nothingFound, type FoundList } from '../../src/views/search/library-search.svelte';
+import { findAll, LibrarySearch, nothingFound, type FoundList } from '../../src/views/search/library-search.svelte';
 import { forget, MOST, remember, SearchHistory } from '../../src/views/search/search-history.svelte';
 
 describe('recent searches', () => {
@@ -76,3 +76,50 @@ describe('the library search', () => {
     expect(nothingFound(findAll(sources, 'love'))).toBe(false);
   });
 });
+
+describe('the search as it is open', () => {
+  const opened = () => {
+    const search = new LibrarySearch();
+    search.open('window', () => ({ albums, artists: artistWall(albums), genres: genreWall(albums), genreName: (name: string) => name }), () => new Promise(() => {}));
+    return search;
+  };
+
+  it('shows the recent searches until the first answer, and is caught up once the answer is for the words', () => {
+    const search = opened();
+    search.ask('kid');
+    expect(search.showsRecent).toBe(true);
+    expect(search.caughtUp).toBe(false);
+    search.now();
+    expect(search.showsRecent).toBe(false);
+    expect(search.caughtUp).toBe(true);
+    expect(search.found?.records.map((album) => album.album)).toEqual(['Kid A']);
+    search.close();
+  });
+
+  // Enter in the bar before the typing paused: the answer is for the words now in the box, not the ones before.
+  it('answers the words in the box at once, without waiting for the typing to pause', () => {
+    const search = opened();
+    search.ask('kid');
+    search.now();
+    search.ask('thunder');
+    expect(search.caughtUp).toBe(false);
+    search.now();
+    expect(search.caughtUp).toBe(true);
+    expect(search.found?.songs.map((hit) => hit.track.title)).toEqual(['Thunderstruck']);
+    search.close();
+  });
+
+  it('says nothing was found only once the answer is for the words', () => {
+    const search = opened();
+    search.ask('kid');
+    search.now();
+    search.ask('kidzz');
+    expect(search.showsAnything).toBe(true);
+    search.now();
+    expect(nothingFound(search.found!)).toBe(true);
+    expect(search.showsAnything).toBe(true);
+    search.close();
+    expect(search.showsAnything).toBe(false);
+  });
+});
+

@@ -122,6 +122,12 @@ async function open(viewport = { width: 1440, height: 900 }, words = {}) {
 
 const rail = (page, name) => page.click(`.rail button:has-text("${name}")`);
 
+// The library search: the deck's search key opens the bar over the window, and the words are typed there.
+async function search(page, words) {
+  await page.click('.deck button[aria-label="Search your library"]');
+  await page.fill('.spot input', words);
+}
+
 test('the page names its icons, and each of them is there', async () => {
   const { page } = await open();
   const addresses = await page.$$eval('link[rel~=icon], link[rel=apple-touch-icon], link[rel=manifest]', (rows) => rows.map((row) => row.href));
@@ -152,9 +158,8 @@ test('Artists files each act once, a guest included, and opens a page', async ()
 
   // The search answers in its own panel and leaves the wall whole.
   await page.click('button[aria-label="Back to artists"]');
-  await page.click('.wall-page .box .lens');
-  await page.fill('.wall-page .box input', 'radio');
-  await page.waitForSelector('.panel .answer:has-text("Radiohead")');
+  await search(page, 'radio');
+  await page.waitForSelector('.spot .answer:has-text("Radiohead")');
   assert.equal((await page.$$('.tile strong')).length, 4);
   assert.deepEqual(problems, []);
   await page.close();
@@ -190,9 +195,8 @@ test('The album list and the data table show the same collection', async () => {
   await page.waitForFunction(() => ['Delta', 'Epsilon'].includes(document.querySelector('.table .row .title')?.textContent));
 
   // The search answers in its own panel and leaves the table whole.
-  await page.click('.box .lens');
-  await page.fill('.box input', 'gamm');
-  await page.waitForSelector('.panel .answer:has-text("Gamma")');
+  await search(page, 'gamm');
+  await page.waitForSelector('.spot .answer:has-text("Gamma")');
   assert.equal((await page.$$('.table .row')).length, FILES.length);
   assert.deepEqual(problems, []);
   await page.close();
@@ -203,28 +207,90 @@ test('The library search answers by kind, opens what is chosen and keeps the sea
 
   await rail(page, 'Albums');
   await page.waitForSelector('.card');
-  await page.click('.box .lens');
-  await page.fill('.box input', 'kid');
-  await page.waitForSelector('.panel h4:text-is("Albums")');
-  assert.match(await page.textContent('.panel'), /Gamma/);
-  await page.click('.panel .answer:has-text("Kid A")');
+  // One search for the app: the views' headings have no search of their own.
+  assert.equal(await page.$('.box .lens'), null);
+  await search(page, 'kid');
+  await page.waitForSelector('.spot h4:text-is("Albums")');
+  assert.match(await page.textContent('.spot .panel'), /Gamma/);
+  await page.click('.spot .answer:has-text("Kid A")');
   await page.waitForSelector('.sheet');
-  await page.waitForSelector('.panel', { state: 'detached' });
-  await page.waitForSelector('.box input', { state: 'detached' });
+  await page.waitForSelector('.spot', { state: 'detached' });
 
   await page.click('.sheet .back-key');
-  await page.click('.box .lens');
-  await page.waitForSelector('.panel h4:text-is("Recent searches")');
-  assert.match(await page.textContent('.panel'), /kid/);
+  await page.click('.deck button[aria-label="Search your library"]');
+  await page.waitForSelector('.spot h4:text-is("Recent searches")');
+  assert.match(await page.textContent('.spot .panel'), /kid/);
   await page.keyboard.press('Escape');
-  await page.waitForSelector('.panel', { state: 'detached' });
+  await page.waitForSelector('.spot', { state: 'detached' });
 
-  // The Albums view fades out first: the Artists view's own box is the one to press.
   await rail(page, 'Artists');
-  await page.click('.wall-page .box .lens');
-  await page.fill('.wall-page .box input', 'portis');
-  await page.click('.panel .answer:has-text("Portishead")');
+  await search(page, 'portis');
+  await page.click('.spot .answer:has-text("Portishead")');
   await page.waitForSelector('.page h1:has-text("Portishead"), .page h2:has-text("Portishead")');
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+test('Cmd or Ctrl+F opens the search over the window: the arrows and Enter choose, Escape gives the keyboard back', async () => {
+  const { page, problems } = await open();
+  const find = process.platform === 'darwin' ? 'Meta+F' : 'Control+F';
+  await rail(page, 'Albums');
+  await page.waitForSelector('.card');
+
+  // The first answer is lit, Down moves the light, Enter opens the lit record.
+  await page.keyboard.press(find);
+  await page.waitForSelector('.spot input:focus');
+  await page.keyboard.type('portis');
+  await page.waitForSelector('.spot .answer.lit .title:text-is("Portishead")');
+  await page.keyboard.press('ArrowDown');
+  await page.waitForSelector('.spot .answer.lit .title:text-is("Dummy")');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.sheet:has-text("Dummy")');
+  await page.waitForSelector('.spot', { state: 'detached' });
+
+  // Enter straight after the letters, before the typing pauses: the lit row is still a recent search, and Enter
+  // must press the answer to the words in the box instead.
+  const streamed = page.waitForRequest((request) => request.url().includes('/api/cloud/stream/b1'));
+  await page.keyboard.press(find);
+  await page.waitForSelector('.spot .answer.lit .title:text-is("portis")');
+  await page.keyboard.type('gamma');
+  await page.keyboard.press('Enter');
+  await streamed;
+  await page.waitForSelector('.spot', { state: 'detached' });
+
+  // Escape puts the bar away and gives the keyboard back to what had it.
+  await page.focus('.sheet .back-key');
+  await page.keyboard.press(find);
+  await page.waitForSelector('.spot input:focus');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.spot', { state: 'detached' });
+  assert.equal(await page.evaluate(() => document.activeElement?.matches('.sheet .back-key')), true);
+
+  // A press on the shade puts it away too.
+  await page.keyboard.press(find);
+  await page.waitForSelector('.spot input:focus');
+  await page.mouse.click(20, 880);
+  await page.waitForSelector('.spot', { state: 'detached' });
+
+  // With the keyboard in the radio, the key goes to the station search.
+  await page.click('.rail button:has-text("Radio")');
+  await page.click('.radio input[type="search"]');
+  await page.keyboard.press(find);
+  assert.equal(await page.evaluate(() => document.activeElement?.matches('.radio input[type="search"]')), true);
+  assert.equal(await page.$('.spot'), null);
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+test('On a phone the Search tab beside Home opens the search over the window', async () => {
+  const { page, problems } = await open();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.click('nav.tabs button:has-text("Search")');
+  await page.waitForSelector('.spot input:focus');
+  await page.fill('.spot input', 'kid');
+  await page.waitForSelector('.spot .answer:has-text("Kid A")');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.spot', { state: 'detached' });
   assert.deepEqual(problems, []);
   await page.close();
 });
@@ -232,9 +298,8 @@ test('The library search answers by kind, opens what is chosen and keeps the sea
 test('The Now playing card lists the queue with covers and bylines, plays a row pressed, and rearranges', async () => {
   const { page, problems } = await open();
   await rail(page, 'Albums');
-  await page.click('.box .lens');
-  await page.fill('.box input', 'dummy');
-  await page.click('.panel .answer:has-text("Dummy")');
+  await search(page, 'dummy');
+  await page.click('.spot .answer:has-text("Dummy")');
   await page.click('.sheet button:has-text("Play")');
 
   await page.click('.deck button[aria-label="Now playing queue"]');
@@ -265,10 +330,9 @@ test('The Now playing card lists the queue with covers and bylines, plays a row 
 test('A song found plays', async () => {
   const { page, problems } = await open();
   await rail(page, 'Albums');
-  await page.click('.box .lens');
-  await page.fill('.box input', 'epsilon');
+  await search(page, 'epsilon');
   const streamed = page.waitForRequest((request) => request.url().includes('/api/cloud/stream/d1'));
-  await page.click('.panel .answer:has-text("Epsilon")');
+  await page.click('.spot .answer:has-text("Epsilon")');
   await streamed;
   assert.deepEqual(problems, []);
   await page.close();
@@ -495,7 +559,7 @@ test('a record is edited as a whole, for every track on it', async () => {
   await page.close();
 });
 
-test('the Home key is on the deck beside the pane key, and not on the rail', async () => {
+test('the Home key is on the deck beside the search key, and not on the rail', async () => {
   const { page } = await open();
 
   assert.equal(await page.locator('.rail button:has-text("Home")').count(), 0);
@@ -514,13 +578,13 @@ test('the left pane glides open and closed, and its content arrives after the mo
 
   // A computer opens with Track info out.
   assert.equal(await width(), 520);
-  await page.click('.deck .pane-pill');
+  await page.click('.rail .fold');
   await page.waitForFunction(() => !document.querySelector('.pane.left .view'));
   await page.waitForTimeout(120);
   const closed = await width();
   assert.equal(closed, 84);
 
-  await page.click('.deck .pane-pill');
+  await page.click('.rail .fold');
   await page.waitForTimeout(200);
   const moving = await width();
   assert.ok(moving > closed, 'the pane has started to move');

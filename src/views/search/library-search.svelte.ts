@@ -1,6 +1,6 @@
-// The library search: one box for the whole collection, in the heading of Albums, Artists, Genres and Playlists.
-// What is typed is answered in a panel under the heading, each kind under its own heading: artists, albums,
-// tracks, playlists and genres. The rules are the phones' and the desktop's (LibrarySearchView): songs and
+// The library search: one search for the whole collection, in the bar over the window (SearchOverlay). What is
+// typed is answered in a panel under the bar, each kind under its own heading: artists, albums, tracks, playlists
+// and genres. The rules are the phones' and the desktop's (LibrarySearchView): songs and
 // records match their title, artist, record or record artist, ignoring case; artists, genres and playlists match
 // their name folded (searchKey), so "beyonce" finds Beyoncé and "acdc" finds AC/DC. A record is found by its own
 // name or who made it, never by one of its songs: the songs answer that.
@@ -57,14 +57,14 @@ export function findAll(sources: Sources, asked: string): Found {
   };
 }
 
-// What the search holds while it is up: whose box it is open under, the words, and what they found. One for the
-// whole app, because only one heading's box is open at a time.
+// What the search holds while it is up: where it was opened from, the words, and what they found. One for the
+// whole app: the bar over the window opens it from 'window' (openSearchBar).
 //
 // Out of order: the typing timer and the settle timer are stopped by every keystroke and by closing, so a search
 // never runs for words that are gone. The playlists are read when the search opens; their answer is dropped when
 // the search was closed or opened again since (opened).
-class LibrarySearch {
-  // The heading's box the search is open under; null while it is put away.
+export class LibrarySearch {
+  // Where the search was opened from; null while it is put away.
   from = $state<string | null>(null);
   asked = $state('');
   found = $state.raw<Found | null>(null);
@@ -86,8 +86,8 @@ class LibrarySearch {
   private opened = 0;
   private sources: () => Omit<Sources, 'lists'> = () => ({ albums: [], artists: [], genres: [], genreName: (name) => name });
 
-  // Puts the search up under a heading's box. A search already up under another box moves to this one, with what
-  // was typed.
+  // Puts the search up, opened from `from`. A search already up from somewhere else moves there, with what was
+  // typed.
   open(from: string, sources: () => Omit<Sources, 'lists'>, readLists: () => Promise<FoundList[]>) {
     this.sources = sources;
     if (this.from === from) return;
@@ -131,6 +131,29 @@ class LibrarySearch {
     if (this.foundFor.toLocaleLowerCase() !== words.toLocaleLowerCase()) this.unfolded = new Set();
     this.found = found;
     this.foundFor = words;
+  }
+
+  // The panel shows the recent searches: the box is empty, or nothing has been found for its words yet.
+  get showsRecent(): boolean {
+    return !this.asked.trim() || this.found === null;
+  }
+
+  // What was found is for the words in the box now. "Nothing found" is said only then, and Enter in the bar
+  // chooses a row only then.
+  get caughtUp(): boolean {
+    return this.foundFor.toLocaleLowerCase() === this.asked.trim().toLocaleLowerCase();
+  }
+
+  // Whether the panel has anything on it: recent searches, an answer, or "nothing found" once caught up.
+  get showsAnything(): boolean {
+    if (this.showsRecent) return this.history.entries.length > 0;
+    return this.found !== null && (!nothingFound(this.found) || this.caughtUp);
+  }
+
+  // Searches the words now, without waiting for the typing to pause: Enter was pressed before the answer came.
+  now() {
+    clearTimeout(this.typing);
+    this.run();
   }
 
   toggle(group: string) {

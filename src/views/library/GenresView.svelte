@@ -14,12 +14,9 @@
   import GenreMark from './GenreMark.svelte';
   import ArtistTile from './ArtistTile.svelte';
   import Shelf from './Shelf.svelte';
-  import SearchBox from '../search/SearchBox.svelte';
-  import { pages, type LibraryMode } from './pages.svelte';
+  import { pages } from './pages.svelte';
 
-  let { onOpen, onArtist, onPick }: { onOpen: (album: CloudAlbum) => void; onArtist: (name: string) => void; onPick: (mode: LibraryMode) => void } = $props();
-
-  let keys = $state<HTMLElement | null>(null);
+  let { onOpen, onArtist }: { onOpen: (album: CloudAlbum) => void; onArtist: (name: string) => void } = $props();
 
   let table = $state.raw<Record<string, GenreArt>>({});
 
@@ -101,7 +98,6 @@
         <h2 class="heading">{text('Genres_Title')}</h2>
         <p class="pane-line">{wall.length === 1 ? text('Genres_CountOne') : text('Genres_Count', wall.length)}</p>
       </div>
-      <div class="keys" bind:this={keys}><SearchBox id="genres" edge={keys} {onPick} /></div>
     </header>
     {#if wall.length}
       <div class="wall">
@@ -128,11 +124,6 @@
     gap: 16px;
     align-items: flex-start;
     justify-content: space-between;
-  }
-
-  .wall-head .keys {
-    display: flex;
-    margin-top: 4px;
   }
 
   .empty {

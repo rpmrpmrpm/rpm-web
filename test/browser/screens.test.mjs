@@ -146,7 +146,7 @@ test('a popup has the desktop header', async () => {
 
 test('every pane starts its content on one line', async () => {
   const { page, close } = await open();
-  await page.click('.pane-pill');
+  await page.click('.rail .fold');
   await page.waitForTimeout(500);
 
   for (const [name, selector] of [
@@ -166,7 +166,7 @@ test('every pane starts its content on one line', async () => {
 
 test('the album band holds a few small keys, and nothing runs over', async () => {
   const { page, problems, close } = await open();
-  await page.click('.pane-pill');
+  await page.click('.rail .fold');
   await page.waitForTimeout(500);
   await rail(page, 'Albums');
   await page.waitForSelector('.card');
@@ -198,7 +198,7 @@ test('a track title stands as it is tagged', async () => {
 
 test('the right click: a record, a song, a table row, the menu key', async () => {
   const { page, problems, close } = await open();
-  await page.click('.pane-pill');
+  await page.click('.rail .fold');
   await page.waitForTimeout(500);
   await rail(page, 'Albums');
   await page.waitForSelector('.card');
@@ -249,7 +249,7 @@ test('the right click: a record, a song, a table row, the menu key', async () =>
 
 test('the album list and the table stand on the pane, and no list wears a form field\'s style', async () => {
   const { page, close } = await open();
-  await page.click('.pane-pill');
+  await page.click('.rail .fold');
   await page.waitForTimeout(500);
   await rail(page, 'Albums');
   await page.waitForSelector('.card');
@@ -268,7 +268,7 @@ test('the album list and the table stand on the pane, and no list wears a form f
 
 test('a DVD box is shown whole, with the line and the count under it', async () => {
   const { page, close } = await open();
-  await page.click('.pane-pill');
+  await page.click('.rail .fold');
   await page.waitForTimeout(500);
   await rail(page, 'Albums');
   await page.waitForSelector('.card');
@@ -293,7 +293,7 @@ test('a DVD box is shown whole, with the line and the count under it', async () 
 
 test('a playlist has a menu, and its songs have one', async () => {
   const { page, problems, close } = await open();
-  await page.click('.pane-pill');
+  await page.click('.rail .fold');
   await page.waitForTimeout(500);
   await rail(page, 'Playlists');
   await page.waitForSelector('.tile:has-text("Road trip")');

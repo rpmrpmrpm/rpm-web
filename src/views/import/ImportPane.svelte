@@ -383,8 +383,10 @@
   }
 </script>
 
+<!-- data-own-search: Cmd or Ctrl+F with the keyboard in here goes to the import's search (SearchOverlay). -->
 <div
   class="bench"
+  data-own-search
   class:dropping
   role="region"
   ondragover={(event) => {
@@ -454,7 +456,7 @@
       </div>
 
       <div class="view-keys">
-        <label class="search"><i class="icon">{icons.search}</i><input type="search" placeholder={text('Review_SearchPlaceholder')} bind:value={search} /></label>
+        <label class="search"><i class="icon">{icons.search}</i><input type="search" data-own-search-field placeholder={text('Review_SearchPlaceholder')} bind:value={search} /></label>
         <button class="tool-key" class:on={filtersOpen || chip !== null} title={text('Queue_FiltersLabel')} aria-label={text('Queue_FiltersLabel')} onclick={() => (filtersOpen = !filtersOpen)}><i class="icon small">{icons.filter}</i></button>
         <button class="tool-key" title={text('Queue_Columns')} aria-label={text('Queue_Columns')} onclick={(event) => menuUnder(event, columnEntries())}><i class="icon">{icons.columns}</i></button>
         <button class="tool-key" class:on={showTags} title={text('Queue_TagPanelTitle')} aria-label={text('Queue_TagPanelTitle')} onclick={() => (showTags = !showTags)}><i class="icon">{icons.tag}</i></button>

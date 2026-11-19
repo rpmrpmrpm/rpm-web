@@ -20,6 +20,8 @@
   import ContextMenu from '../menu/ContextMenu.svelte';
   import TrackInfo from '../library/TrackInfo.svelte';
   import RadioPane from '../radio/RadioPane.svelte';
+  import { openSearchBar } from '../search/search-bar';
+  import SearchOverlay from '../search/SearchOverlay.svelte';
   import AboutWindow from './AboutWindow.svelte';
   import AppMenu from './AppMenu.svelte';
   import DesktopOffer from './DesktopOffer.svelte';
@@ -131,6 +133,21 @@
     pickMode(next);
   }
 
+  // An answer chosen in the search over the window: what it opens is brought up wherever the reader is. A
+  // record's page stands over every view (and over every tab on a phone, in RecordActions), so for a record only
+  // the import, which lies over the library, steps aside.
+  function shownFromSearch(where: LibraryMode | 'record') {
+    if (layout === 'narrow') {
+      if (where !== 'record') {
+        tab = 'library';
+        pickMode(where === 'home' ? 'albums' : where);
+      }
+      return;
+    }
+    if (covered) closeImport();
+    if (where !== 'record') pickMode(where);
+  }
+
   // The setup, once per account in this browser, over a library that is still empty. Decided once, when the
   // library has first been read.
   let setupAt = $state<SetupStep | 'hello' | null>(null);
@@ -173,6 +190,7 @@
 
 <Room />
 <ContextMenu />
+<SearchOverlay onShow={shownFromSearch} />
 <RecordActions compact={layout === 'narrow'} />
 
 {#if layout === 'narrow'}
@@ -216,6 +234,10 @@
         }}
       >
         <i class="icon">{icons.home}</i>{text('Rpm_Tab_Home')}
+      </button>
+      <!-- Not a tab of its own: it opens the search over the window, as the deck's search key does. -->
+      <button onclick={openSearchBar}>
+        <i class="icon">{icons.search}</i>{text('Lookup_SearchButton')}
       </button>
       <button
         class:on={tab === 'library'}
@@ -293,10 +315,9 @@
     </div>
 
     <Deck
-      paneOpen={left !== null}
       atHome={mode === 'home' && !covered}
-      onPane={() => moveLeft(left ? null : lastLeft)}
       onHome={() => press('home')}
+      onSearch={openSearchBar}
       onSettings={() => (settingsOpen = true)}
       onFeedback={() => (feedbackOpen = true)}
       onAbout={() => (aboutOpen = true)}

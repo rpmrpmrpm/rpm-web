@@ -8,11 +8,11 @@
   import AppMenu from '../shell/AppMenu.svelte';
   import QueueCard from './QueueCard.svelte';
 
-  let { paneOpen, atHome, onPane, onHome, onSettings, onFeedback, onAbout }: {
-    paneOpen: boolean;
+  let { atHome, onHome, onSearch, onSettings, onFeedback, onAbout }: {
     atHome: boolean;
-    onPane: () => void;
     onHome: () => void;
+    // The library search over the window, the same as Cmd+F or Ctrl+F.
+    onSearch: () => void;
     onSettings: () => void;
     onFeedback: () => void;
     onAbout: () => void;
@@ -30,10 +30,8 @@
 
 <footer class="pane deck">
   <div class="side">
-    <button class="deck-pill pane-pill" class:open={paneOpen} title={text('Deck_PaneTip')} aria-label={text('Deck_PaneTip')} aria-pressed={paneOpen} onclick={onPane}>
-      <span class="frame"><span class="drawer"></span></span>
-    </button>
     <button class="deck-pill home" class:on={atHome} title={text('Deck_HomeTip')} aria-label={text('Deck_HomeTip')} aria-pressed={atHome} onclick={onHome}><i class="icon">{icons.home}</i></button>
+    <button class="deck-pill" title={text('Rpm_Search_Library')} aria-label={text('Rpm_Search_Library')} onclick={onSearch}><i class="icon">{icons.search}</i></button>
     {#if now.trouble}
       <span class="trouble" role="status"><i class="icon">{icons.warning}</i>{text(now.trouble)}</span>
     {/if}
@@ -119,36 +117,6 @@
 
   .side.end {
     justify-content: flex-end;
-  }
-
-  /* The pill plays the move the pane makes: a drawer in a little window, sliding out of its left edge. */
-  .frame {
-    display: block;
-    width: 26px;
-    height: 16px;
-    overflow: hidden;
-    box-sizing: border-box;
-    border: 1px solid rgb(255 255 255 / 0.4);
-    border-radius: 4px;
-    background: rgb(255 255 255 / 0.07);
-  }
-
-  .drawer {
-    display: block;
-    width: 10px;
-    height: 100%;
-    border-radius: 3px 0 0 3px;
-    background: linear-gradient(rgb(255 255 255 / 0.65), rgb(255 255 255 / 0.35));
-    transform: translateX(-7px);
-    transition: transform 240ms var(--move);
-  }
-
-  .pane-pill:hover .drawer {
-    transform: translateX(-4px);
-  }
-
-  .pane-pill.open .drawer {
-    transform: none;
   }
 
   .deck-pill.on {

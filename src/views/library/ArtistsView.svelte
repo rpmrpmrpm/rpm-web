@@ -8,19 +8,17 @@
   import AlphabetRail from './AlphabetRail.svelte';
   import ArtistPage from './ArtistPage.svelte';
   import ArtistTile from './ArtistTile.svelte';
-  import SearchBox from '../search/SearchBox.svelte';
-  import { pages, type LibraryMode } from './pages.svelte';
+  import { pages } from './pages.svelte';
 
-  let { onOpen, onPick }: { onOpen: (album: CloudAlbum) => void; onPick: (mode: LibraryMode) => void } = $props();
+  let { onOpen }: { onOpen: (album: CloudAlbum) => void } = $props();
 
-  let keys = $state<HTMLElement | null>(null);
   let scroller = $state<HTMLElement | null>(null);
   let lit = $state('');
 
   const held = $derived(albumsByKey(library.albums));
   const every = $derived(artistWall(library.albums));
   const sorted = $derived(sortArtists(every, 'Name', held));
-  // The search answers in its own panel (SearchBox) and does not narrow the wall.
+  // The search answers in its own bar (SearchOverlay) and does not narrow the wall.
   const shown = $derived(sorted);
   const open = $derived(pages.artist === null ? null : (every.find((artist) => artist.name === pages.artist) ?? null));
   const first = (artist: ArtistWallItem) => held.get(ownAlbums(artist)[0] ?? '');
@@ -58,7 +56,6 @@
         <h2 class="heading">{text('Artists_Title')}</h2>
         <p class="pane-line">{shown.length === 1 ? text('Artists_CountOne') : text('Artists_Count', shown.length)}</p>
       </div>
-      <div class="keys" bind:this={keys}><SearchBox id="artists" edge={keys} {onPick} /></div>
     </header>
 
     <div class="scroller" bind:this={scroller} onscroll={followScroll}>
@@ -94,11 +91,6 @@
     align-items: flex-start;
     justify-content: space-between;
     padding-right: 18px;
-  }
-
-  .keys {
-    display: flex;
-    margin-top: 4px;
   }
 
   .scroller {

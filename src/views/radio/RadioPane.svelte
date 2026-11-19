@@ -174,7 +174,8 @@
 
 <svelte:window onpointerdown={closeOnOutside} onkeydown={(event) => event.key === 'Escape' && (panel = null)} />
 
-<div class="radio">
+<!-- data-own-search: Cmd or Ctrl+F with the keyboard in here goes to the station search (SearchOverlay). -->
+<div class="radio" data-own-search>
   <div class="pane-head">
     <h2 class="heading">{text('Radio_Title')}</h2>
     <p class="pane-line">{heading}</p>
@@ -185,7 +186,7 @@
   <div class="tools">
     <label class="find">
       <i class="icon">{icons.search}</i>
-      <input type="search" aria-label={text('Radio_SearchPlaceholder')} placeholder={text('Radio_SearchPlaceholder')} bind:value={typed} oninput={typedSomething} />
+      <input type="search" data-own-search-field aria-label={text('Radio_SearchPlaceholder')} placeholder={text('Radio_SearchPlaceholder')} bind:value={typed} oninput={typedSomething} />
     </label>
     <button class="tool opens country" title={text('Radio_AllCountries')} onclick={() => (panel = panel === 'country' ? null : 'country')}>
       <span>{countryLabel}</span><i class="icon">{icons.chevronDown}</i>
