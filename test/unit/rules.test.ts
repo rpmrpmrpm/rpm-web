@@ -9,6 +9,7 @@ import {
   buildArtistWall,
   creditNames,
   creditRows,
+  favoriteArtists,
   initialOf,
   isVariousArtists,
   searchKey,
@@ -171,6 +172,48 @@ describe('the artist wall', () => {
 
 const track = (id: string, fields: Record<string, unknown> = {}, tags: Record<string, unknown> = {}): CloudTrack =>
   readTrack({ rpmId: id, relativePath: `${fields.artist ?? 'A'}/${fields.album ?? 'B'}/${id}.flac`, title: id, artist: 'A', album: 'B', tags, ...fields });
+
+describe("the artists wall's heart", () => {
+  const shelf = buildArtistWall([
+    row('ABBA/Arrival', 'ABBA', 'ABBA', 10),
+    row('Queen/Innuendo', 'Queen', 'Queen', 12),
+    row('Calvin Harris/18 Months', 'Calvin Harris', 'Calvin Harris feat. Ellie Goulding'),
+    row('Calvin Harris/18 Months', 'Calvin Harris', 'Calvin Harris feat. Rihanna'),
+    row('AC-DC/Back in Black', 'AC/DC', 'AC/DC', 10),
+    // Guests get a box only with a record of their own.
+    row('Ellie Goulding/Lights', 'Ellie Goulding', 'Ellie Goulding', 10),
+    row('Rihanna/Loud', 'Rihanna', 'Rihanna', 10),
+  ]);
+
+  it('a hearted record brings its artist', () => {
+    expect([...favoriteArtists(shelf, new Set(['ABBA/Arrival']), [])]).toEqual(['ABBA']);
+  });
+
+  it('a hearted song brings each act it credits and not the other guests', () => {
+    const kept = favoriteArtists(shelf, new Set(), ['Calvin Harris feat. Ellie Goulding']);
+    expect(kept.has('Calvin Harris')).toBe(true);
+    expect(kept.has('Ellie Goulding')).toBe(true);
+    expect(kept.has('Rihanna')).toBe(false);
+  });
+
+  it('a band with a separator in its name is matched whole', () => {
+    expect([...favoriteArtists(shelf, new Set(), ['ac/dc'])]).toEqual(['AC/DC']);
+  });
+
+  it('a record shared by two acts brings both', () => {
+    // The credit is two acts only because the collection knows each of them on their own.
+    const wall = buildArtistWall([
+      row('Duo/Record', 'Simon Says & Ellie Goulding', 'Simon Says & Ellie Goulding'),
+      row('EG/Lights', 'Ellie Goulding', 'Ellie Goulding'),
+      row('SS/Solo', 'Simon Says', 'Simon Says'),
+    ]);
+    expect([...favoriteArtists(wall, new Set(['Duo/Record']), [])].sort()).toEqual(['Ellie Goulding', 'Simon Says']);
+  });
+
+  it('nothing hearted keeps nobody', () => {
+    expect(favoriteArtists(shelf, new Set(), ['', '  ', null, undefined]).size).toBe(0);
+  });
+});
 
 describe('genres', () => {
   // The source's own cases.

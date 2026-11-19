@@ -165,6 +165,56 @@ test('Artists files each act once, a guest included, and opens a page', async ()
   await page.close();
 });
 
+test('the artists heart keeps the acts with a hearted song or record, and the size slider sets the columns', async () => {
+  const { page, problems } = await open();
+  const names = () => page.$$eval('.tile strong', (rows) => rows.map((row) => row.textContent));
+  const columns = (selector) => page.$eval(selector, (grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length);
+
+  await rail(page, 'Artists');
+  await page.waitForSelector('.tile strong');
+  await page.click('button[aria-label="Favourite artists only"]');
+  await page.waitForFunction(() => document.querySelectorAll('.tile').length === 0);
+
+  // A hearted song brings each act its credit names, and only them.
+  await rail(page, 'Albums');
+  await page.click('.card:has-text("18 Months")');
+  await page.hover('.drawer .track >> nth=0');
+  await page.click('.drawer .track .heart >> nth=0');
+  await page.waitForSelector('.drawer .track .heart.on');
+  await rail(page, 'Artists');
+  await page.waitForFunction(() => document.querySelectorAll('.tile').length === 2);
+  assert.deepEqual(await names(), ['Calvin Harris', 'Ellie Goulding']);
+
+  // A hearted record brings its artist.
+  await rail(page, 'Albums');
+  await page.click('.card:has-text("Dummy")');
+  await page.click('.drawer .album-heart');
+  await page.waitForSelector('.drawer .album-heart.on');
+  await rail(page, 'Artists');
+  await page.waitForFunction(() => document.querySelectorAll('.tile').length === 3);
+  assert.deepEqual(await names(), ['Calvin Harris', 'Ellie Goulding', 'Portishead']);
+
+  await page.click('button[aria-label="Favourite artists only"]');
+  await page.waitForFunction(() => document.querySelectorAll('.tile').length === 4);
+
+  // The smallest cards make more columns than the largest, and the size is kept in this browser.
+  await page.locator('input[aria-label="Card size"]').fill('480');
+  const wide = await columns('.tiles');
+  await page.locator('input[aria-label="Card size"]').fill('190');
+  assert.ok((await columns('.tiles')) > wide, 'smaller cards, more columns');
+  assert.equal(await page.evaluate(() => localStorage.getItem('rpm-artists-card-size')), '190');
+
+  await rail(page, 'Genres');
+  await page.waitForSelector('.wall .card');
+  await page.locator('input[aria-label="Card size"]').fill('480');
+  const fewest = await columns('.wall');
+  await page.locator('input[aria-label="Card size"]').fill('190');
+  assert.ok((await columns('.wall')) > fewest, 'smaller cards, more columns');
+  assert.equal(await page.evaluate(() => localStorage.getItem('rpm-genres-card-size')), '190');
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
 test('Genres files records on the shelves the other apps use', async () => {
   const { page, problems } = await open();
 

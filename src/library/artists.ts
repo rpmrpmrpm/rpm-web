@@ -244,6 +244,26 @@ export function buildArtistWall(credits: readonly ArtistCreditRow[]): ArtistWall
   return sortArtists(wall, 'Name', new Map());
 }
 
+// The acts the listener has hearted something of: one of their own records (alone or shared), or a song
+// credited to them, wherever it is filed. The artists wall's heart narrows the wall to these, as the albums
+// heart narrows the records. Ported from ArtistWall.Favorites.
+//
+// A song is matched by its credit, not by its record: a hearted track on a compilation belongs to the act who
+// sings it, not to every guest on the record. Each credit is read the wide way an artist's page reads one
+// (creditNames): whole first, then each act it names. The names are squashed once into a set, so the wall is
+// not compared credit by credit.
+export function favoriteArtists(wall: readonly ArtistWallItem[], favoriteAlbums: ReadonlySet<string>, favoriteSongCredits: Iterable<string | null | undefined>): Set<string> {
+  const credited = new Set<string>();
+  for (const credit of favoriteSongCredits) {
+    if (blank(credit)) continue;
+    credited.add(squash(credit));
+    for (const act of splitWide(credit)) credited.add(squash(act));
+  }
+  credited.delete('');
+  const kept = wall.filter((artist) => credited.has(squash(artist.name)) || ownAlbums(artist).some((key) => favoriteAlbums.has(key)));
+  return new Set(kept.map((artist) => artist.name));
+}
+
 // Whether one credit as typed names this act, for picking their songs out of somebody else's record.
 export function creditNames(credit: string | null | undefined, artist: string | null | undefined): boolean {
   if (blank(credit) || blank(artist)) return false;

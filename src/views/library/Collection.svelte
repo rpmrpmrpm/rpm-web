@@ -11,6 +11,8 @@
   import AlbumWall from './AlbumWall.svelte';
   import TrackTable from './TrackTable.svelte';
   import RecordSpinner from './RecordSpinner.svelte';
+  import HeartKey from './HeartKey.svelte';
+  import SizeSlider from './SizeSlider.svelte';
   import { collection, pickView, type CollectionView } from './view.svelte';
 
   let {
@@ -146,9 +148,7 @@
     </div>
 
     <div class="tools">
-      <div class="slot">
-        <button class="slot-key" class:lit={lovedOnly} aria-pressed={lovedOnly} title={text('Library_FavoritesOnly')} aria-label={text('Library_FavoritesOnly')} onclick={() => (lovedOnly = !lovedOnly)}><i class="icon" class:outline={!lovedOnly}>{icons.heart}</i></button>
-      </div>
+      <HeartKey on={lovedOnly} label={text('Library_FavoritesOnly')} onToggle={() => (lovedOnly = !lovedOnly)} />
       {#if view === 'list'}
         <div class="slot">
           <button class="slot-key" title={text('AlbumGroup_Tooltip')} aria-label={text('AlbumGroup_Tooltip')} onclick={(event) => choices(event, groupChoices())}><i class="icon">{icons.group}</i></button>
@@ -164,11 +164,7 @@
           <button class="slot-key" title={text('AlbumSort_Tooltip')} aria-label={text('AlbumSort_Tooltip')} onclick={(event) => choices(event, sortChoices())}><i class="icon">{icons.sortDown}</i></button>
         </div>
         {#if !compact}
-          <span class="size">
-            <i class="small"></i>
-            <input class="slim" style:--fill="{((target - SMALLEST) / (LARGEST - SMALLEST)) * 100}%" type="range" min={SMALLEST} max={LARGEST} step="2" aria-label={text('AlbumGrid_CoverSize')} bind:value={target} onchange={keepSize} />
-            <i class="big"></i>
-          </span>
+          <SizeSlider bind:value={target} min={SMALLEST} max={LARGEST} label={text('AlbumGrid_CoverSize')} onchange={keepSize} />
         {/if}
       {/if}
     </div>
@@ -260,14 +256,6 @@
     color: #fff;
   }
 
-  .slot-key:not(.lit) .outline {
-    color: var(--favorite-idle);
-  }
-
-  .slot-key.lit {
-    color: var(--favorite);
-  }
-
   @media (hover: hover) {
     .slot-key:hover {
       background: rgb(255 255 255 / 0.094);
@@ -276,70 +264,6 @@
     .slot-key.on:hover {
       background: var(--selected);
     }
-  }
-
-  .size {
-    display: flex;
-    gap: 7px;
-    align-items: center;
-  }
-
-  .size i {
-    display: block;
-    flex: none;
-    background: rgb(255 255 255 / 0.6);
-  }
-
-  .small {
-    width: 6.5px;
-    height: 7px;
-  }
-
-  .big {
-    width: 10.5px;
-    height: 12px;
-  }
-
-  .slim {
-    width: 96px;
-    height: 14px;
-    margin: 0;
-    background: none;
-    appearance: none;
-    cursor: pointer;
-  }
-
-  .slim::-webkit-slider-runnable-track {
-    height: 3px;
-    background: linear-gradient(to right, #fff var(--fill, 0%), rgb(255 255 255 / 0.25) var(--fill, 0%));
-  }
-
-  .slim::-moz-range-track {
-    height: 3px;
-    background: rgb(255 255 255 / 0.25);
-  }
-
-  .slim::-moz-range-progress {
-    height: 3px;
-    background: #fff;
-  }
-
-  .slim::-webkit-slider-thumb {
-    width: 3px;
-    height: 14px;
-    margin-top: -5.5px;
-    border: 0;
-    border-radius: 0;
-    background: #fff;
-    appearance: none;
-  }
-
-  .slim::-moz-range-thumb {
-    width: 3px;
-    height: 14px;
-    border: 0;
-    border-radius: 0;
-    background: #fff;
   }
 
   .compact .tools {

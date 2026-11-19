@@ -1,5 +1,6 @@
 <script lang="ts">
-  // Genres: the shelves the collection fills, each in its own lettering and colour, and each one's page.
+  // Genres: the shelves the collection fills, each in its own lettering and colour, and each one's page. The
+  // heading has the card size, shared in its numbers with the artists wall (wall-size).
   import { articles, player } from '../../app';
   import { icons } from '../../design/icons';
   import type { CloudAlbum } from '../../library/albums';
@@ -15,10 +16,21 @@
   import ArtistTile from './ArtistTile.svelte';
   import Shelf from './Shelf.svelte';
   import { pages } from './pages.svelte';
+  import SizeSlider from './SizeSlider.svelte';
+  import { FIRST_TARGET, GENRES_SIZE_KEY, keepTarget, LARGEST_TARGET, SMALLEST_TARGET, storedTarget, WALL_GAP, wallColumns } from './wall-size';
 
-  let { onOpen, onArtist }: { onOpen: (album: CloudAlbum) => void; onArtist: (name: string) => void } = $props();
+  let {
+    onOpen,
+    onArtist,
+    compact = false,
+  }: { onOpen: (album: CloudAlbum) => void; onArtist: (name: string) => void; compact?: boolean } = $props();
 
   let table = $state.raw<Record<string, GenreArt>>({});
+  let target = $state(storedTarget(GENRES_SIZE_KEY));
+  let width = $state(0);
+
+  // On a phone the slider is not shown, so the wall keeps the first size.
+  const columns = $derived(wallColumns(width, compact ? FIRST_TARGET : target));
 
   void genreArtTable().then((loaded) => (table = loaded));
 
@@ -98,9 +110,14 @@
         <h2 class="heading">{text('Genres_Title')}</h2>
         <p class="pane-line">{wall.length === 1 ? text('Genres_CountOne') : text('Genres_Count', wall.length)}</p>
       </div>
+      {#if !compact}
+        <div class="tools">
+          <SizeSlider bind:value={target} min={SMALLEST_TARGET} max={LARGEST_TARGET} label={text('Library_CardSize')} onchange={() => keepTarget(GENRES_SIZE_KEY, target)} />
+        </div>
+      {/if}
     </header>
     {#if wall.length}
-      <div class="wall">
+      <div class="wall" bind:clientWidth={width} style:grid-template-columns="repeat({columns}, minmax(0, 1fr))" style:gap="{WALL_GAP}px">
         {#each wall as genre (genre.name)}
           <GenreCard name={shown(genre.name)} act={actOf(genre)} albums={genre.albums.length} art={table[genre.name]} onOpen={() => (pages.genre = genre.name)} />
         {/each}
@@ -132,10 +149,17 @@
     font-size: 11.5px;
   }
 
+  /* The columns and the gap are set on the element, from the card size (wallColumns). */
   .wall {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
-    gap: 14px;
+  }
+
+  .tools {
+    display: flex;
+    flex: none;
+    align-items: center;
+    height: 28px;
+    margin-top: 4px;
   }
 
   .page.detail {

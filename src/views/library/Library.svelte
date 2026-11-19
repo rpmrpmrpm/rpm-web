@@ -60,9 +60,9 @@
     {:else if mode === 'home'}
       <HomeView {onOpen} {onImport} />
     {:else if mode === 'artists'}
-      <ArtistsView {onOpen} />
+      <ArtistsView {onOpen} {compact} />
     {:else if mode === 'genres'}
-      <GenresView {onOpen} {onArtist} />
+      <GenresView {onOpen} {onArtist} {compact} />
     {:else if mode === 'playlists'}
       <PlaylistsView />
     {:else}
