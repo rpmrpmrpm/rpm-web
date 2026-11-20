@@ -1,7 +1,7 @@
 // The cloud library.
 
 import type { Api } from './http';
-import type { PlaysEntry, PlaysRow } from '../library/plays';
+import type { CloudListen, PlaysEntry, PlaysRow } from '../library/plays';
 import { readPage, readQuota, readStream, type CloudPage, type CloudQuota, type CloudStream, type CloudTrack } from './wire';
 
 const PAGE_SIZE = 2000;
@@ -39,6 +39,11 @@ export class CloudClient {
 
   async sendTrackPlays(deviceId: string, tracks: PlaysEntry[]): Promise<void> {
     await this.api.call('cloud/track-plays', { method: 'PUT', body: { deviceId, tracks } });
+  }
+
+  // A batch of this browser's listens for the store's listening log, at most 500.
+  async sendListens(deviceId: string, listens: CloudListen[]): Promise<void> {
+    await this.api.call('cloud/listens', { method: 'PUT', body: { deviceId, listens } });
   }
 
   // Song ratings (0 to 10) for tracks the account holds, at most 200 per call.

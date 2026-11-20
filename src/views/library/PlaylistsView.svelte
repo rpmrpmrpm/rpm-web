@@ -7,7 +7,7 @@
   import { durationSeconds, type CloudTrack } from '../../api/wire';
   import { favorites, player, playlists } from '../../app';
   import { icons } from '../../design/icons';
-  import { hasAnother, Readings } from '../../library/generated-lists';
+  import { hasAnother, listKey, Readings } from '../../library/generated-lists';
   import { lookOf } from '../../library/list-look';
   import { foldersIn, listsIn, PlaylistGone, type CloudPlaylist, type GeneratedList } from '../../library/playlists';
   import { library, now } from '../../state.svelte';
@@ -88,8 +88,12 @@
     return tracksOf(readings.showing(list));
   };
   const openedGenerated = $derived(pages.playlist?.kind === 'generated' ? pages.playlist.list : null);
-  function generateNew(list: GeneratedList) {
-    readings.step(list);
+  // On the account's own lists the store cuts a new one for each press. The list on screen changes when its answer
+  // comes, or to the next slice of the run when the store cannot answer yet.
+  async function generateNew(list: GeneratedList) {
+    const reading = readings.step(list);
+    const answer = await playlists.nextReading(listKey(list), reading).catch(() => null);
+    if (answer?.trackIds.length) readings.noteFresh(list, reading, answer.trackIds);
     stepped++;
   }
   const secondsOf = (tracks: readonly CloudTrack[]) => tracks.reduce((sum, track) => sum + durationSeconds(track), 0);

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { readTrack, type CloudTrack } from '../../src/api/wire';
 import { EQ_BANDS, EQ_PRESETS, Equalizer, MAX_GAIN_DB } from '../../src/audio/equalizer.js';
-import { listenCounts, ListenTally } from '../../src/audio/listen';
+import { heardListen, listenCounts, ListenTally, worthRecording } from '../../src/audio/listen';
 import { LoudnessMeter, MEASURE_RATE } from '../../src/import/loudness';
 import { groupAlbums, type CloudAlbum } from '../../src/library/albums';
 import {
@@ -22,7 +22,7 @@ import {
 import { buildGenreWall, genreOfAlbum, genresOf, matchGenre, shelvesOf } from '../../src/library/genres';
 import { addedRow, foldName, homeAlbums, homeRows, listenedRow, playedRow, shuffled, similarAlbums, type HomeAlbum, type Played } from '../../src/library/home';
 import { same, squash } from '../../src/library/names';
-import { PER_PASS, PlayLog, type PlaysClient, type PlaysRow, type SavedPlays } from '../../src/library/plays';
+import { PER_PASS, PlayLog, type CloudListen, type PlaysClient, type PlaysRow, type SavedPlays } from '../../src/library/plays';
 import { RECORD_CEILING, searchRecords, searchSongs, SONG_CEILING } from '../../src/library/search';
 
 const row = (album: string, albumArtist: string | null, artist: string | null, tracks = 1): ArtistCreditRow => ({ album, albumArtist, artist, tracks });
@@ -366,6 +366,20 @@ describe('what counts as a listen', () => {
     expect(tally.read('a', 2, 0, 1, 200)).toEqual({ track: 'a', heardSeconds: 100, lengthSeconds: 200 });
   });
 
+  it('writes down a listen of a few seconds or more, and nothing shorter', () => {
+    expect(worthRecording(5, 200)).toBe(true);
+    expect(worthRecording(4, 200)).toBe(false);
+    expect(worthRecording(20, 20)).toBe(false);
+  });
+
+  it('stamps a listen with the hour and the weekday on this clock', () => {
+    // 21:30 UTC on Thursday 20 August 2026 is 06:30 on Friday in Tokyo.
+    const heard = heardListen({ track: 't', heardSeconds: 200, lengthSeconds: 300 }, new Date(Date.UTC(2026, 7, 20, 21, 30)), 'Asia/Tokyo');
+    expect(heard).toEqual({ rpmId: 't', at: 1_787_261_400, heardSeconds: 200, lengthSeconds: 300, counted: true, localHour: 6, localDayOfWeek: 5 });
+    expect(heardListen({ track: 't', heardSeconds: 20, lengthSeconds: 300 }, new Date(0), 'UTC')?.counted).toBe(false);
+    expect(heardListen({ track: 't', heardSeconds: 2, lengthSeconds: 300 }, new Date(0), 'UTC')).toBeNull();
+  });
+
   it('never lowers what a stretch has earned', () => {
     const tally = new ListenTally();
     tally.read('a', 1, 0, 50, 200);
@@ -380,9 +394,17 @@ describe('the play log', () => {
     return { saved, log: new PlayLog({ read: async (user) => saved.get(user) ?? null, write: async (user, value) => void saved.set(user, structuredClone(value)) }) };
   }
 
-  const client = (rows: PlaysRow[] = []): PlaysClient & { sent: { deviceId: string; rows: unknown[] }[] } => {
+  const client = (rows: PlaysRow[] = []): PlaysClient & { sent: { deviceId: string; rows: unknown[] }[]; listened: { deviceId: string; listens: CloudListen[] }[] } => {
     const sent: { deviceId: string; rows: unknown[] }[] = [];
-    return { sent, trackPlays: async () => rows, sendTrackPlays: async (deviceId, entries) => void sent.push({ deviceId, rows: entries }) };
+    return {
+      sent,
+      listened: [] as { deviceId: string; listens: CloudListen[] }[],
+      trackPlays: async () => rows,
+      sendTrackPlays: async (deviceId, entries) => void sent.push({ deviceId, rows: entries }),
+      async sendListens(deviceId, listens) {
+        this.listened.push({ deviceId, listens });
+      },
+    };
   };
 
   const foreign = (fields: Partial<PlaysRow>): PlaysRow => ({ rpmId: 't', deviceId: 'phone', plays: 3, lastPlayedAt: 10, updatedAt: 100, ...fields });
@@ -432,11 +454,42 @@ describe('the play log', () => {
     expect(plays.everythingPlayed().get('t')?.plays).toBe(2);
   });
 
+  const heard = (rpmId: string, counted = true) => ({ rpmId, at: 1_790_000_000, heardSeconds: counted ? 200 : 20, lengthSeconds: 240, counted, localHour: 22, localDayOfWeek: 3 });
+
+  it('sends every listen with an id of its own, once, under this browser', async () => {
+    const { log: plays } = log();
+    await plays.open('u');
+    plays.noteListen(heard('t'));
+    plays.noteListen(heard('t', false));
+    const asked = client();
+    await plays.sync(asked, 'web');
+    await plays.sync(asked, 'web');
+    expect(asked.listened).toHaveLength(1);
+    const [sent] = asked.listened;
+    expect(sent!.deviceId).toBe('web');
+    expect(sent!.listens.map((l) => l.counted)).toEqual([true, false]);
+    expect(new Set(sent!.listens.map((l) => l.listenId)).size).toBe(2);
+    expect(sent!.listens[0]).toMatchObject({ rpmId: 't', at: 1_790_000_000, localHour: 22, localDayOfWeek: 3 });
+  });
+
+  it('keeps listens that were not taken, across a visit', async () => {
+    const { log: plays, saved } = log();
+    await plays.open('u');
+    plays.noteListen(heard('t'));
+    await plays.sync({ trackPlays: async () => [], sendTrackPlays: async () => {}, sendListens: async () => { throw new Error('down'); } }, 'web');
+    await Promise.resolve();
+    const again = new PlayLog({ read: async (user) => saved.get(user) ?? null, write: async () => {} });
+    await again.open('u');
+    const asked = client();
+    await again.sync(asked, 'web');
+    expect(asked.listened[0]?.listens.map((l) => l.rpmId)).toEqual(['t']);
+  });
+
   it('keeps what was not sent, and sends it next time', async () => {
     const { log: plays } = log();
     await plays.open('u');
     plays.note('t', 5);
-    await plays.sync({ trackPlays: async () => [], sendTrackPlays: async () => { throw new Error('down'); } }, 'web');
+    await plays.sync({ trackPlays: async () => [], sendTrackPlays: async () => { throw new Error('down'); }, sendListens: async () => {} }, 'web');
     const asked = client();
     await plays.sync(asked, 'web');
     expect(asked.sent).toHaveLength(1);
@@ -447,7 +500,7 @@ describe('the play log', () => {
     await plays.open('u');
     plays.note('t', 5);
     const send = vi.fn();
-    await plays.sync({ trackPlays: async () => { throw new Error('down'); }, sendTrackPlays: send }, 'web');
+    await plays.sync({ trackPlays: async () => { throw new Error('down'); }, sendTrackPlays: send, sendListens: send }, 'web');
     expect(send).not.toHaveBeenCalled();
   });
 
@@ -464,7 +517,7 @@ describe('the play log', () => {
     const { log: plays, saved } = log();
     await plays.open('u');
     let answer!: (rows: PlaysRow[]) => void;
-    const pass = plays.sync({ trackPlays: () => new Promise((done) => (answer = done)), sendTrackPlays: async () => {} }, 'web');
+    const pass = plays.sync({ trackPlays: () => new Promise((done) => (answer = done)), sendTrackPlays: async () => {}, sendListens: async () => {} }, 'web');
     await plays.open('v');
     answer([foreign({})]);
     await pass;

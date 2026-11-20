@@ -14,6 +14,13 @@ export interface CloudPlaylist {
   updatedAt: number;
 }
 
+// The store's new reading of a list: the songs by id, in the order they play, and how many one list shows.
+export interface ListReading {
+  id: string;
+  trackIds: string[];
+  shows: number;
+}
+
 export interface GeneratedList {
   kind: string;
   title: string | null;
@@ -99,6 +106,8 @@ export class Playlists {
     private readonly mint: () => string = () => crypto.randomUUID(),
     // The interface's language, for the names of the lists the store cuts.
     private readonly language: () => string = currentLanguage,
+    // This browser's IANA time zone. The store cuts Your mix on the hour there and the holiday lists on the date there.
+    private readonly zone: () => string = () => Intl.DateTimeFormat().resolvedOptions().timeZone,
   ) {}
 
   private readonly pictures = new Map<string, Promise<string | null>>();
@@ -112,10 +121,25 @@ export class Playlists {
   // time they are asked for.
   async generated(): Promise<GeneratedList[]> {
     try {
-      const path = `cloud/moodlists?lang=${encodeURIComponent(this.language())}`;
+      const path = `cloud/moodlists?lang=${encodeURIComponent(this.language())}&tz=${encodeURIComponent(this.zone())}`;
       return await this.api.json(path, (raw) => (raw as { lists?: GeneratedList[] }).lists ?? []);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return [];
+      throw error;
+    }
+  }
+
+  // A new reading of one of this account's generated lists, cut by the store: the list after `reading` presses of
+  // "Generate new" in this browser. Null when the store cannot answer yet: it has not built the account's library
+  // and has started a build (409), or it no longer offers the list (404). The caller then shows the next slice.
+  async nextReading(listId: string, reading: number): Promise<ListReading | null> {
+    try {
+      return await this.api.json('cloud/moodlists/next', (raw) => raw as ListReading, {
+        method: 'POST',
+        body: { id: listId, reading, lang: this.language(), tz: this.zone() },
+      });
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 409 || error.status === 404)) return null;
       throw error;
     }
   }

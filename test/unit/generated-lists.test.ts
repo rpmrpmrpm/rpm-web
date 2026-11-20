@@ -52,6 +52,22 @@ describe('the readings', () => {
     expect(new Readings(store).showing(list)).toEqual(ids(100).slice(50, 100));
   });
 
+  it('shows the store\'s new list for the press it answered, and the slice for any other', () => {
+    const store = memory();
+    const readings = new Readings(store);
+    const reading = readings.step(list);
+    readings.noteFresh(list, reading, ['n1', 'n2']);
+    expect(readings.showing(list)).toEqual(['n1', 'n2']);
+    expect(new Readings(store).showing(list)).toEqual(['n1', 'n2']);
+
+    readings.step(list);
+    expect(readings.showing(list)).toEqual(ids(100).slice(0, 50));
+
+    // An answer for a press the listener has moved past is not shown.
+    readings.noteFresh(list, reading, ['late']);
+    expect(readings.showing(list)).toEqual(ids(100).slice(0, 50));
+  });
+
   it('reads a damaged store as no presses', () => {
     expect(new Readings(memory({ 'rpm.generatedListReadings': 'not json' })).of(list)).toBe(0);
   });

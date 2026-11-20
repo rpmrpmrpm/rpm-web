@@ -1,7 +1,7 @@
 // The player: the queue, what the keys do, and which track is signed and handed to the stream.
 
 import { EQ_BANDS } from './equalizer.js';
-import { ListenTally, listenCounts, type Listened } from './listen';
+import { heardListen, ListenTally, type HeardListen, type Listened } from './listen';
 import type { CloudClient } from '../api/cloud';
 import type { CloudStream, CloudTrack } from '../api/wire';
 import { gainFor, levelOf, levelOfRecord, type Level, type NormalizeMode } from './level';
@@ -91,7 +91,8 @@ export class Player {
     private readonly cloud: Signer,
     private readonly sound: Volume,
     private readonly findArtwork: (track: CloudTrack) => Promise<string | null> = async () => null,
-    private readonly listened: (rpmId: string) => void = () => {},
+    // Every listen worth writing down, plays and skips. The caller writes it to the play log.
+    private readonly listened: (heard: HeardListen) => void = () => {},
   ) {
     this.audio = new Audio();
     this.audio.preload = 'auto';
@@ -469,7 +470,8 @@ export class Player {
   }
 
   private reportListen(done: Listened | null) {
-    if (done && listenCounts(done.heardSeconds, done.lengthSeconds)) this.listened(done.track);
+    const heard = done && heardListen(done, new Date());
+    if (heard) this.listened(heard);
   }
 
   private onEnded() {

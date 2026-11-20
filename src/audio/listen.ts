@@ -2,11 +2,49 @@
 
 export const SHORTEST_SECONDS = 30;
 export const ENOUGH_SECONDS = 4 * 60;
+// Less than this heard is not written in the listening log at all: a flick past.
+export const NOTICED_SECONDS = 5;
 const RESTART_WITHIN_SECONDS = 0.5;
 
 export function listenCounts(heard: number, length: number): boolean {
   if (length < SHORTEST_SECONDS || heard <= 0) return false;
   return heard >= Math.min(length / 2, ENOUGH_SECONDS);
+}
+
+// Whether a listen is written in the listening log, as a play or a skip.
+export function worthRecording(heard: number, length: number): boolean {
+  return length >= SHORTEST_SECONDS && heard >= NOTICED_SECONDS;
+}
+
+// A listen worth writing in the listening log, stamped with the hour (0 to 23) and the weekday (0 = Sunday) on the
+// listener's clock when it ended. The store cannot work these out later, because people travel.
+export interface HeardListen {
+  rpmId: string;
+  at: number;
+  heardSeconds: number;
+  lengthSeconds: number;
+  counted: boolean;
+  localHour: number;
+  localDayOfWeek: number;
+}
+
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// The listen as the log keeps it, or null for one too slight to write down.
+export function heardListen(done: Listened, ended: Date, zone = Intl.DateTimeFormat().resolvedOptions().timeZone): HeardListen | null {
+  if (!done.track || !worthRecording(done.heardSeconds, done.lengthSeconds)) return null;
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', hourCycle: 'h23', weekday: 'short' }).formatToParts(ended);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? 0) % 24;
+  const day = DAYS.indexOf(parts.find((part) => part.type === 'weekday')?.value ?? 'Sun');
+  return {
+    rpmId: done.track,
+    at: Math.floor(ended.getTime() / 1000),
+    heardSeconds: done.heardSeconds,
+    lengthSeconds: done.lengthSeconds,
+    counted: listenCounts(done.heardSeconds, done.lengthSeconds),
+    localHour: hour,
+    localDayOfWeek: Math.max(0, day),
+  };
 }
 
 export interface Listened {

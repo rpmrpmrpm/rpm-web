@@ -113,8 +113,30 @@ describe('playlists', () => {
       }),
       call: vi.fn(),
     };
-    await new Playlists(api as never, undefined, undefined, () => 'zh-Hans').generated();
-    expect(asked).toEqual(['cloud/moodlists?lang=zh-Hans']);
+    await new Playlists(api as never, undefined, undefined, () => 'zh-Hans', () => 'America/Argentina/Buenos_Aires').generated();
+    expect(asked).toEqual(['cloud/moodlists?lang=zh-Hans&tz=America%2FArgentina%2FBuenos_Aires']);
+  });
+
+  it('asks the store for a new reading of a list, and takes no answer yet as none', async () => {
+    const calls: { path: string; body: unknown }[] = [];
+    let status = 200;
+    const api = {
+      json: vi.fn(async (path: string, read: (raw: unknown) => unknown, options?: { body?: unknown }) => {
+        calls.push({ path, body: options?.body });
+        if (status !== 200) throw new ApiError(status, 'no');
+        return read({ id: 'L', trackIds: ['a', 'b'], shows: 50 });
+      }),
+      call: vi.fn(),
+    };
+    const playlists = new Playlists(api as never, undefined, undefined, () => 'fr', () => 'Europe/Paris');
+
+    expect(await playlists.nextReading('L', 5)).toEqual({ id: 'L', trackIds: ['a', 'b'], shows: 50 });
+    expect(calls[0]).toEqual({ path: 'cloud/moodlists/next', body: { id: 'L', reading: 5, lang: 'fr', tz: 'Europe/Paris' } });
+
+    status = 409;
+    expect(await playlists.nextReading('L', 6)).toBeNull();
+    status = 404;
+    expect(await playlists.nextReading('L', 7)).toBeNull();
   });
 
   it('deletes', async () => {

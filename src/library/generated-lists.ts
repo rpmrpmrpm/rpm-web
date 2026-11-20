@@ -30,30 +30,68 @@ export const hasAnother = (list: GeneratedList): boolean => (list.shows ?? 0) > 
 // the two are not shared, so a press here answers at once with nothing that can fail. The count only goes up. It
 // is not wrapped at the number of slices, because a new cut can have a different number of them, and the window
 // wraps instead.
+//
+// On the account's own lists the store answers a press with a new list (`cloud/moodlists/next`), kept here with the
+// press it answered. It is shown only while the list is on that press.
 export class Readings {
   private byList: Record<string, number>;
+  private fresh: Record<string, { reading: number; trackIds: string[] }>;
 
   constructor(private readonly store: Pick<Storage, 'getItem' | 'setItem'> | null = browserStorage()) {
     this.byList = read(store);
+    this.fresh = readFresh(store);
   }
 
   of(list: GeneratedList): number {
     return this.byList[listKey(list)] ?? 0;
   }
 
-  step(list: GeneratedList): void {
+  // Moves the list on by one press and returns the new count.
+  step(list: GeneratedList): number {
     const key = listKey(list);
-    this.byList = { ...this.byList, [key]: (this.byList[key] ?? 0) + 1 };
-    try {
-      this.store?.setItem(READINGS_KEY, JSON.stringify(this.byList));
-    } catch {
-      // A private window may refuse to store. The slice still moves for this visit.
-    }
+    const reading = (this.byList[key] ?? 0) + 1;
+    this.byList = { ...this.byList, [key]: reading };
+    this.keep(READINGS_KEY, this.byList);
+    return reading;
   }
 
-  // The songs this list shows now.
+  // Keeps the store's list for press `reading`. An answer for a press the listener has moved past is dropped.
+  noteFresh(list: GeneratedList, reading: number, trackIds: string[]): void {
+    if (reading !== this.of(list)) return;
+    this.fresh = { ...this.fresh, [listKey(list)]: { reading, trackIds } };
+    this.keep(FRESH_KEY, this.fresh);
+  }
+
+  // The songs this list shows now: the store's answer to this press, or the slice of the run.
   showing(list: GeneratedList): string[] {
+    const answer = this.fresh[listKey(list)];
+    if (answer && answer.reading === this.of(list)) return answer.trackIds;
     return windowOf(list.trackIds, list.shows ?? 0, this.of(list));
+  }
+
+  private keep(key: string, value: unknown) {
+    try {
+      this.store?.setItem(key, JSON.stringify(value));
+    } catch {
+      // A private window may refuse to store. The list still moves for this visit.
+    }
+  }
+}
+
+const FRESH_KEY = 'rpm.generatedListFresh';
+
+function readFresh(store: Pick<Storage, 'getItem'> | null): Record<string, { reading: number; trackIds: string[] }> {
+  try {
+    const raw: unknown = JSON.parse(store?.getItem(FRESH_KEY) ?? '{}');
+    if (!raw || typeof raw !== 'object') return {};
+    return Object.fromEntries(
+      Object.entries(raw).filter(
+        (entry): entry is [string, { reading: number; trackIds: string[] }] =>
+          Number.isInteger((entry[1] as { reading?: unknown })?.reading) && Array.isArray((entry[1] as { trackIds?: unknown })?.trackIds),
+      ),
+    );
+  } catch {
+    return {};
   }
 }
 

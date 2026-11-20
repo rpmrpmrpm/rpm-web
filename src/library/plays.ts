@@ -5,6 +5,7 @@
 // what they are: a store that added everybody's together could never separate them again. What travels
 // is a total, never a count to add on, so a lost answer or a retry writes the same number twice.
 
+import type { HeardListen } from '../audio/listen';
 import type { Played } from './home';
 
 interface Own {
@@ -22,7 +23,20 @@ export interface SavedPlays {
   own: Record<string, Own>;
   foreign: Record<string, Record<string, Foreign>>;
   cursor: number;
+  // The listens the store's listening log has not taken yet, oldest first. Absent in a record saved before there
+  // were any.
+  listens?: CloudListen[];
 }
+
+// One finished listen, as the store's listening log keeps it. The id is made here, so a listen sent twice is
+// stored once.
+export interface CloudListen extends HeardListen {
+  listenId: string;
+}
+
+// Listens per request, the store's own limit, and how many are kept here at most.
+export const LISTENS_PER_SEND = 500;
+const LISTENS_KEPT = 20_000;
 
 export interface PlaysEntry {
   rpmId: string;
@@ -38,6 +52,7 @@ export interface PlaysRow extends PlaysEntry {
 export interface PlaysClient {
   trackPlays(since: number): Promise<PlaysRow[]>;
   sendTrackPlays(deviceId: string, rows: PlaysEntry[]): Promise<void>;
+  sendListens(deviceId: string, listens: CloudListen[]): Promise<void>;
 }
 
 export interface PlaysStore {
@@ -75,8 +90,9 @@ export class PlayLog {
     const era = this.era;
     const saved = await this.store.read(userId).catch(() => null);
     if (era !== this.era || !saved) return;
-    // Plays counted while the file was being read are kept.
+    // Plays and listens counted while the file was being read are kept.
     for (const [id, own] of Object.entries(this.held.own)) saved.own[id] = own;
+    saved.listens = [...(saved.listens ?? []), ...(this.held.listens ?? [])];
     this.held = saved;
     this.changed();
   }
@@ -101,6 +117,15 @@ export class PlayLog {
     this.held.own[rpmId] = mine;
     this.save();
     this.changed();
+  }
+
+  // A listen worth writing down, play or skip, for the store's listening log. Saved at once, as a play is.
+  noteListen(heard: HeardListen) {
+    if (!heard.rpmId) return;
+    const listens = (this.held.listens ??= []);
+    listens.push({ ...heard, listenId: crypto.randomUUID() });
+    if (listens.length > LISTENS_KEPT) listens.splice(0, listens.length - LISTENS_KEPT);
+    this.save();
   }
 
   everythingPlayed(): Map<string, Played> {
@@ -132,20 +157,41 @@ export class PlayLog {
       .sort(([a], [b]) => (a < b ? -1 : 1))
       .slice(0, PER_PASS)
       .map(([rpmId, row]) => ({ rpmId, plays: row.plays, lastPlayedAt: row.lastPlayedAt }));
-    if (!due.length) return;
+    if (due.length) {
+      try {
+        await client.sendTrackPlays(mine, due);
+      } catch {
+        return;
+      }
+      if (era !== this.era) return;
+      // Marked with the values that were sent. A play counted since is still unsent, and goes next time.
+      for (const row of due) {
+        const held = this.held.own[row.rpmId];
+        if (held) held.sent = row.plays;
+      }
+      this.save();
+    }
 
-    try {
-      await client.sendTrackPlays(mine, due);
-    } catch {
-      return;
+    await this.sendListens(client, mine, era);
+  }
+
+  // The listens, oldest first, one batch at a time. Each is removed once the store has taken it, so a listen noted
+  // while a batch was on its way stays for the next.
+  private async sendListens(client: PlaysClient, mine: string, era: number) {
+    for (let batch = 0; batch < 10; batch++) {
+      const due = (this.held.listens ?? []).slice(0, LISTENS_PER_SEND);
+      if (!due.length) return;
+      try {
+        await client.sendListens(mine, due);
+      } catch {
+        return;
+      }
+      if (era !== this.era) return;
+      const sent = new Set(due.map((listen) => listen.listenId));
+      this.held.listens = (this.held.listens ?? []).filter((listen) => !sent.has(listen.listenId));
+      this.save();
+      if (due.length < LISTENS_PER_SEND) return;
     }
-    if (era !== this.era) return;
-    // Marked with the values that were sent. A play counted since is still unsent, and goes next time.
-    for (const row of due) {
-      const held = this.held.own[row.rpmId];
-      if (held) held.sent = row.plays;
-    }
-    this.save();
   }
 
   private apply(rows: readonly PlaysRow[], mine: string) {

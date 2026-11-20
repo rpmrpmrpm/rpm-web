@@ -96,8 +96,9 @@ export const player = new Player(
     const album = catalogue.albums.find((a) => a.tracks.some((t) => t.rpmId === track.rpmId));
     return album ? covers.address(album, LOCK_SCREEN_ART) : null;
   },
-  (rpmId) => {
-    playLog.note(rpmId, Math.floor(Date.now() / 1000));
+  (heard) => {
+    playLog.noteListen(heard);
+    if (heard.counted) playLog.note(heard.rpmId, heard.at);
     syncPlays();
   },
 );
