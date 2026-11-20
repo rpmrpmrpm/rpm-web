@@ -53,8 +53,18 @@ export class WorkerMedia implements ImportMedia {
     return this.call<Loudness | null>({ type: 'loudness', file });
   }
 
+  // One fingerprint per file: Recognise and the report after the upload ask for the same one, and each costs a
+  // decode of the whole track. A failure is not kept, so a later ask tries again.
+  private readonly prints = new WeakMap<File, Promise<Fingerprint>>();
+
   fingerprint(file: File) {
-    return this.call<Fingerprint>({ type: 'fingerprint', file });
+    let print = this.prints.get(file);
+    if (!print) {
+      print = this.call<Fingerprint>({ type: 'fingerprint', file });
+      this.prints.set(file, print);
+      print.catch(() => this.prints.delete(file));
+    }
+    return print;
   }
 
   clip(file: File, kilobits: number, start: number, seconds: number) {

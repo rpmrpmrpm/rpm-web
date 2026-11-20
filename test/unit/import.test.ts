@@ -180,6 +180,7 @@ describe('what goes to the store', () => {
 
 describe('the upload sequence', () => {
   let calls: string[];
+  let sent: { path: string; body: unknown }[];
   let held: Map<string, string>;
   let answers: Record<string, () => Response>;
 
@@ -199,6 +200,7 @@ describe('the upload sequence', () => {
     const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
       const path = String(url).replace('/api/', '').split('?')[0]!;
       calls.push(`${init?.method ?? 'GET'} ${path}`);
+      if (typeof init?.body === 'string') sent.push({ path, body: JSON.parse(init.body) });
       const key = Object.keys(answers).find((name) => path.startsWith(name));
       return key ? answers[key]!() : json({});
     });
@@ -213,6 +215,7 @@ describe('the upload sequence', () => {
 
   beforeEach(() => {
     calls = [];
+    sent = [];
     held = new Map();
     answers = {
       'cloud/quota': () => json({ usedBytes: 0, quotaBytes: 1000, fileCount: 0 }),
@@ -419,4 +422,71 @@ describe('the upload sequence', () => {
     expect(calls.join()).not.toContain('new-id/upload');
   });
 
+
+  // A fingerprint long enough for the store to file: about a minute and a half of frames.
+  const longPrint = { fingerprint: async () => ({ text: 'print', raw: Array.from({ length: 600 }, (_, i) => i - 300), seconds: 200 }) };
+  const reportsSent = () =>
+    sent.filter((call) => call.path === 'fingerprints').map((call) => (call.body as { items: Record<string, unknown>[] }).items);
+
+  it('reports the fingerprint of an uploaded track with the song it is', async () => {
+    const { queue, rows } = queueOf('A/1.flac');
+    queue.applyTags(rows, { Title: 'Dancing Queen', Artist: 'ABBA', Album: 'Arrival', Year: 1976 });
+    await importer(queue, longPrint).run(rows, 1, () => {});
+
+    const [items] = reportsSent();
+    expect(items).toHaveLength(1);
+    expect(items![0]).toMatchObject({ title: 'Dancing Queen', artist: 'ABBA', album: 'Arrival', year: 1976, durationSeconds: 200 });
+    expect(items![0]!.rawFingerprint).toHaveLength(600);
+    expect(rows[0]!.state).toBe('done');
+  });
+
+  it('reports nothing for a track with no title or artist, or a fingerprint too short to file', async () => {
+    const untitled = queueOf('A/1.flac');
+    untitled.queue.applyTags(untitled.rows, { Artist: 'ABBA' });
+    await importer(untitled.queue, longPrint).run(untitled.rows, 1, () => {});
+    const short = queueOf('A/2.flac');
+    short.queue.applyTags(short.rows, { Title: 'Intro', Artist: 'ABBA' });
+    await importer(short.queue).run(short.rows, 1, () => {});
+
+    expect(reportsSent()).toEqual([]);
+  });
+
+  it('reports nothing for audio the account already held', async () => {
+    held.set('a'.repeat(64), 'known-id');
+    answers['cloud/verify'] = () => json({ files: [{ rpmId: 'known-id', ok: true }] });
+    const { queue, rows } = queueOf('A/1.flac');
+    queue.applyTags(rows, { Title: 'Dancing Queen', Artist: 'ABBA' });
+    await importer(queue, longPrint).run(rows, 1, () => {});
+    expect(reportsSent()).toEqual([]);
+  });
+
+  it('sends the reports eight to a request, and the rest when the run ends', async () => {
+    const paths = Array.from({ length: 10 }, (_, i) => `A/${i}.flac`);
+    const { queue, rows } = queueOf(...paths);
+    rows.forEach((row, i) => queue.applyTags([row], { Title: `Song ${i}`, Artist: 'ABBA' }));
+    await importer(queue, longPrint).run(rows, 2, () => {});
+    expect(reportsSent().map((items) => items.length)).toEqual([8, 2]);
+  });
+
+  it('sends a part batch a few seconds after an import from another app', async () => {
+    vi.useFakeTimers();
+    try {
+      const { queue, rows } = queueOf('A/1.flac');
+      queue.applyTags(rows, { Title: 'Dancing Queen', Artist: 'ABBA' });
+      await importer(queue, longPrint).importOne(rows[0]!, 1);
+      expect(reportsSent()).toEqual([]);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(reportsSent().map((items) => items.length)).toEqual([1]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not fail a track over a report the store refuses', async () => {
+    answers['fingerprints'] = () => json({}, 429);
+    const { queue, rows } = queueOf('A/1.flac');
+    queue.applyTags(rows, { Title: 'Dancing Queen', Artist: 'ABBA' });
+    expect(await importer(queue, longPrint).run(rows, 1, () => {})).toBe('done');
+    expect(rows[0]!.state).toBe('done');
+  });
 });

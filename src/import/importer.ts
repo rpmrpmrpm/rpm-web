@@ -16,6 +16,24 @@ const HEAD_SECONDS = 3;
 const HEAD_RATE = -1;
 const MAX_COVER_BYTES = 12 * 1024 * 1024;
 const TRIES = 3;
+// Reports per request to the fingerprint database, as the desktop sends them: small enough to answer inside the
+// store's time limit, which looks every report up against the whole database.
+const REPORT_BATCH = 8;
+// How long a part batch waits for more reports before it is sent anyway.
+const REPORT_WAIT_MS = 5000;
+// About a minute of fingerprint. The store files nothing shorter (FingerprintsController.MinFrames): a short
+// fingerprint would match too much of other tracks.
+const MIN_REPORT_FRAMES = 420;
+
+// One report as the store reads it (POST fingerprints): the song it claims, and the audio's fingerprint.
+interface FingerprintReport {
+  title: string;
+  artist: string;
+  album: string | null;
+  year: number;
+  durationSeconds: number;
+  rawFingerprint: number[];
+}
 
 interface InitAnswer {
   status: 'upload' | 'challenge';
@@ -249,6 +267,54 @@ export class Importer {
     }
   }
 
+  // What this computer's fingerprints teach rpm's own recognition database: "this audio is this song". The
+  // desktop's fingerprint pass sends one for every track in a library (FingerprintService). An account with no
+  // desktop has nothing else to send them, so the import does, for each track it uploads.
+  //
+  // Sent in batches, as the desktop sends them, because the store answers each report with a lookup of its
+  // whole database and allows a number of requests a day, not of reports. A batch is sent when it is full, when
+  // a run ends, and a few seconds after the last report, for an import from another app, which has no end
+  // of its own here. Best effort: a report that is not sent never fails a track.
+  private reports: FingerprintReport[] = [];
+  private reportTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private async reportFingerprint(row: ImportRow) {
+    const title = row.tags.Title?.trim();
+    const artist = row.tags.Artist?.trim();
+    // A report claims a title and an artist, and the store refuses one without them.
+    if (!title || !artist) return;
+    try {
+      const print = await this.media.fingerprint(row.file);
+      if (print.raw.length < MIN_REPORT_FRAMES || print.seconds <= 0) return;
+      this.reports.push({
+        title,
+        artist,
+        album: row.tags.Album?.trim() || null,
+        year: row.tags.Year ?? 0,
+        durationSeconds: print.seconds,
+        rawFingerprint: print.raw,
+      });
+    } catch {
+      return;
+    }
+    if (this.reports.length >= REPORT_BATCH) await this.sendReports();
+    else this.reportTimer ??= setTimeout(() => void this.sendReports(), REPORT_WAIT_MS);
+  }
+
+  // Sends every report waiting, a batch at a time.
+  async sendReports() {
+    if (this.reportTimer) clearTimeout(this.reportTimer);
+    this.reportTimer = null;
+    while (this.reports.length > 0) {
+      const items = this.reports.splice(0, REPORT_BATCH);
+      try {
+        await this.post('fingerprints', { items });
+      } catch {
+        // Best effort. The store's daily limit or a dropped request loses these reports, not the tracks.
+      }
+    }
+  }
+
   // Uploads one row, or finds the account already holds its audio. Returns the track's id either way.
   // addedAt is when the track joined the library (unix seconds): now for a normal import, the date the
   // other app recorded for an import from another app.
@@ -319,6 +385,7 @@ export class Importer {
     await this.uploadDisc(row);
     await this.makeRenditions(row, rpmId);
     await this.measureLoudness(row, rpmId);
+    await this.reportFingerprint(row);
     return rpmId;
   }
 
@@ -373,6 +440,7 @@ export class Importer {
       }
     };
     await Promise.all(Array.from({ length: atOnce }, lane));
+    await this.sendReports();
 
     for (const row of pending) this.note(row, 'ready');
     this.running = false;
