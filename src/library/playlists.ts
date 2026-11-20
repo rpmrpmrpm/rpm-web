@@ -4,6 +4,7 @@
 
 import { ApiError, type Api } from '../api/http';
 import type { Transfers } from '../import/importer';
+import { currentLanguage } from '../strings/loc';
 
 export interface CloudPlaylist {
   playlistId: string;
@@ -96,6 +97,8 @@ export class Playlists {
     private readonly api: Pick<Api, 'json' | 'call'>,
     private readonly transfers: Pick<Transfers, 'put'> = { put: async () => {} },
     private readonly mint: () => string = () => crypto.randomUUID(),
+    // The interface's language, for the names of the lists the store cuts.
+    private readonly language: () => string = currentLanguage,
   ) {}
 
   private readonly pictures = new Map<string, Promise<string | null>>();
@@ -104,10 +107,13 @@ export class Playlists {
     return this.api.json('cloud/playlists', (raw) => (raw as { playlists?: CloudPlaylist[] }).playlists ?? []);
   }
 
-  // What the desktop cut for this account. An account with no desktop has none, which is not a failure.
+  // What the desktop cut for this account, or what the store cut for an account with no desktop. None is not a
+  // failure: the store builds lists after the first ask, in the language named here, and they are there the next
+  // time they are asked for.
   async generated(): Promise<GeneratedList[]> {
     try {
-      return await this.api.json('cloud/moodlists', (raw) => (raw as { lists?: GeneratedList[] }).lists ?? []);
+      const path = `cloud/moodlists?lang=${encodeURIComponent(this.language())}`;
+      return await this.api.json(path, (raw) => (raw as { lists?: GeneratedList[] }).lists ?? []);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return [];
       throw error;

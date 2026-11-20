@@ -104,6 +104,19 @@ describe('playlists', () => {
     expect(await playlists.generated()).toEqual([]);
   });
 
+  it('asks for the generated lists in the interface language, for the names of a cut the store makes', async () => {
+    const asked: string[] = [];
+    const api = {
+      json: vi.fn(async (path: string, read: (raw: unknown) => unknown) => {
+        asked.push(path);
+        return read({ lists: [] });
+      }),
+      call: vi.fn(),
+    };
+    await new Playlists(api as never, undefined, undefined, () => 'zh-Hans').generated();
+    expect(asked).toEqual(['cloud/moodlists?lang=zh-Hans']);
+  });
+
   it('deletes', async () => {
     const { playlists, deletes } = fake([list()]);
     await playlists.remove('p');

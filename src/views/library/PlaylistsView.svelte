@@ -66,7 +66,17 @@
     }
   }
 
-  onMount(read);
+  // An account with no desktop gets its generated lists from the store, which starts cutting them when they are
+  // first asked for. So a first read with none asks once more after the cut has had time to finish.
+  const ASK_AGAIN_MS = 30_000;
+
+  onMount(() => {
+    void read();
+    const again = setTimeout(async () => {
+      if (generated.length === 0) generated = await playlists.generated().catch(() => []);
+    }, ASK_AGAIN_MS);
+    return () => clearTimeout(again);
+  });
 
   const byId = $derived(new Map(library.albums.flatMap((album) => album.tracks).map((track) => [track.rpmId, track])));
   const tracksOf = (ids: readonly string[]): CloudTrack[] => ids.flatMap((id) => byId.get(id) ?? []);
